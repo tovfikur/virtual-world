@@ -1,0 +1,20 @@
+[2025-11-02T05:11:15.348Z] 🚀 Starting Puppeteer browser...
+[2025-11-02T05:11:16.172Z] ✅ Browser opened
+[2025-11-02T05:11:16.172Z] 📄 Navigate to: http://localhost/login
+[2025-11-02T05:11:17.464Z] 🔴 [HTTP 404] http://localhost/logo.svg
+[2025-11-02T05:11:17.465Z] ❌ [CONSOLE ERROR] Failed to load resource: the server responded with a status of 404 (Not Found)
+[2025-11-02T05:11:18.003Z]
+[2025-11-02T05:11:18.004Z] ================================================================================
+[2025-11-02T05:11:18.004Z] 🎮 BROWSER IS READY FOR INTERACTION
+[2025-11-02T05:11:18.004Z] ================================================================================
+[2025-11-02T05:11:18.005Z]
+[2025-11-02T05:11:18.005Z] Instructions:
+[2025-11-02T05:11:18.005Z]   1. Interact with the browser manually
+[2025-11-02T05:11:18.005Z]   2. I will monitor all console messages in real-time
+[2025-11-02T05:11:18.006Z]   3. Check browser-console.log for full logs
+[2025-11-02T05:11:18.006Z]   4. Press Ctrl+C in terminal to stop monitoring
+[2025-11-02T05:11:18.006Z]
+[2025-11-02T05:12:05.822Z] 🚫 [REQUEST FAILED] http://localhost/api/v1/auth/login
+[2025-11-02T05:12:05.823Z]    Error: net::ERR_ABORTED
+[2025-11-02T05:12:47.535Z] 🚫 [REQUEST FAILED] http://localhost/api/v1/auth/login
+[2025-11-02T05:12:47.535Z]    Error: net::ERR_ABORTED

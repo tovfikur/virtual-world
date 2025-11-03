@@ -1,0 +1,224 @@
+/**
+ * World Renderer Component
+ * PixiJS-based infinite world renderer with chunk streaming
+ */
+
+import { useEffect, useRef, useState } from 'react';
+import * as PIXI from 'pixi.js';
+import useWorldStore from '../stores/worldStore';
+import { getBiomeColor } from '../utils/biomeColors';
+import toast from 'react-hot-toast';
+
+const LAND_SIZE = 32; // pixels per land parcel
+const CHUNK_SIZE = 32; // lands per chunk
+
+function WorldRenderer() {
+  const canvasRef = useRef(null);
+  const appRef = useRef(null);
+  const worldContainerRef = useRef(null);
+  const landGraphicsRef = useRef(new Map());
+  const isDraggingRef = useRef(false);
+  const lastPosRef = useRef({ x: 0, y: 0 });
+
+  const {
+    chunks,
+    loadingChunks,
+    camera,
+    setCamera,
+    moveCamera,
+    zoomCamera,
+    loadChunk,
+    setSelectedLand,
+    setHoveredLand,
+    getVisibleChunks,
+    getLandAt
+  } = useWorldStore();
+
+  const [viewport, setViewport] = useState({ width: window.innerWidth, height: window.innerHeight });
+
+  // Initialize PixiJS application
+  useEffect(() => {
+    const app = new PIXI.Application({
+      width: viewport.width,
+      height: viewport.height,
+      backgroundColor: 0x1e293b,
+      antialias: true,
+      resolution: window.devicePixelRatio || 1,
+      autoDensity: true,
+    });
+
+    canvasRef.current.appendChild(app.view);
+    appRef.current = app;
+
+    // Create world container
+    const worldContainer = new PIXI.Container();
+    app.stage.addChild(worldContainer);
+    worldContainerRef.current = worldContainer;
+
+    // Handle window resize
+    const handleResize = () => {
+      const width = window.innerWidth;
+      const height = window.innerHeight;
+      setViewport({ width, height });
+      app.renderer.resize(width, height);
+    };
+    window.addEventListener('resize', handleResize);
+
+    return () => {
+      window.removeEventListener('resize', handleResize);
+      app.destroy(true, { children: true });
+    };
+  }, []);
+
+  // Update camera transform
+  useEffect(() => {
+    if (!worldContainerRef.current) return;
+
+    const container = worldContainerRef.current;
+    container.scale.set(camera.zoom, camera.zoom);
+    container.position.set(
+      viewport.width / 2 - camera.x * camera.zoom * LAND_SIZE,
+      viewport.height / 2 - camera.y * camera.zoom * LAND_SIZE
+    );
+  }, [camera, viewport]);
+
+  // Load visible chunks
+  useEffect(() => {
+    const visibleChunks = getVisibleChunks(viewport.width, viewport.height);
+
+    visibleChunks.forEach(([cx, cy]) => {
+      const chunkId = `${cx}_${cy}`;
+      if (!chunks.has(chunkId) && !loadingChunks.has(chunkId)) {
+        loadChunk(cx, cy);
+      }
+    });
+  }, [camera, viewport, chunks, loadingChunks, getVisibleChunks, loadChunk]);
+
+  // Render chunks
+  useEffect(() => {
+    if (!worldContainerRef.current) return;
+
+    const container = worldContainerRef.current;
+
+    chunks.forEach((chunkData, chunkId) => {
+      // Skip if already rendered
+      if (landGraphicsRef.current.has(chunkId)) return;
+
+      const chunkContainer = new PIXI.Container();
+
+      chunkData.lands.forEach((land) => {
+        const graphics = new PIXI.Graphics();
+        const color = getBiomeColor(land.biome);
+
+        // Draw land square
+        graphics.beginFill(color);
+        graphics.drawRect(0, 0, LAND_SIZE, LAND_SIZE);
+        graphics.endFill();
+
+        // Border
+        graphics.lineStyle(1, 0x000000, 0.2);
+        graphics.drawRect(0, 0, LAND_SIZE, LAND_SIZE);
+
+        // Position
+        graphics.x = land.x * LAND_SIZE;
+        graphics.y = land.y * LAND_SIZE;
+
+        // Make interactive
+        graphics.interactive = true;
+        graphics.buttonMode = true;
+
+        // Hover effect
+        graphics.on('pointerover', () => {
+          graphics.alpha = 0.8;
+          setHoveredLand(land);
+        });
+
+        graphics.on('pointerout', () => {
+          graphics.alpha = 1;
+          setHoveredLand(null);
+        });
+
+        // Click to select
+        graphics.on('pointerdown', (e) => {
+          if (!isDraggingRef.current) {
+            setSelectedLand(land);
+            toast.success(`Selected land at (${land.x}, ${land.y})`);
+          }
+        });
+
+        chunkContainer.addChild(graphics);
+      });
+
+      container.addChild(chunkContainer);
+      landGraphicsRef.current.set(chunkId, chunkContainer);
+    });
+  }, [chunks, setSelectedLand, setHoveredLand]);
+
+  // Camera controls - Pan
+  useEffect(() => {
+    if (!appRef.current) return;
+
+    const app = appRef.current;
+
+    const onPointerDown = (e) => {
+      isDraggingRef.current = true;
+      lastPosRef.current = { x: e.data.global.x, y: e.data.global.y };
+    };
+
+    const onPointerMove = (e) => {
+      if (!isDraggingRef.current) return;
+
+      const dx = e.data.global.x - lastPosRef.current.x;
+      const dy = e.data.global.y - lastPosRef.current.y;
+
+      moveCamera(-dx / (camera.zoom * LAND_SIZE), -dy / (camera.zoom * LAND_SIZE));
+
+      lastPosRef.current = { x: e.data.global.x, y: e.data.global.y };
+    };
+
+    const onPointerUp = () => {
+      isDraggingRef.current = false;
+    };
+
+    app.stage.interactive = true;
+    app.stage.on('pointerdown', onPointerDown);
+    app.stage.on('pointermove', onPointerMove);
+    app.stage.on('pointerup', onPointerUp);
+    app.stage.on('pointerupoutside', onPointerUp);
+
+    return () => {
+      app.stage.off('pointerdown', onPointerDown);
+      app.stage.off('pointermove', onPointerMove);
+      app.stage.off('pointerup', onPointerUp);
+      app.stage.off('pointerupoutside', onPointerUp);
+    };
+  }, [camera, moveCamera]);
+
+  // Camera controls - Zoom
+  useEffect(() => {
+    if (!canvasRef.current) return;
+
+    const handleWheel = (e) => {
+      e.preventDefault();
+      const delta = e.deltaY > 0 ? -0.1 : 0.1;
+      zoomCamera(delta);
+    };
+
+    const canvas = canvasRef.current.querySelector('canvas');
+    canvas.addEventListener('wheel', handleWheel, { passive: false });
+
+    return () => {
+      canvas.removeEventListener('wheel', handleWheel);
+    };
+  }, [zoomCamera]);
+
+  return (
+    <div
+      ref={canvasRef}
+      className="absolute inset-0"
+      style={{ cursor: isDraggingRef.current ? 'grabbing' : 'grab' }}
+    />
+  );
+}
+
+export default WorldRenderer;

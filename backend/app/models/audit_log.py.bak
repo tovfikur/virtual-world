@@ -1,0 +1,156 @@
+"""
+Audit Log model
+Immutable log of all significant events for compliance
+"""
+
+from sqlalchemy import Column, String, Integer, ForeignKey, DateTime, Index, Enum as SQLEnum
+from sqlalchemy.dialects.postgresql import UUID, JSONB
+import uuid
+from enum import Enum as PyEnum
+
+from app.db.base import BaseModel
+
+
+class AuditEventCategory(str, PyEnum):
+    """Audit event category enumeration."""
+    LAND_TRANSFER = "land_transfer"
+    PAYMENT = "payment"
+    ADMIN = "admin"
+    MARKETPLACE = "marketplace"
+    USER = "user"
+    SYSTEM = "system"
+
+
+class AuditLog(BaseModel):
+    """
+    Audit log for tracking all significant events.
+
+    IMMUTABLE: Records cannot be updated or deleted (compliance requirement).
+    Provides complete audit trail for all transactions and admin actions.
+
+    Attributes:
+        log_id: Unique UUID identifier
+        event_type: Specific event (e.g., "land_transfer", "payment_received")
+        event_category: Category for filtering
+        actor_id: User who triggered event (NULL for system events)
+        actor_role: Role of actor at time of event
+        resource_type: Type of resource affected (land/user/listing)
+        resource_id: ID of affected resource
+        action: Description of action performed
+        details: JSONB for flexible additional data
+        status: success or failure
+        error_message: Error details if failed
+        amount_bdt: Monetary amount if applicable
+    """
+
+    __tablename__ = "audit_logs"
+
+    __table_args__ = (
+        Index("idx_audit_logs_actor", "actor_id", "created_at"),
+        Index("idx_audit_logs_event", "event_type"),
+        Index("idx_audit_logs_resource", "resource_type", "resource_id"),
+        Index("idx_audit_logs_timestamp", "created_at"),
+        Index("idx_audit_logs_failures", "created_at",
+              postgresql_where="status = 'failure'"),
+    )
+
+    # Primary Key
+    log_id = Column(
+        UUID(as_uuid=True),
+        primary_key=True,
+        default=uuid.uuid4,
+        nullable=False
+    )
+
+    # Event Details
+    event_type = Column(
+        String(50),
+        nullable=False
+    )
+    event_category = Column(
+        SQLEnum(AuditEventCategory),
+        nullable=False
+    )
+
+    # Actor (who triggered the event)
+    actor_id = Column(
+        UUID(as_uuid=True),
+        ForeignKey("users.user_id"),
+        nullable=True,  # NULL for system events
+        index=True
+    )
+    actor_role = Column(
+        String(20),
+        nullable=True
+    )
+
+    # Resource (what was affected)
+    resource_type = Column(
+        String(50),
+        nullable=True
+    )
+    resource_id = Column(
+        String(255),
+        nullable=True
+    )
+
+    # Action
+    action = Column(
+        String(255),
+        nullable=True
+    )
+    details = Column(
+        JSONB,
+        nullable=True
+    )
+
+    # Result
+    status = Column(
+        String(20),
+        default="success",
+        nullable=False
+    )
+    error_message = Column(
+        String,
+        nullable=True
+    )
+
+    # Monetary (if applicable)
+    amount_bdt = Column(
+        Integer,
+        nullable=True
+    )
+
+    # Relationship
+    actor = relationship(
+        "User",
+        back_populates="audit_logs",
+        foreign_keys=[actor_id]
+    )
+
+    def __repr__(self) -> str:
+        """String representation of AuditLog."""
+        return f"<AuditLog {self.log_id} - {self.event_type}>"
+
+    def to_dict(self) -> dict:
+        """
+        Convert audit log to dictionary for API responses.
+
+        Returns:
+            dict: Audit log data dictionary
+        """
+        return {
+            "log_id": str(self.log_id),
+            "event_type": self.event_type,
+            "event_category": self.event_category.value,
+            "actor_id": str(self.actor_id) if self.actor_id else None,
+            "actor_role": self.actor_role,
+            "resource_type": self.resource_type,
+            "resource_id": self.resource_id,
+            "action": self.action,
+            "details": self.details,
+            "status": self.status,
+            "error_message": self.error_message,
+            "amount_bdt": self.amount_bdt,
+            "created_at": self.created_at.isoformat() if self.created_at else None
+        }
