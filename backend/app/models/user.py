@@ -102,6 +102,27 @@ class User(BaseModel):
         nullable=True
     )
 
+    # Suspension
+    is_suspended = Column(
+        Boolean,
+        default=False,
+        nullable=False
+    )
+    suspension_reason = Column(
+        String,
+        nullable=True
+    )
+    suspended_until = Column(
+        DateTime(timezone=True),
+        nullable=True
+    )
+
+    # Last Login
+    last_login = Column(
+        DateTime(timezone=True),
+        nullable=True
+    )
+
     # Relationships
     lands = relationship(
         "Land",

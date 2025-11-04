@@ -20,6 +20,9 @@ from app.models.chat import ChatSession
 from app.models.chat import Message
 from app.models.audit_log import AuditLog
 from app.models.admin_config import AdminConfig
+from app.models.ban import Ban
+from app.models.announcement import Announcement
+from app.models.report import Report
 from app.services.cache_service import cache_service
 from pydantic import BaseModel
 
@@ -645,4 +648,1801 @@ async def update_world_config(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to update world configuration"
+        )
+
+
+# ============================================
+# MARKETPLACE & ECONOMY
+# ============================================
+
+@router.get("/marketplace/listings")
+async def get_marketplace_listings(
+    page: int = Query(default=1, ge=1),
+    limit: int = Query(default=50, ge=1, le=100),
+    status: Optional[str] = None,
+    search: Optional[str] = None,
+    db: AsyncSession = Depends(get_db),
+    admin: dict = Depends(require_admin)
+):
+    """Get all marketplace listings with filters"""
+    try:
+        query = select(Listing).join(User, Listing.seller_id == User.user_id)
+
+        # Apply filters
+        if status:
+            query = query.where(Listing.status == status)
+
+        if search:
+            query = query.where(
+                User.username.ilike(f"%{search}%")
+            )
+
+        # Count total
+        count_query = select(func.count()).select_from(query.subquery())
+        total = await db.scalar(count_query)
+
+        # Paginate
+        query = query.order_by(desc(Listing.created_at))
+        query = query.offset((page - 1) * limit).limit(limit)
+
+        result = await db.execute(query)
+        listings = result.scalars().all()
+
+        return {
+            "data": [
+                {
+                    "listing_id": l.listing_id,
+                    "land_id": l.land_id,
+                    "seller_id": l.seller_id,
+                    "price_bdt": l.price_bdt,
+                    "listing_type": l.listing_type,
+                    "status": l.status,
+                    "created_at": l.created_at.isoformat(),
+                    "expires_at": l.expires_at.isoformat() if l.expires_at else None
+                }
+                for l in listings
+            ],
+            "pagination": {
+                "page": page,
+                "limit": limit,
+                "total": total,
+                "pages": (total + limit - 1) // limit
+            }
+        }
+
+    except Exception as e:
+        logger.error(f"Error getting marketplace listings: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to fetch marketplace listings"
+        )
+
+
+@router.delete("/marketplace/listings/{listing_id}")
+async def remove_listing(
+    listing_id: str,
+    reason: str = Query(..., description="Reason for removal"),
+    db: AsyncSession = Depends(get_db),
+    admin: dict = Depends(require_admin)
+):
+    """Remove a fraudulent or inappropriate listing"""
+    try:
+        listing = await db.get(Listing, listing_id)
+        if not listing:
+            raise HTTPException(status_code=404, detail="Listing not found")
+
+        # Update listing status
+        listing.status = "removed"
+        listing.updated_at = datetime.utcnow()
+
+        # Log action
+        audit_log = AuditLog(
+            user_id=admin["sub"],
+            action="remove_listing",
+            resource_type="listing",
+            resource_id=listing_id,
+            details=f"Removed listing. Reason: {reason}"
+        )
+        db.add(audit_log)
+
+        await db.commit()
+
+        return {
+            "message": "Listing removed successfully",
+            "listing_id": listing_id,
+            "reason": reason
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error removing listing: {e}")
+        await db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to remove listing"
+        )
+
+
+@router.get("/transactions")
+async def get_transactions(
+    page: int = Query(default=1, ge=1),
+    limit: int = Query(default=50, ge=1, le=100),
+    status: Optional[str] = None,
+    search: Optional[str] = None,
+    db: AsyncSession = Depends(get_db),
+    admin: dict = Depends(require_admin)
+):
+    """Get all transactions with filters"""
+    try:
+        query = select(Transaction)
+
+        # Apply filters
+        if status:
+            query = query.where(Transaction.status == status)
+
+        if search:
+            # Search by buyer or seller username
+            query = query.join(User, Transaction.buyer_id == User.user_id).where(
+                User.username.ilike(f"%{search}%")
+            )
+
+        # Count total
+        count_query = select(func.count()).select_from(query.subquery())
+        total = await db.scalar(count_query)
+
+        # Paginate
+        query = query.order_by(desc(Transaction.created_at))
+        query = query.offset((page - 1) * limit).limit(limit)
+
+        result = await db.execute(query)
+        transactions = result.scalars().all()
+
+        return {
+            "data": [
+                {
+                    "transaction_id": t.transaction_id,
+                    "buyer_id": t.buyer_id,
+                    "seller_id": t.seller_id,
+                    "land_id": t.land_id,
+                    "amount_bdt": t.amount_bdt,
+                    "status": t.status,
+                    "created_at": t.created_at.isoformat()
+                }
+                for t in transactions
+            ],
+            "pagination": {
+                "page": page,
+                "limit": limit,
+                "total": total,
+                "pages": (total + limit - 1) // limit
+            }
+        }
+
+    except Exception as e:
+        logger.error(f"Error getting transactions: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to fetch transactions"
+        )
+
+
+@router.post("/transactions/{transaction_id}/refund")
+async def refund_transaction(
+    transaction_id: str,
+    reason: str = Query(..., description="Reason for refund"),
+    db: AsyncSession = Depends(get_db),
+    admin: dict = Depends(require_admin)
+):
+    """Refund a completed transaction"""
+    try:
+        transaction = await db.get(Transaction, transaction_id)
+        if not transaction:
+            raise HTTPException(status_code=404, detail="Transaction not found")
+
+        if transaction.status != "completed":
+            raise HTTPException(
+                status_code=400,
+                detail="Can only refund completed transactions"
+            )
+
+        # Get buyer and seller
+        buyer = await db.get(User, transaction.buyer_id)
+        seller = await db.get(User, transaction.seller_id)
+
+        if not buyer or not seller:
+            raise HTTPException(status_code=404, detail="User not found")
+
+        # Refund money to buyer
+        buyer.balance_bdt += transaction.amount_bdt
+
+        # Deduct from seller
+        seller.balance_bdt -= transaction.amount_bdt
+
+        # Update transaction status
+        transaction.status = "refunded"
+        transaction.updated_at = datetime.utcnow()
+
+        # Log action
+        audit_log = AuditLog(
+            user_id=admin["sub"],
+            action="refund_transaction",
+            resource_type="transaction",
+            resource_id=transaction_id,
+            details=f"Refunded transaction. Reason: {reason}"
+        )
+        db.add(audit_log)
+
+        await db.commit()
+
+        return {
+            "message": "Transaction refunded successfully",
+            "transaction_id": transaction_id,
+            "amount_refunded": transaction.amount_bdt,
+            "reason": reason
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error refunding transaction: {e}")
+        await db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to refund transaction"
+        )
+
+
+@router.get("/transactions/export")
+async def export_transactions(
+    start_date: Optional[datetime] = None,
+    end_date: Optional[datetime] = None,
+    db: AsyncSession = Depends(get_db),
+    admin: dict = Depends(require_admin)
+):
+    """Export transactions as CSV data"""
+    try:
+        query = select(Transaction)
+
+        if start_date:
+            query = query.where(Transaction.created_at >= start_date)
+
+        if end_date:
+            query = query.where(Transaction.created_at <= end_date)
+
+        result = await db.execute(query.order_by(Transaction.created_at))
+        transactions = result.scalars().all()
+
+        # Format as CSV-like data
+        csv_data = []
+        for t in transactions:
+            csv_data.append({
+                "transaction_id": str(t.transaction_id),
+                "buyer_id": str(t.buyer_id),
+                "seller_id": str(t.seller_id),
+                "land_id": str(t.land_id),
+                "amount_bdt": t.amount_bdt,
+                "status": t.status,
+                "created_at": t.created_at.isoformat()
+            })
+
+        return {
+            "data": csv_data,
+            "count": len(csv_data),
+            "exported_at": datetime.utcnow().isoformat()
+        }
+
+    except Exception as e:
+        logger.error(f"Error exporting transactions: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to export transactions"
+        )
+
+
+class EconomicSettingsUpdate(BaseModel):
+    transaction_fee_percent: Optional[float] = None
+    base_land_price_bdt: Optional[int] = None
+    forest_multiplier: Optional[float] = None
+    grassland_multiplier: Optional[float] = None
+    water_multiplier: Optional[float] = None
+    desert_multiplier: Optional[float] = None
+    snow_multiplier: Optional[float] = None
+    max_land_price_bdt: Optional[int] = None
+    min_land_price_bdt: Optional[int] = None
+    enable_land_trading: Optional[bool] = None
+
+
+@router.get("/config/economy")
+async def get_economic_settings(
+    db: AsyncSession = Depends(get_db),
+    admin: dict = Depends(require_admin)
+):
+    """Get economic configuration settings"""
+    try:
+        result = await db.execute(select(AdminConfig).limit(1))
+        config = result.scalar_one_or_none()
+
+        if not config:
+            raise HTTPException(status_code=404, detail="Configuration not found")
+
+        return {
+            "transaction_fee_percent": config.transaction_fee_percent,
+            "base_land_price_bdt": config.base_land_price_bdt,
+            "biome_multipliers": {
+                "forest": config.forest_multiplier,
+                "grassland": config.grassland_multiplier,
+                "water": config.water_multiplier,
+                "desert": config.desert_multiplier,
+                "snow": config.snow_multiplier
+            },
+            "max_land_price_bdt": config.max_land_price_bdt,
+            "min_land_price_bdt": config.min_land_price_bdt,
+            "enable_land_trading": config.enable_land_trading
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error getting economic settings: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to fetch economic settings"
+        )
+
+
+@router.patch("/config/economy")
+async def update_economic_settings(
+    settings: EconomicSettingsUpdate,
+    db: AsyncSession = Depends(get_db),
+    admin: dict = Depends(require_admin)
+):
+    """Update economic configuration settings"""
+    try:
+        result = await db.execute(select(AdminConfig).limit(1))
+        config = result.scalar_one_or_none()
+
+        if not config:
+            raise HTTPException(status_code=404, detail="Configuration not found")
+
+        # Update fields
+        if settings.transaction_fee_percent is not None:
+            config.transaction_fee_percent = settings.transaction_fee_percent
+
+        if settings.base_land_price_bdt is not None:
+            config.base_land_price_bdt = settings.base_land_price_bdt
+
+        if settings.forest_multiplier is not None:
+            config.forest_multiplier = settings.forest_multiplier
+
+        if settings.grassland_multiplier is not None:
+            config.grassland_multiplier = settings.grassland_multiplier
+
+        if settings.water_multiplier is not None:
+            config.water_multiplier = settings.water_multiplier
+
+        if settings.desert_multiplier is not None:
+            config.desert_multiplier = settings.desert_multiplier
+
+        if settings.snow_multiplier is not None:
+            config.snow_multiplier = settings.snow_multiplier
+
+        if settings.max_land_price_bdt is not None:
+            config.max_land_price_bdt = settings.max_land_price_bdt
+
+        if settings.min_land_price_bdt is not None:
+            config.min_land_price_bdt = settings.min_land_price_bdt
+
+        if settings.enable_land_trading is not None:
+            config.enable_land_trading = settings.enable_land_trading
+
+        config.updated_at = datetime.utcnow()
+        await db.commit()
+
+        # Log action
+        audit_log = AuditLog(
+            user_id=admin["sub"],
+            action="update_economic_settings",
+            resource_type="config",
+            resource_id=str(config.config_id),
+            details=f"Updated economic settings: {settings.dict(exclude_none=True)}"
+        )
+        db.add(audit_log)
+        await db.commit()
+
+        return {
+            "message": "Economic settings updated successfully",
+            "updated_fields": settings.dict(exclude_none=True)
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error updating economic settings: {e}")
+        await db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to update economic settings"
+        )
+
+
+# ============================================
+# LAND MANAGEMENT
+# ============================================
+
+@router.get("/lands/analytics")
+async def get_land_analytics(
+    db: AsyncSession = Depends(get_db),
+    admin: dict = Depends(require_admin)
+):
+    """Get land analytics and statistics"""
+    try:
+        # Total lands
+        total_lands = await db.scalar(select(func.count(Land.land_id)))
+
+        # Allocated lands (with owner)
+        allocated_lands = await db.scalar(
+            select(func.count(Land.land_id)).where(Land.owner_id.isnot(None))
+        )
+
+        # Unallocated lands
+        unallocated_lands = total_lands - allocated_lands if total_lands and allocated_lands else 0
+
+        # Lands by shape (if column exists)
+        shape_distribution = {}
+        try:
+            shape_result = await db.execute(
+                select(Land.shape, func.count(Land.land_id).label('count'))
+                .group_by(Land.shape)
+            )
+            shape_distribution = {row.shape: row.count for row in shape_result.all()}
+        except:
+            pass
+
+        # Lands by biome
+        biome_result = await db.execute(
+            select(Land.biome, func.count(Land.land_id).label('count'))
+            .group_by(Land.biome)
+        )
+        biome_distribution = {row.biome: row.count for row in biome_result.all()}
+
+        # Lands for sale
+        lands_for_sale = await db.scalar(
+            select(func.count(Land.land_id)).where(Land.for_sale == True)
+        )
+
+        return {
+            "total_lands": total_lands or 0,
+            "allocated_lands": allocated_lands or 0,
+            "unallocated_lands": unallocated_lands,
+            "lands_for_sale": lands_for_sale or 0,
+            "shape_distribution": shape_distribution,
+            "biome_distribution": biome_distribution
+        }
+
+    except Exception as e:
+        logger.error(f"Error getting land analytics: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to fetch land analytics"
+        )
+
+
+@router.post("/lands/{land_id}/transfer")
+async def transfer_land_ownership(
+    land_id: str,
+    new_owner_id: str = Query(..., description="New owner user ID"),
+    reason: str = Query(..., description="Reason for transfer"),
+    db: AsyncSession = Depends(get_db),
+    admin: dict = Depends(require_admin)
+):
+    """Transfer land ownership to another user"""
+    try:
+        land = await db.get(Land, land_id)
+        if not land:
+            raise HTTPException(status_code=404, detail="Land not found")
+
+        new_owner = await db.get(User, new_owner_id)
+        if not new_owner:
+            raise HTTPException(status_code=404, detail="New owner not found")
+
+        old_owner_id = land.owner_id
+        land.owner_id = new_owner_id
+        land.for_sale = False
+        land.updated_at = datetime.utcnow()
+
+        # Log action
+        audit_log = AuditLog(
+            user_id=admin["sub"],
+            action="transfer_land",
+            resource_type="land",
+            resource_id=land_id,
+            details=f"Transferred land from {old_owner_id} to {new_owner_id}. Reason: {reason}"
+        )
+        db.add(audit_log)
+
+        await db.commit()
+
+        return {
+            "message": "Land transferred successfully",
+            "land_id": land_id,
+            "old_owner_id": str(old_owner_id) if old_owner_id else None,
+            "new_owner_id": new_owner_id,
+            "reason": reason
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error transferring land: {e}")
+        await db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to transfer land"
+        )
+
+
+@router.delete("/lands/{land_id}/reclaim")
+async def reclaim_land(
+    land_id: str,
+    reason: str = Query(..., description="Reason for reclaiming"),
+    db: AsyncSession = Depends(get_db),
+    admin: dict = Depends(require_admin)
+):
+    """Reclaim a specific land plot"""
+    try:
+        land = await db.get(Land, land_id)
+        if not land:
+            raise HTTPException(status_code=404, detail="Land not found")
+
+        old_owner_id = land.owner_id
+        land.owner_id = None
+        land.for_sale = False
+        land.updated_at = datetime.utcnow()
+
+        # Log action
+        audit_log = AuditLog(
+            user_id=admin["sub"],
+            action="reclaim_land",
+            resource_type="land",
+            resource_id=land_id,
+            details=f"Reclaimed land from {old_owner_id}. Reason: {reason}"
+        )
+        db.add(audit_log)
+
+        await db.commit()
+
+        return {
+            "message": "Land reclaimed successfully",
+            "land_id": land_id,
+            "previous_owner_id": str(old_owner_id) if old_owner_id else None,
+            "reason": reason
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error reclaiming land: {e}")
+        await db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to reclaim land"
+        )
+
+
+# ============================================
+# USER MANAGEMENT (EXTENDED)
+# ============================================
+
+class UserSuspendRequest(BaseModel):
+    reason: str
+    duration_days: Optional[int] = None  # None = permanent
+
+
+class UserBanRequest(BaseModel):
+    reason: str
+    ban_type: str = "full"  # 'full', 'marketplace', 'chat'
+    duration_days: Optional[int] = None  # None = permanent
+
+
+@router.post("/users/{user_id}/suspend")
+async def suspend_user(
+    user_id: str,
+    request: UserSuspendRequest,
+    db: AsyncSession = Depends(get_db),
+    admin: dict = Depends(require_admin)
+):
+    """Suspend a user account"""
+    try:
+        user = await db.get(User, user_id)
+        if not user:
+            raise HTTPException(status_code=404, detail="User not found")
+
+        if user.role == "admin":
+            raise HTTPException(
+                status_code=400,
+                detail="Cannot suspend admin users"
+            )
+
+        # Calculate suspension end date
+        suspended_until = None
+        if request.duration_days:
+            suspended_until = datetime.utcnow() + timedelta(days=request.duration_days)
+
+        # Update user
+        user.is_suspended = True
+        user.suspension_reason = request.reason
+        user.suspended_until = suspended_until
+        user.updated_at = datetime.utcnow()
+
+        # Log action
+        audit_log = AuditLog(
+            user_id=admin["sub"],
+            action="suspend_user",
+            resource_type="user",
+            resource_id=user_id,
+            details=f"Suspended user. Reason: {request.reason}, Duration: {request.duration_days or 'permanent'} days"
+        )
+        db.add(audit_log)
+
+        await db.commit()
+
+        return {
+            "message": "User suspended successfully",
+            "user_id": user_id,
+            "suspended_until": suspended_until.isoformat() if suspended_until else "permanent",
+            "reason": request.reason
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error suspending user: {e}")
+        await db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to suspend user"
+        )
+
+
+@router.post("/users/{user_id}/unsuspend")
+async def unsuspend_user(
+    user_id: str,
+    db: AsyncSession = Depends(get_db),
+    admin: dict = Depends(require_admin)
+):
+    """Remove suspension from a user account"""
+    try:
+        user = await db.get(User, user_id)
+        if not user:
+            raise HTTPException(status_code=404, detail="User not found")
+
+        user.is_suspended = False
+        user.suspension_reason = None
+        user.suspended_until = None
+        user.updated_at = datetime.utcnow()
+
+        # Log action
+        audit_log = AuditLog(
+            user_id=admin["sub"],
+            action="unsuspend_user",
+            resource_type="user",
+            resource_id=user_id,
+            details="Removed user suspension"
+        )
+        db.add(audit_log)
+
+        await db.commit()
+
+        return {
+            "message": "User suspension removed successfully",
+            "user_id": user_id
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error unsuspending user: {e}")
+        await db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to unsuspend user"
+        )
+
+
+@router.post("/users/{user_id}/ban")
+async def ban_user(
+    user_id: str,
+    request: UserBanRequest,
+    db: AsyncSession = Depends(get_db),
+    admin: dict = Depends(require_admin)
+):
+    """Ban a user from the platform or specific features"""
+    try:
+        user = await db.get(User, user_id)
+        if not user:
+            raise HTTPException(status_code=404, detail="User not found")
+
+        if user.role == "admin":
+            raise HTTPException(
+                status_code=400,
+                detail="Cannot ban admin users"
+            )
+
+        # Calculate ban expiration
+        expires_at = None
+        if request.duration_days:
+            expires_at = datetime.utcnow() + timedelta(days=request.duration_days)
+
+        # Create ban record
+        ban = Ban(
+            user_id=user_id,
+            banned_by=admin["sub"],
+            reason=request.reason,
+            ban_type=request.ban_type,
+            expires_at=expires_at,
+            is_active=True
+        )
+        db.add(ban)
+
+        # If full ban, also suspend the user
+        if request.ban_type == "full":
+            user.is_suspended = True
+            user.suspension_reason = f"Banned: {request.reason}"
+            user.suspended_until = expires_at
+
+        # Log action
+        audit_log = AuditLog(
+            user_id=admin["sub"],
+            action="ban_user",
+            resource_type="user",
+            resource_id=user_id,
+            details=f"Banned user ({request.ban_type}). Reason: {request.reason}"
+        )
+        db.add(audit_log)
+
+        await db.commit()
+
+        return {
+            "message": "User banned successfully",
+            "user_id": user_id,
+            "ban_type": request.ban_type,
+            "expires_at": expires_at.isoformat() if expires_at else "permanent",
+            "reason": request.reason
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error banning user: {e}")
+        await db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to ban user"
+        )
+
+
+@router.delete("/users/{user_id}/ban")
+async def unban_user(
+    user_id: str,
+    db: AsyncSession = Depends(get_db),
+    admin: dict = Depends(require_admin)
+):
+    """Remove all active bans from a user"""
+    try:
+        # Deactivate all active bans
+        result = await db.execute(
+            select(Ban).where(
+                and_(Ban.user_id == user_id, Ban.is_active == True)
+            )
+        )
+        bans = result.scalars().all()
+
+        if not bans:
+            raise HTTPException(status_code=404, detail="No active bans found for this user")
+
+        for ban in bans:
+            ban.is_active = False
+
+        # Also remove suspension if exists
+        user = await db.get(User, user_id)
+        if user:
+            user.is_suspended = False
+            user.suspension_reason = None
+            user.suspended_until = None
+
+        # Log action
+        audit_log = AuditLog(
+            user_id=admin["sub"],
+            action="unban_user",
+            resource_type="user",
+            resource_id=user_id,
+            details=f"Removed {len(bans)} active ban(s)"
+        )
+        db.add(audit_log)
+
+        await db.commit()
+
+        return {
+            "message": "User unbanned successfully",
+            "user_id": user_id,
+            "bans_removed": len(bans)
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error unbanning user: {e}")
+        await db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to unban user"
+        )
+
+
+@router.get("/users/{user_id}/activity")
+async def get_user_activity(
+    user_id: str,
+    db: AsyncSession = Depends(get_db),
+    admin: dict = Depends(require_admin)
+):
+    """Get detailed user activity and statistics"""
+    try:
+        user = await db.get(User, user_id)
+        if not user:
+            raise HTTPException(status_code=404, detail="User not found")
+
+        # Get lands count
+        lands_count = await db.scalar(
+            select(func.count(Land.land_id)).where(Land.owner_id == user_id)
+        )
+
+        # Get transactions count
+        transactions_bought = await db.scalar(
+            select(func.count(Transaction.transaction_id)).where(
+                and_(Transaction.buyer_id == user_id, Transaction.status == "completed")
+            )
+        )
+
+        transactions_sold = await db.scalar(
+            select(func.count(Transaction.transaction_id)).where(
+                and_(Transaction.seller_id == user_id, Transaction.status == "completed")
+            )
+        )
+
+        # Get active listings
+        active_listings = await db.scalar(
+            select(func.count(Listing.listing_id)).where(
+                and_(Listing.seller_id == user_id, Listing.status == "active")
+            )
+        )
+
+        # Get messages count
+        messages_count = await db.scalar(
+            select(func.count(Message.message_id)).where(Message.sender_id == user_id)
+        )
+
+        # Get active bans
+        result = await db.execute(
+            select(Ban).where(
+                and_(Ban.user_id == user_id, Ban.is_active == True)
+            ).order_by(desc(Ban.created_at))
+        )
+        active_bans = result.scalars().all()
+
+        return {
+            "user_id": user_id,
+            "username": user.username,
+            "email": user.email,
+            "role": user.role,
+            "is_suspended": user.is_suspended,
+            "suspension_reason": user.suspension_reason,
+            "suspended_until": user.suspended_until.isoformat() if user.suspended_until else None,
+            "last_login": user.last_login.isoformat() if user.last_login else None,
+            "created_at": user.created_at.isoformat(),
+            "statistics": {
+                "lands_owned": lands_count or 0,
+                "transactions_bought": transactions_bought or 0,
+                "transactions_sold": transactions_sold or 0,
+                "active_listings": active_listings or 0,
+                "messages_sent": messages_count or 0,
+                "balance_bdt": user.balance_bdt
+            },
+            "active_bans": [
+                {
+                    "ban_id": str(ban.ban_id),
+                    "ban_type": ban.ban_type,
+                    "reason": ban.reason,
+                    "expires_at": ban.expires_at.isoformat() if ban.expires_at else "permanent",
+                    "created_at": ban.created_at.isoformat()
+                }
+                for ban in active_bans
+            ]
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error getting user activity: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to fetch user activity"
+        )
+
+
+# ============================================
+# CONFIGURATION (FEATURES & LIMITS)
+# ============================================
+
+class FeatureTogglesUpdate(BaseModel):
+    enable_land_trading: Optional[bool] = None
+    enable_chat: Optional[bool] = None
+    enable_registration: Optional[bool] = None
+    maintenance_mode: Optional[bool] = None
+    starter_land_enabled: Optional[bool] = None
+
+
+class SystemLimitsUpdate(BaseModel):
+    max_lands_per_user: Optional[int] = None
+    max_listings_per_user: Optional[int] = None
+    auction_bid_increment: Optional[int] = None
+    auction_extend_minutes: Optional[int] = None
+
+
+@router.get("/config/features")
+async def get_feature_toggles(
+    db: AsyncSession = Depends(get_db),
+    admin: dict = Depends(require_admin)
+):
+    """Get feature toggle settings"""
+    try:
+        result = await db.execute(select(AdminConfig).limit(1))
+        config = result.scalar_one_or_none()
+
+        if not config:
+            raise HTTPException(status_code=404, detail="Configuration not found")
+
+        return {
+            "enable_land_trading": config.enable_land_trading,
+            "enable_chat": config.enable_chat,
+            "enable_registration": config.enable_registration,
+            "maintenance_mode": config.maintenance_mode,
+            "starter_land_enabled": config.starter_land_enabled
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error getting feature toggles: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to fetch feature toggles"
+        )
+
+
+@router.patch("/config/features")
+async def update_feature_toggles(
+    settings: FeatureTogglesUpdate,
+    db: AsyncSession = Depends(get_db),
+    admin: dict = Depends(require_admin)
+):
+    """Update feature toggle settings"""
+    try:
+        result = await db.execute(select(AdminConfig).limit(1))
+        config = result.scalar_one_or_none()
+
+        if not config:
+            raise HTTPException(status_code=404, detail="Configuration not found")
+
+        # Update fields
+        if settings.enable_land_trading is not None:
+            config.enable_land_trading = settings.enable_land_trading
+
+        if settings.enable_chat is not None:
+            config.enable_chat = settings.enable_chat
+
+        if settings.enable_registration is not None:
+            config.enable_registration = settings.enable_registration
+
+        if settings.maintenance_mode is not None:
+            config.maintenance_mode = settings.maintenance_mode
+
+        if settings.starter_land_enabled is not None:
+            config.starter_land_enabled = settings.starter_land_enabled
+
+        config.updated_at = datetime.utcnow()
+        await db.commit()
+
+        # Log action
+        audit_log = AuditLog(
+            user_id=admin["sub"],
+            action="update_feature_toggles",
+            resource_type="config",
+            resource_id=str(config.config_id),
+            details=f"Updated feature toggles: {settings.dict(exclude_none=True)}"
+        )
+        db.add(audit_log)
+        await db.commit()
+
+        return {
+            "message": "Feature toggles updated successfully",
+            "updated_fields": settings.dict(exclude_none=True)
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error updating feature toggles: {e}")
+        await db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to update feature toggles"
+        )
+
+
+@router.get("/config/limits")
+async def get_system_limits(
+    db: AsyncSession = Depends(get_db),
+    admin: dict = Depends(require_admin)
+):
+    """Get system limit settings"""
+    try:
+        result = await db.execute(select(AdminConfig).limit(1))
+        config = result.scalar_one_or_none()
+
+        if not config:
+            raise HTTPException(status_code=404, detail="Configuration not found")
+
+        return {
+            "max_lands_per_user": config.max_lands_per_user,
+            "max_listings_per_user": config.max_listings_per_user,
+            "auction_bid_increment": config.auction_bid_increment,
+            "auction_extend_minutes": config.auction_extend_minutes
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error getting system limits: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to fetch system limits"
+        )
+
+
+@router.patch("/config/limits")
+async def update_system_limits(
+    settings: SystemLimitsUpdate,
+    db: AsyncSession = Depends(get_db),
+    admin: dict = Depends(require_admin)
+):
+    """Update system limit settings"""
+    try:
+        result = await db.execute(select(AdminConfig).limit(1))
+        config = result.scalar_one_or_none()
+
+        if not config:
+            raise HTTPException(status_code=404, detail="Configuration not found")
+
+        # Update fields
+        if settings.max_lands_per_user is not None:
+            config.max_lands_per_user = settings.max_lands_per_user
+
+        if settings.max_listings_per_user is not None:
+            config.max_listings_per_user = settings.max_listings_per_user
+
+        if settings.auction_bid_increment is not None:
+            config.auction_bid_increment = settings.auction_bid_increment
+
+        if settings.auction_extend_minutes is not None:
+            config.auction_extend_minutes = settings.auction_extend_minutes
+
+        config.updated_at = datetime.utcnow()
+        await db.commit()
+
+        # Log action
+        audit_log = AuditLog(
+            user_id=admin["sub"],
+            action="update_system_limits",
+            resource_type="config",
+            resource_id=str(config.config_id),
+            details=f"Updated system limits: {settings.dict(exclude_none=True)}"
+        )
+        db.add(audit_log)
+        await db.commit()
+
+        return {
+            "message": "System limits updated successfully",
+            "updated_fields": settings.dict(exclude_none=True)
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error updating system limits: {e}")
+        await db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to update system limits"
+        )
+
+
+# ============================================
+# CONTENT MODERATION
+# ============================================
+
+@router.get("/moderation/chat-messages")
+async def get_chat_messages(
+    page: int = Query(default=1, ge=1),
+    limit: int = Query(default=50, ge=1, le=100),
+    user_id: Optional[str] = None,
+    search: Optional[str] = None,
+    db: AsyncSession = Depends(get_db),
+    admin: dict = Depends(require_admin)
+):
+    """Get chat messages with filters"""
+    try:
+        query = select(Message).join(User, Message.sender_id == User.user_id)
+
+        # Apply filters
+        if user_id:
+            query = query.where(Message.sender_id == user_id)
+
+        if search:
+            query = query.where(Message.content.ilike(f"%{search}%"))
+
+        # Count total
+        count_query = select(func.count()).select_from(query.subquery())
+        total = await db.scalar(count_query)
+
+        # Paginate
+        query = query.order_by(desc(Message.created_at))
+        query = query.offset((page - 1) * limit).limit(limit)
+
+        result = await db.execute(query)
+        messages = result.scalars().all()
+
+        return {
+            "data": [
+                {
+                    "message_id": str(m.message_id),
+                    "sender_id": str(m.sender_id),
+                    "content": m.content,
+                    "created_at": m.created_at.isoformat()
+                }
+                for m in messages
+            ],
+            "pagination": {
+                "page": page,
+                "limit": limit,
+                "total": total,
+                "pages": (total + limit - 1) // limit
+            }
+        }
+
+    except Exception as e:
+        logger.error(f"Error getting chat messages: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to fetch chat messages"
+        )
+
+
+@router.delete("/moderation/messages/{message_id}")
+async def delete_message(
+    message_id: str,
+    reason: str = Query(..., description="Reason for deletion"),
+    db: AsyncSession = Depends(get_db),
+    admin: dict = Depends(require_admin)
+):
+    """Delete an inappropriate chat message"""
+    try:
+        message = await db.get(Message, message_id)
+        if not message:
+            raise HTTPException(status_code=404, detail="Message not found")
+
+        sender_id = message.sender_id
+
+        # Delete the message
+        await db.delete(message)
+
+        # Log action
+        audit_log = AuditLog(
+            user_id=admin["sub"],
+            action="delete_message",
+            resource_type="message",
+            resource_id=message_id,
+            details=f"Deleted message from user {sender_id}. Reason: {reason}"
+        )
+        db.add(audit_log)
+
+        await db.commit()
+
+        return {
+            "message": "Message deleted successfully",
+            "message_id": message_id,
+            "reason": reason
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error deleting message: {e}")
+        await db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to delete message"
+        )
+
+
+class MuteUserRequest(BaseModel):
+    duration_minutes: int  # Duration in minutes
+
+
+@router.post("/moderation/users/{user_id}/mute")
+async def mute_user(
+    user_id: str,
+    request: MuteUserRequest,
+    reason: str = Query(..., description="Reason for mute"),
+    db: AsyncSession = Depends(get_db),
+    admin: dict = Depends(require_admin)
+):
+    """Mute a user from chat"""
+    try:
+        user = await db.get(User, user_id)
+        if not user:
+            raise HTTPException(status_code=404, detail="User not found")
+
+        # Calculate mute expiration
+        expires_at = datetime.utcnow() + timedelta(minutes=request.duration_minutes)
+
+        # Create chat ban
+        ban = Ban(
+            user_id=user_id,
+            banned_by=admin["sub"],
+            reason=reason,
+            ban_type="chat",
+            expires_at=expires_at,
+            is_active=True
+        )
+        db.add(ban)
+
+        # Log action
+        audit_log = AuditLog(
+            user_id=admin["sub"],
+            action="mute_user",
+            resource_type="user",
+            resource_id=user_id,
+            details=f"Muted user for {request.duration_minutes} minutes. Reason: {reason}"
+        )
+        db.add(audit_log)
+
+        await db.commit()
+
+        return {
+            "message": "User muted successfully",
+            "user_id": user_id,
+            "duration_minutes": request.duration_minutes,
+            "expires_at": expires_at.isoformat(),
+            "reason": reason
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error muting user: {e}")
+        await db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to mute user"
+        )
+
+
+@router.get("/moderation/reports")
+async def get_reports(
+    page: int = Query(default=1, ge=1),
+    limit: int = Query(default=50, ge=1, le=100),
+    status: Optional[str] = None,
+    resource_type: Optional[str] = None,
+    db: AsyncSession = Depends(get_db),
+    admin: dict = Depends(require_admin)
+):
+    """Get user reports with filters"""
+    try:
+        query = select(Report)
+
+        # Apply filters
+        if status:
+            query = query.where(Report.status == status)
+
+        if resource_type:
+            query = query.where(Report.resource_type == resource_type)
+
+        # Count total
+        count_query = select(func.count()).select_from(query.subquery())
+        total = await db.scalar(count_query)
+
+        # Paginate
+        query = query.order_by(desc(Report.created_at))
+        query = query.offset((page - 1) * limit).limit(limit)
+
+        result = await db.execute(query)
+        reports = result.scalars().all()
+
+        return {
+            "data": [
+                {
+                    "report_id": str(r.report_id),
+                    "reporter_id": str(r.reporter_id),
+                    "reported_user_id": str(r.reported_user_id) if r.reported_user_id else None,
+                    "resource_type": r.resource_type,
+                    "resource_id": str(r.resource_id) if r.resource_id else None,
+                    "reason": r.reason,
+                    "status": r.status,
+                    "assigned_to": str(r.assigned_to) if r.assigned_to else None,
+                    "created_at": r.created_at.isoformat(),
+                    "resolved_at": r.resolved_at.isoformat() if r.resolved_at else None
+                }
+                for r in reports
+            ],
+            "pagination": {
+                "page": page,
+                "limit": limit,
+                "total": total,
+                "pages": (total + limit - 1) // limit
+            }
+        }
+
+    except Exception as e:
+        logger.error(f"Error getting reports: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to fetch reports"
+        )
+
+
+class ReportResolutionRequest(BaseModel):
+    action: str  # 'resolved', 'dismissed'
+    notes: Optional[str] = None
+
+
+@router.patch("/moderation/reports/{report_id}")
+async def resolve_report(
+    report_id: str,
+    request: ReportResolutionRequest,
+    db: AsyncSession = Depends(get_db),
+    admin: dict = Depends(require_admin)
+):
+    """Resolve or dismiss a user report"""
+    try:
+        report = await db.get(Report, report_id)
+        if not report:
+            raise HTTPException(status_code=404, detail="Report not found")
+
+        # Update report
+        report.status = request.action
+        report.assigned_to = admin["sub"]
+        report.resolution_notes = request.notes
+        report.resolved_at = datetime.utcnow()
+
+        # Log action
+        audit_log = AuditLog(
+            user_id=admin["sub"],
+            action="resolve_report",
+            resource_type="report",
+            resource_id=report_id,
+            details=f"Report {request.action}. Notes: {request.notes or 'None'}"
+        )
+        db.add(audit_log)
+
+        await db.commit()
+
+        return {
+            "message": f"Report {request.action} successfully",
+            "report_id": report_id,
+            "action": request.action,
+            "notes": request.notes
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error resolving report: {e}")
+        await db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to resolve report"
+        )
+
+
+# ============================================
+# COMMUNICATION (ANNOUNCEMENTS & BROADCAST)
+# ============================================
+
+class AnnouncementCreateRequest(BaseModel):
+    title: str
+    message: str
+    type: str = "info"  # 'info', 'warning', 'urgent'
+    target_audience: str = "all"  # 'all', 'admins', 'users'
+    display_location: str = "banner"  # 'banner', 'popup', 'both'
+    start_date: Optional[datetime] = None
+    end_date: Optional[datetime] = None
+
+
+@router.get("/announcements")
+async def get_announcements(
+    page: int = Query(default=1, ge=1),
+    limit: int = Query(default=50, ge=1, le=100),
+    active_only: bool = Query(default=False),
+    db: AsyncSession = Depends(get_db),
+    admin: dict = Depends(require_admin)
+):
+    """Get all announcements"""
+    try:
+        query = select(Announcement)
+
+        # Filter for active announcements if requested
+        if active_only:
+            now = datetime.utcnow()
+            query = query.where(
+                and_(
+                    or_(Announcement.start_date.is_(None), Announcement.start_date <= now),
+                    or_(Announcement.end_date.is_(None), Announcement.end_date >= now)
+                )
+            )
+
+        # Count total
+        count_query = select(func.count()).select_from(query.subquery())
+        total = await db.scalar(count_query)
+
+        # Paginate
+        query = query.order_by(desc(Announcement.created_at))
+        query = query.offset((page - 1) * limit).limit(limit)
+
+        result = await db.execute(query)
+        announcements = result.scalars().all()
+
+        return {
+            "data": [
+                {
+                    "announcement_id": str(a.announcement_id),
+                    "title": a.title,
+                    "message": a.message,
+                    "type": a.type,
+                    "target_audience": a.target_audience,
+                    "display_location": a.display_location,
+                    "start_date": a.start_date.isoformat() if a.start_date else None,
+                    "end_date": a.end_date.isoformat() if a.end_date else None,
+                    "created_by": str(a.created_by),
+                    "created_at": a.created_at.isoformat()
+                }
+                for a in announcements
+            ],
+            "pagination": {
+                "page": page,
+                "limit": limit,
+                "total": total,
+                "pages": (total + limit - 1) // limit
+            }
+        }
+
+    except Exception as e:
+        logger.error(f"Error getting announcements: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to fetch announcements"
+        )
+
+
+@router.post("/announcements")
+async def create_announcement(
+    request: AnnouncementCreateRequest,
+    db: AsyncSession = Depends(get_db),
+    admin: dict = Depends(require_admin)
+):
+    """Create a new announcement"""
+    try:
+        announcement = Announcement(
+            title=request.title,
+            message=request.message,
+            type=request.type,
+            target_audience=request.target_audience,
+            display_location=request.display_location,
+            start_date=request.start_date,
+            end_date=request.end_date,
+            created_by=admin["sub"]
+        )
+        db.add(announcement)
+
+        # Log action
+        audit_log = AuditLog(
+            user_id=admin["sub"],
+            action="create_announcement",
+            resource_type="announcement",
+            resource_id=str(announcement.announcement_id),
+            details=f"Created announcement: {request.title}"
+        )
+        db.add(audit_log)
+
+        await db.commit()
+        await db.refresh(announcement)
+
+        return {
+            "message": "Announcement created successfully",
+            "announcement_id": str(announcement.announcement_id),
+            "title": announcement.title
+        }
+
+    except Exception as e:
+        logger.error(f"Error creating announcement: {e}")
+        await db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to create announcement"
+        )
+
+
+@router.patch("/announcements/{announcement_id}")
+async def update_announcement(
+    announcement_id: str,
+    request: AnnouncementCreateRequest,
+    db: AsyncSession = Depends(get_db),
+    admin: dict = Depends(require_admin)
+):
+    """Update an existing announcement"""
+    try:
+        announcement = await db.get(Announcement, announcement_id)
+        if not announcement:
+            raise HTTPException(status_code=404, detail="Announcement not found")
+
+        # Update fields
+        announcement.title = request.title
+        announcement.message = request.message
+        announcement.type = request.type
+        announcement.target_audience = request.target_audience
+        announcement.display_location = request.display_location
+        announcement.start_date = request.start_date
+        announcement.end_date = request.end_date
+
+        # Log action
+        audit_log = AuditLog(
+            user_id=admin["sub"],
+            action="update_announcement",
+            resource_type="announcement",
+            resource_id=announcement_id,
+            details=f"Updated announcement: {request.title}"
+        )
+        db.add(audit_log)
+
+        await db.commit()
+
+        return {
+            "message": "Announcement updated successfully",
+            "announcement_id": announcement_id
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error updating announcement: {e}")
+        await db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to update announcement"
+        )
+
+
+@router.delete("/announcements/{announcement_id}")
+async def delete_announcement(
+    announcement_id: str,
+    db: AsyncSession = Depends(get_db),
+    admin: dict = Depends(require_admin)
+):
+    """Delete an announcement"""
+    try:
+        announcement = await db.get(Announcement, announcement_id)
+        if not announcement:
+            raise HTTPException(status_code=404, detail="Announcement not found")
+
+        title = announcement.title
+        await db.delete(announcement)
+
+        # Log action
+        audit_log = AuditLog(
+            user_id=admin["sub"],
+            action="delete_announcement",
+            resource_type="announcement",
+            resource_id=announcement_id,
+            details=f"Deleted announcement: {title}"
+        )
+        db.add(audit_log)
+
+        await db.commit()
+
+        return {
+            "message": "Announcement deleted successfully",
+            "announcement_id": announcement_id
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error deleting announcement: {e}")
+        await db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to delete announcement"
+        )
+
+
+class BroadcastMessageRequest(BaseModel):
+    message: str
+    target: str = "all"  # 'all', 'admins', 'users', 'online'
+    title: Optional[str] = "System Announcement"
+
+
+@router.post("/broadcast")
+async def send_broadcast(
+    request: BroadcastMessageRequest,
+    db: AsyncSession = Depends(get_db),
+    admin: dict = Depends(require_admin)
+):
+    """Send broadcast message to users (placeholder for WebSocket implementation)"""
+    try:
+        # In a real implementation, this would:
+        # 1. Get list of target users based on request.target
+        # 2. Send WebSocket message to all connected users
+        # 3. Optionally save to database for offline users
+
+        # Log action
+        audit_log = AuditLog(
+            user_id=admin["sub"],
+            action="send_broadcast",
+            resource_type="broadcast",
+            resource_id=None,
+            details=f"Sent broadcast to {request.target}: {request.message[:100]}"
+        )
+        db.add(audit_log)
+
+        await db.commit()
+
+        return {
+            "message": "Broadcast message sent successfully",
+            "target": request.target,
+            "note": "WebSocket implementation required for real-time delivery"
+        }
+
+    except Exception as e:
+        logger.error(f"Error sending broadcast: {e}")
+        await db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to send broadcast"
+        )
+
+
+# ============================================
+# SECURITY & BANS MANAGEMENT
+# ============================================
+
+@router.get("/security/bans")
+async def get_all_bans(
+    page: int = Query(default=1, ge=1),
+    limit: int = Query(default=50, ge=1, le=100),
+    active_only: bool = Query(default=True),
+    ban_type: Optional[str] = None,
+    db: AsyncSession = Depends(get_db),
+    admin: dict = Depends(require_admin)
+):
+    """Get all bans in the system"""
+    try:
+        query = select(Ban)
+
+        # Apply filters
+        if active_only:
+            query = query.where(Ban.is_active == True)
+
+        if ban_type:
+            query = query.where(Ban.ban_type == ban_type)
+
+        # Count total
+        count_query = select(func.count()).select_from(query.subquery())
+        total = await db.scalar(count_query)
+
+        # Paginate
+        query = query.order_by(desc(Ban.created_at))
+        query = query.offset((page - 1) * limit).limit(limit)
+
+        result = await db.execute(query)
+        bans = result.scalars().all()
+
+        return {
+            "data": [
+                {
+                    "ban_id": str(b.ban_id),
+                    "user_id": str(b.user_id),
+                    "banned_by": str(b.banned_by),
+                    "reason": b.reason,
+                    "ban_type": b.ban_type,
+                    "expires_at": b.expires_at.isoformat() if b.expires_at else "permanent",
+                    "is_active": b.is_active,
+                    "created_at": b.created_at.isoformat()
+                }
+                for b in bans
+            ],
+            "pagination": {
+                "page": page,
+                "limit": limit,
+                "total": total,
+                "pages": (total + limit - 1) // limit
+            }
+        }
+
+    except Exception as e:
+        logger.error(f"Error getting bans: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to fetch bans"
+        )
+
+
+@router.get("/security/logs")
+async def get_security_logs(
+    page: int = Query(default=1, ge=1),
+    limit: int = Query(default=50, ge=1, le=100),
+    action_type: Optional[str] = None,
+    db: AsyncSession = Depends(get_db),
+    admin: dict = Depends(require_admin)
+):
+    """Get security-related audit logs"""
+    try:
+        # Security-related actions
+        security_actions = [
+            "suspend_user", "unsuspend_user", "ban_user", "unban_user",
+            "delete_message", "mute_user", "resolve_report"
+        ]
+
+        query = select(AuditLog).where(AuditLog.action.in_(security_actions))
+
+        if action_type:
+            query = query.where(AuditLog.action == action_type)
+
+        # Count total
+        count_query = select(func.count()).select_from(query.subquery())
+        total = await db.scalar(count_query)
+
+        # Paginate
+        query = query.order_by(desc(AuditLog.created_at))
+        query = query.offset((page - 1) * limit).limit(limit)
+
+        result = await db.execute(query)
+        logs = result.scalars().all()
+
+        return {
+            "data": [
+                {
+                    "log_id": str(log.log_id),
+                    "user_id": str(log.user_id),
+                    "action": log.action,
+                    "resource_type": log.resource_type,
+                    "resource_id": str(log.resource_id) if log.resource_id else None,
+                    "details": log.details,
+                    "ip_address": log.ip_address,
+                    "created_at": log.created_at.isoformat()
+                }
+                for log in logs
+            ],
+            "pagination": {
+                "page": page,
+                "limit": limit,
+                "total": total,
+                "pages": (total + limit - 1) // limit
+            }
+        }
+
+    except Exception as e:
+        logger.error(f"Error getting security logs: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to fetch security logs"
         )

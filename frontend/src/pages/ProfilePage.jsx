@@ -14,6 +14,9 @@ function ProfilePage() {
   const [lands, setLands] = useState([]);
   const [balance, setBalance] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [page, setPage] = useState(1);
+  const [pagination, setPagination] = useState(null);
+  const [loadingMore, setLoadingMore] = useState(false);
 
   useEffect(() => {
     if (user) {
@@ -27,17 +30,36 @@ function ProfilePage() {
     try {
       const [statsRes, landsRes, balanceRes] = await Promise.all([
         usersAPI.getUserStats(user.user_id),
-        usersAPI.getUserLands(user.user_id, 1, 10),
+        usersAPI.getUserLands(user.user_id, 1, 20),
         usersAPI.getBalance(user.user_id)
       ]);
 
       setStats(statsRes.data.stats);
       setLands(landsRes.data.data);
+      setPagination(landsRes.data.pagination);
       setBalance(balanceRes.data);
     } catch (error) {
       toast.error('Failed to load profile data');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const loadMoreLands = async () => {
+    if (!pagination?.has_next || loadingMore) return;
+
+    setLoadingMore(true);
+    try {
+      const nextPage = page + 1;
+      const response = await usersAPI.getUserLands(user.user_id, nextPage, 20);
+
+      setLands([...lands, ...response.data.data]);
+      setPagination(response.data.pagination);
+      setPage(nextPage);
+    } catch (error) {
+      toast.error('Failed to load more lands');
+    } finally {
+      setLoadingMore(false);
     }
   };
 
@@ -91,7 +113,14 @@ function ProfilePage() {
 
         {/* Owned Lands */}
         <div className="mt-8">
-          <h2 className="text-2xl font-bold mb-4">My Lands</h2>
+          <div className="flex justify-between items-center mb-4">
+            <h2 className="text-2xl font-bold">My Lands</h2>
+            {pagination && (
+              <p className="text-gray-400">
+                Showing {lands.length} of {pagination.total} lands
+              </p>
+            )}
+          </div>
           {lands.length === 0 ? (
             <div className="bg-gray-800 rounded-lg p-12 text-center border border-gray-700">
               <p className="text-gray-400 text-lg mb-4">You don't own any land yet</p>
@@ -103,43 +132,68 @@ function ProfilePage() {
               </a>
             </div>
           ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {lands.map((land) => (
-                <div
-                  key={land.land_id}
-                  className="bg-gray-800 rounded-lg p-4 border border-gray-700 hover:border-blue-500 transition-colors"
-                >
-                  <div className="flex justify-between items-start mb-3">
-                    <div>
-                      <p className="text-gray-400 text-sm">Land</p>
-                      <p className="font-semibold">({land.x}, {land.y})</p>
-                    </div>
-                    <span className="px-2 py-1 bg-blue-600 text-xs rounded capitalize">
-                      {land.biome}
-                    </span>
-                  </div>
-
-                  <div className="mb-3">
-                    <p className="text-gray-400 text-sm">Base Price</p>
-                    <p className="text-xl font-bold text-green-400">
-                      {land.price_base_bdt} BDT
-                    </p>
-                  </div>
-
-                  {land.fenced && (
-                    <div className="mb-3">
-                      <span className="px-2 py-1 bg-yellow-600 text-xs rounded">
-                        🔒 Fenced
+            <>
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {lands.map((land) => (
+                  <div
+                    key={land.land_id}
+                    className="bg-gray-800 rounded-lg p-4 border border-gray-700 hover:border-blue-500 transition-colors"
+                  >
+                    <div className="flex justify-between items-start mb-3">
+                      <div>
+                        <p className="text-gray-400 text-sm">Land</p>
+                        <p className="font-semibold">({land.coordinates?.x ?? 'N/A'}, {land.coordinates?.y ?? 'N/A'})</p>
+                      </div>
+                      <span className="px-2 py-1 bg-blue-600 text-xs rounded capitalize">
+                        {land.biome}
                       </span>
                     </div>
-                  )}
 
-                  <button className="w-full bg-gray-700 hover:bg-gray-600 text-white py-2 rounded-lg transition-colors text-sm">
-                    View Details
+                    <div className="mb-3">
+                      <p className="text-gray-400 text-sm">Base Price</p>
+                      <p className="text-xl font-bold text-green-400">
+                        {land.price_base_bdt} BDT
+                      </p>
+                    </div>
+
+                    {land.fenced && (
+                      <div className="mb-3">
+                        <span className="px-2 py-1 bg-yellow-600 text-xs rounded">
+                          🔒 Fenced
+                        </span>
+                      </div>
+                    )}
+
+                    <button className="w-full bg-gray-700 hover:bg-gray-600 text-white py-2 rounded-lg transition-colors text-sm">
+                      View Details
+                    </button>
+                  </div>
+                ))}
+              </div>
+
+              {/* Load More Button */}
+              {pagination?.has_next && (
+                <div className="mt-6 text-center">
+                  <button
+                    onClick={loadMoreLands}
+                    disabled={loadingMore}
+                    className="bg-blue-600 hover:bg-blue-700 disabled:bg-gray-600 text-white font-semibold px-8 py-3 rounded-lg transition-colors"
+                  >
+                    {loadingMore ? (
+                      <span className="flex items-center justify-center">
+                        <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                        </svg>
+                        Loading...
+                      </span>
+                    ) : (
+                      'Load More Lands'
+                    )}
                   </button>
                 </div>
-              ))}
-            </div>
+              )}
+            </>
           )}
         </div>
       </div>

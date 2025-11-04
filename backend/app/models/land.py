@@ -26,6 +26,14 @@ class Biome(str, PyEnum):
     SNOW = "snow"
 
 
+class LandShape(str, PyEnum):
+    """Land shape enumeration for plot geometry."""
+    SQUARE = "square"
+    CIRCLE = "circle"
+    TRIANGLE = "triangle"
+    RECTANGLE = "rectangle"
+
+
 class Land(BaseModel):
     """
     Land model representing purchasable virtual land parcels.
@@ -88,6 +96,24 @@ class Land(BaseModel):
     )
     color_hex = Column(
         String(7),
+        nullable=False
+    )
+
+    # Land Geometry (for automatic allocation)
+    shape = Column(
+        SQLEnum(LandShape),
+        default=LandShape.SQUARE,
+        nullable=False,
+        index=True
+    )
+    width = Column(
+        Integer,
+        default=1,
+        nullable=False
+    )
+    height = Column(
+        Integer,
+        default=1,
         nullable=False
     )
 
@@ -172,6 +198,22 @@ class Land(BaseModel):
         """Validate color is valid hex format."""
         if not value.startswith("#") or len(value) != 7:
             raise ValueError("Color must be in #RRGGBB format")
+        return value
+
+    @validates("width", "height")
+    def validate_dimensions(self, key: str, value: int) -> int:
+        """Validate land dimensions are positive."""
+        if value < 1:
+            raise ValueError(f"{key} must be at least 1")
+        if value > 1000:
+            raise ValueError(f"{key} cannot exceed 1000 units")
+        return value
+
+    @validates("shape")
+    def validate_shape(self, key: str, value: LandShape) -> LandShape:
+        """Validate shape is valid enum value."""
+        if not isinstance(value, LandShape):
+            raise ValueError(f"Invalid shape: {value}")
         return value
 
     def set_passcode(self, passcode: str) -> None:
@@ -271,6 +313,9 @@ class Land(BaseModel):
             "biome": self.biome.value,
             "elevation": self.elevation,
             "color_hex": self.color_hex,
+            "shape": self.shape.value,
+            "width": self.width,
+            "height": self.height,
             "fenced": self.fenced,
             "passcode_required": self.passcode_hash is not None,
             "public_message": self.public_message,

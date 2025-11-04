@@ -289,6 +289,106 @@ export const adminAPI = {
 
   updateWorldConfig: (data) =>
     api.patch('/admin/config/world', data),
+
+  // Marketplace & Economy
+  getMarketplaceListings: (params) =>
+    api.get('/admin/marketplace/listings', { params }),
+
+  removeListing: (listingId, reason) =>
+    api.delete(`/admin/marketplace/listings/${listingId}`, { params: { reason } }),
+
+  getTransactions: (params) =>
+    api.get('/admin/transactions', { params }),
+
+  refundTransaction: (transactionId, reason) =>
+    api.post(`/admin/transactions/${transactionId}/refund`, null, { params: { reason } }),
+
+  exportTransactions: (startDate, endDate) =>
+    api.get('/admin/transactions/export', { params: { start_date: startDate, end_date: endDate } }),
+
+  getEconomicSettings: () =>
+    api.get('/admin/config/economy'),
+
+  updateEconomicSettings: (data) =>
+    api.patch('/admin/config/economy', data),
+
+  // Land Management
+  getLandAnalytics: () =>
+    api.get('/admin/lands/analytics'),
+
+  transferLand: (landId, newOwnerId, reason) =>
+    api.post(`/admin/lands/${landId}/transfer`, null, { params: { new_owner_id: newOwnerId, reason } }),
+
+  reclaimLand: (landId, reason) =>
+    api.delete(`/admin/lands/${landId}/reclaim`, { params: { reason } }),
+
+  // User Management Extended
+  suspendUser: (userId, data) =>
+    api.post(`/admin/users/${userId}/suspend`, data),
+
+  unsuspendUser: (userId) =>
+    api.post(`/admin/users/${userId}/unsuspend`),
+
+  banUser: (userId, data) =>
+    api.post(`/admin/users/${userId}/ban`, data),
+
+  unbanUser: (userId) =>
+    api.delete(`/admin/users/${userId}/ban`),
+
+  getUserActivity: (userId) =>
+    api.get(`/admin/users/${userId}/activity`),
+
+  // Configuration
+  getFeatureToggles: () =>
+    api.get('/admin/config/features'),
+
+  updateFeatureToggles: (data) =>
+    api.patch('/admin/config/features', data),
+
+  getSystemLimits: () =>
+    api.get('/admin/config/limits'),
+
+  updateSystemLimits: (data) =>
+    api.patch('/admin/config/limits', data),
+
+  // Content Moderation
+  getChatMessages: (params) =>
+    api.get('/admin/moderation/chat-messages', { params }),
+
+  deleteMessage: (messageId, reason) =>
+    api.delete(`/admin/moderation/messages/${messageId}`, { params: { reason } }),
+
+  muteUser: (userId, data, reason) =>
+    api.post(`/admin/moderation/users/${userId}/mute`, data, { params: { reason } }),
+
+  getReports: (params) =>
+    api.get('/admin/moderation/reports', { params }),
+
+  resolveReport: (reportId, data) =>
+    api.patch(`/admin/moderation/reports/${reportId}`, data),
+
+  // Communication
+  getAnnouncements: (params) =>
+    api.get('/admin/announcements', { params }),
+
+  createAnnouncement: (data) =>
+    api.post('/admin/announcements', data),
+
+  updateAnnouncement: (announcementId, data) =>
+    api.patch(`/admin/announcements/${announcementId}`, data),
+
+  deleteAnnouncement: (announcementId) =>
+    api.delete(`/admin/announcements/${announcementId}`),
+
+  sendBroadcast: (data) =>
+    api.post('/admin/broadcast', data),
+
+  // Security
+  getAllBans: (params) =>
+    api.get('/admin/security/bans', { params }),
+
+  getSecurityLogs: (params) =>
+    api.get('/admin/security/logs', { params }),
 };
 
 export default api;

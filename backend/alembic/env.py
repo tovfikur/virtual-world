@@ -24,8 +24,12 @@ if config.config_file_name is not None:
 # Set target metadata
 target_metadata = BaseModel.metadata
 
-# Get database URL from settings
-config.set_main_option('sqlalchemy.url', str(settings.database_url))
+# Get database URL from settings and convert async URL to sync for migrations
+db_url = str(settings.database_url)
+# Replace postgresql+asyncpg with postgresql+psycopg2 for sync migrations
+if 'postgresql+asyncpg' in db_url:
+    db_url = db_url.replace('postgresql+asyncpg', 'postgresql+psycopg2')
+config.set_main_option('sqlalchemy.url', db_url)
 
 
 def run_migrations_offline() -> None:

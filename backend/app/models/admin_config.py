@@ -3,7 +3,7 @@ Admin Config model
 World generation and platform configuration
 """
 
-from sqlalchemy import Column, Integer, Float, ForeignKey, CheckConstraint
+from sqlalchemy import Column, Integer, Float, ForeignKey, CheckConstraint, Boolean
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
 import uuid
@@ -158,6 +158,84 @@ class AdminConfig(BaseModel):
     transaction_fee_percent = Column(
         Float,
         default=5.0,
+        nullable=False
+    )
+
+    # Feature Toggles
+    enable_land_trading = Column(
+        Boolean,
+        default=True,
+        nullable=False
+    )
+    enable_chat = Column(
+        Boolean,
+        default=True,
+        nullable=False
+    )
+    enable_registration = Column(
+        Boolean,
+        default=True,
+        nullable=False
+    )
+    maintenance_mode = Column(
+        Boolean,
+        default=False,
+        nullable=False
+    )
+
+    # System Limits
+    max_lands_per_user = Column(
+        Integer,
+        nullable=True
+    )
+    max_listings_per_user = Column(
+        Integer,
+        default=10,
+        nullable=False
+    )
+    auction_bid_increment = Column(
+        Integer,
+        default=100,
+        nullable=False
+    )
+    auction_extend_minutes = Column(
+        Integer,
+        default=5,
+        nullable=False
+    )
+    max_land_price_bdt = Column(
+        Integer,
+        nullable=True
+    )
+    min_land_price_bdt = Column(
+        Integer,
+        nullable=True
+    )
+
+    # Land Allocation Settings (for new users)
+    starter_land_enabled = Column(
+        Boolean,
+        default=True,
+        nullable=False
+    )
+    starter_land_min_size = Column(
+        Integer,
+        default=36,
+        nullable=False
+    )
+    starter_land_max_size = Column(
+        Integer,
+        default=1000,
+        nullable=False
+    )
+    starter_land_buffer_units = Column(
+        Integer,
+        default=1,
+        nullable=False
+    )
+    starter_shape_variation_enabled = Column(
+        Boolean,
+        default=True,
         nullable=False
     )
 

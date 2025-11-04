@@ -15,6 +15,7 @@ from app.models.user import User
 from app.schemas.user_schema import UserCreate, UserLogin, UserResponse, TokenResponse
 from app.services.auth_service import auth_service
 from app.services.cache_service import cache_service
+from app.services.land_allocation_service import land_allocation_service
 from app.config import settings, CACHE_TTLS
 from app.dependencies import get_current_user
 
@@ -73,6 +74,17 @@ async def register(
     await db.refresh(user)
 
     logger.info(f"New user registered: {user.username} ({user.user_id})")
+
+    # Allocate starter land to new user
+    try:
+        allocated_lands = await land_allocation_service.allocate_starter_land(db, user)
+        if allocated_lands:
+            logger.info(f"Allocated {len(allocated_lands)} land units to new user {user.username}")
+        else:
+            logger.warning(f"Failed to allocate starter land to {user.username}")
+    except Exception as e:
+        logger.error(f"Error allocating starter land to {user.username}: {e}")
+        # Don't fail registration if land allocation fails
 
     return UserResponse.model_validate(user)
 

@@ -20,6 +20,13 @@ import AdminDashboardPage from './pages/AdminDashboardPage';
 import AdminUsersPage from './pages/AdminUsersPage';
 import AdminConfigPage from './pages/AdminConfigPage';
 import AdminLogsPage from './pages/AdminLogsPage';
+import AdminMarketplacePage from './pages/AdminMarketplacePage';
+import AdminLandsPage from './pages/AdminLandsPage';
+import AdminEconomyPage from './pages/AdminEconomyPage';
+import AdminModerationPage from './pages/AdminModerationPage';
+import AdminFeaturesPage from './pages/AdminFeaturesPage';
+import AdminCommunicationPage from './pages/AdminCommunicationPage';
+import AdminSecurityPage from './pages/AdminSecurityPage';
 
 // Components
 import ProtectedRoute from './components/ProtectedRoute';
@@ -122,6 +129,62 @@ function App() {
           element={
             <ProtectedRoute>
               <AdminLogsPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/admin/marketplace"
+          element={
+            <ProtectedRoute>
+              <AdminMarketplacePage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/admin/lands"
+          element={
+            <ProtectedRoute>
+              <AdminLandsPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/admin/economy"
+          element={
+            <ProtectedRoute>
+              <AdminEconomyPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/admin/moderation"
+          element={
+            <ProtectedRoute>
+              <AdminModerationPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/admin/features"
+          element={
+            <ProtectedRoute>
+              <AdminFeaturesPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/admin/communication"
+          element={
+            <ProtectedRoute>
+              <AdminCommunicationPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/admin/security"
+          element={
+            <ProtectedRoute>
+              <AdminSecurityPage />
             </ProtectedRoute>
           }
         />
