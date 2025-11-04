@@ -19,6 +19,7 @@ const useWorldStore = create((set, get) => ({
   },
   selectedLand: null,
   hoveredLand: null,
+  focusTarget: null,
 
   // World info
   worldSeed: null,
@@ -297,6 +298,14 @@ const useWorldStore = create((set, get) => ({
 
   setHoveredLand: (land) => {
     set({ hoveredLand: land });
+  },
+
+  setFocusTarget: (target) => {
+    set({ focusTarget: target });
+  },
+
+  clearFocusTarget: () => {
+    set({ focusTarget: null });
   },
 
   // World info

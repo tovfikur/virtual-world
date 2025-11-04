@@ -6,7 +6,7 @@ Land management, search, transfer, and fencing operations
 from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func, and_, or_
-from typing import Optional
+from typing import Optional, Dict
 import logging
 import uuid
 
@@ -26,6 +26,157 @@ from app.config import CACHE_TTLS
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/lands", tags=["lands"])
+
+
+async def _serialize_land(
+    land: Land,
+    db: AsyncSession,
+    owner_cache: Optional[Dict[str, Optional[str]]] = None
+) -> dict:
+    """Convert Land ORM object to serializable dict with owner metadata."""
+    owner_username = None
+
+    if land.owner_id:
+        cache_key = str(land.owner_id)
+        if owner_cache is not None and cache_key in owner_cache:
+            owner_username = owner_cache[cache_key]
+        else:
+            owner_result = await db.execute(
+                select(User.username).where(User.user_id == land.owner_id)
+            )
+            owner_username = owner_result.scalar_one_or_none()
+            if owner_cache is not None:
+                owner_cache[cache_key] = owner_username
+
+    land_dict = land.to_dict()
+    land_dict["owner_username"] = owner_username
+    return land_dict
+
+
+@router.get("/coordinates/{x}/{y}", response_model=LandResponse)
+async def get_land_by_coordinates(
+    x: int,
+    y: int,
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Get land details by world coordinates.
+
+    Returns land information when the parcel is claimed (persisted in DB).
+    """
+    width_expr = func.coalesce(Land.width, 1)
+    height_expr = func.coalesce(Land.height, 1)
+
+    result = await db.execute(
+        select(Land)
+        .where(
+            Land.x <= x,
+            (Land.x + width_expr) > x,
+            Land.y <= y,
+            (Land.y + height_expr) > y
+        )
+        .order_by(Land.created_at.desc())
+        .limit(1)
+    )
+    land = result.scalars().first()
+
+    if not land:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Land not found"
+        )
+
+    land_dict = await _serialize_land(land, db)
+    return LandResponse(**land_dict)
+
+
+@router.get("/owner/{owner_id}/coordinates")
+async def get_owner_land_coordinates(
+    owner_id: str,
+    limit: int = Query(5000, ge=1, le=20000),
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Get coordinates of lands owned by a user.
+
+    Returns a lightweight list of coordinates for highlighting ownership.
+    """
+    try:
+        owner_uuid = uuid.UUID(owner_id)
+    except ValueError:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid owner ID format"
+        )
+
+    # Verify owner exists
+    owner_result = await db.execute(
+        select(User.username).where(User.user_id == owner_uuid)
+    )
+    owner_username = owner_result.scalar_one_or_none()
+
+    if owner_username is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Owner not found"
+        )
+
+    result = await db.execute(
+        select(
+            Land.land_id,
+            Land.x,
+            Land.y,
+            Land.width,
+            Land.height,
+            Land.biome,
+            Land.price_base_bdt
+        )
+        .where(
+            Land.owner_id == owner_uuid,
+            Land.deleted_at.is_(None)
+        )
+    )
+
+    rows = result.all()
+    total_tiles = sum(
+        (row.width or 1) * (row.height or 1)
+        for row in rows
+    )
+
+    lands = []
+
+    for row in rows:
+        width = row.width or 1
+        height = row.height or 1
+        biome_value = row.biome.value if row.biome else None
+
+        for dx in range(width):
+            for dy in range(height):
+                tile_x = row.x + dx
+                tile_y = row.y + dy
+                lands.append({
+                    "land_id": str(row.land_id),
+                    "x": tile_x,
+                    "y": tile_y,
+                    "biome": biome_value,
+                    "price_base_bdt": row.price_base_bdt
+                })
+
+                if len(lands) >= limit:
+                    break
+            if len(lands) >= limit:
+                break
+
+        if len(lands) >= limit:
+            break
+
+    return {
+        "owner_id": owner_id,
+        "owner_username": owner_username,
+        "count": total_tiles,
+        "lands": lands,
+        "limit": limit
+    }
 
 
 @router.get("/{land_id}", response_model=LandResponse)
@@ -50,6 +201,7 @@ async def get_land(
 
     if cached_land:
         logger.debug(f"Cache hit for land {land_id}")
+        cached_land.setdefault("owner_username", None)
         return LandResponse(**cached_land)
 
     try:
@@ -71,8 +223,9 @@ async def get_land(
             detail="Land not found"
         )
 
+    land_dict = await _serialize_land(land, db)
+
     # Cache the result
-    land_dict = land.to_dict()
     await cache_service.set(cache_key, land_dict, ttl=CACHE_TTLS["land"])
 
     return LandResponse(**land_dict)
@@ -166,8 +319,13 @@ async def search_lands(
     result = await db.execute(query)
     lands = result.scalars().all()
 
+    owner_cache: dict[str, Optional[str]] = {}
+    serialized_lands = []
+    for land in lands:
+        serialized_lands.append(await _serialize_land(land, db, owner_cache))
+
     return {
-        "data": [land.to_dict() for land in lands],
+        "data": serialized_lands,
         "pagination": {
             "page": page,
             "limit": limit,
@@ -230,7 +388,8 @@ async def update_land(
 
     logger.info(f"Land updated: {land_id}")
 
-    return LandResponse(**land.to_dict())
+    land_dict = await _serialize_land(land, db)
+    return LandResponse(**land_dict)
 
 
 @router.post("/{land_id}/fence")

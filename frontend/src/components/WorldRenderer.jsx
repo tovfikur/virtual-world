@@ -3,10 +3,11 @@
  * PixiJS-based infinite world renderer with chunk streaming
  */
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import * as PIXI from "pixi.js";
 import useWorldStore from "../stores/worldStore";
 import { getBiomeColor } from "../utils/biomeColors";
+import { landsAPI } from "../services/api";
 import toast from "react-hot-toast";
 
 const LAND_SIZE = 32; // pixels per land parcel
@@ -17,6 +18,16 @@ function WorldRenderer() {
   const appRef = useRef(null);
   const worldContainerRef = useRef(null);
   const landGraphicsRef = useRef(new Map());
+  const landLookupRef = useRef(new Map());
+  const ownershipCacheRef = useRef(new Map()); // key -> { owner_id, owner_username }
+  const ownershipRequestsRef = useRef(new Map()); // key -> active promise
+  const ownerLandCacheRef = useRef(new Map()); // owner_id -> { lands, owner_username, fetchedAt }
+  const highlightedOwnerRef = useRef(null);
+  const highlightedGraphicsRef = useRef(new Map()); // key -> meta
+  const currentHoverKeyRef = useRef(null);
+  const currentHoverOwnerRef = useRef(null);
+  const focusHighlightKeysRef = useRef(new Set());
+  const focusHandledIdRef = useRef(null);
   const isDraggingRef = useRef(false);
   const lastPosRef = useRef({ x: 0, y: 0 });
 
@@ -35,12 +46,193 @@ function WorldRenderer() {
     setHoveredLand,
     getVisibleChunks,
     getLandAt,
+    focusTarget,
   } = useWorldStore();
 
   const [viewport, setViewport] = useState({
     width: window.innerWidth,
     height: window.innerHeight,
   });
+
+  const resetOwnerHighlight = useCallback(() => {
+    if (highlightedGraphicsRef.current.size === 0) return;
+
+    highlightedGraphicsRef.current.forEach((meta) => {
+      const { graphic, baseX, baseY, baseScaleX, baseScaleY, baseTint } = meta;
+      graphic.scale.set(baseScaleX, baseScaleY);
+      graphic.position.set(baseX, baseY);
+      graphic.tint = baseTint;
+    });
+
+    highlightedGraphicsRef.current.clear();
+    highlightedOwnerRef.current = null;
+  }, []);
+
+  const applyHighlightToGraphic = useCallback((key) => {
+    if (highlightedGraphicsRef.current.has(key)) {
+      return true;
+    }
+
+    const meta = landLookupRef.current.get(key);
+    if (!meta) {
+      return false;
+    }
+
+    const { graphic, baseX, baseY, baseScaleX, baseScaleY } = meta;
+    const targetScale = 1.08;
+    const offsetX = (LAND_SIZE * (targetScale - baseScaleX)) / 2;
+    const offsetY = (LAND_SIZE * (targetScale - baseScaleY)) / 2;
+
+    graphic.scale.set(targetScale, targetScale);
+    graphic.position.set(baseX - offsetX, baseY - offsetY);
+    graphic.tint = 0xfff1a8;
+
+    highlightedGraphicsRef.current.set(key, meta);
+    return true;
+  }, []);
+
+  const highlightOwner = useCallback(
+    async (ownerId) => {
+      if (!ownerId) {
+        resetOwnerHighlight();
+        return;
+      }
+
+      if (currentHoverOwnerRef.current !== ownerId) {
+        return;
+      }
+
+      if (highlightedOwnerRef.current === ownerId) {
+        return;
+      }
+
+      resetOwnerHighlight();
+
+      let ownerData = ownerLandCacheRef.current.get(ownerId);
+
+      if (!ownerData) {
+        try {
+          const response = await landsAPI.getOwnerCoordinates(ownerId);
+          ownerData = {
+            owner_id: ownerId,
+            owner_username: response.data.owner_username,
+            lands: response.data.lands ?? [],
+            fetchedAt: Date.now(),
+          };
+          ownerLandCacheRef.current.set(ownerId, ownerData);
+        } catch (error) {
+          console.error("Failed to load owner coordinates", error);
+          return;
+        }
+      }
+
+      highlightedOwnerRef.current = ownerId;
+
+      ownerData.lands.forEach((ownedLand) => {
+        const ownedKey = `${ownedLand.x}_${ownedLand.y}`;
+        if (!ownershipCacheRef.current.has(ownedKey)) {
+          ownershipCacheRef.current.set(ownedKey, {
+            owner_id: ownerId,
+            owner_username: ownerData.owner_username,
+            land_id: ownedLand.land_id,
+          });
+        }
+        applyHighlightToGraphic(ownedKey);
+      });
+    },
+    [applyHighlightToGraphic, resetOwnerHighlight]
+  );
+
+  useEffect(() => {
+    if (!focusTarget || focusTarget.id === focusHandledIdRef.current) {
+      return;
+    }
+
+    focusHandledIdRef.current = focusTarget.id;
+
+    resetOwnerHighlight();
+    focusHighlightKeysRef.current = new Set();
+
+    if (focusTarget.coordinates?.length) {
+      focusTarget.coordinates.forEach((coord) => {
+        const key = `${coord.x}_${coord.y}`;
+        focusHighlightKeysRef.current.add(key);
+
+        if (focusTarget.ownerId && !ownershipCacheRef.current.has(key)) {
+          ownershipCacheRef.current.set(key, {
+            owner_id: focusTarget.ownerId,
+            owner_username: focusTarget.ownerUsername,
+            land_id: coord.land_id,
+          });
+        }
+
+        applyHighlightToGraphic(key);
+      });
+    }
+
+    highlightedOwnerRef.current = focusTarget?.ownerId || "__focus__";
+  }, [focusTarget, applyHighlightToGraphic, resetOwnerHighlight]);
+
+  const handleLandHover = useCallback(
+    (land) => {
+      const key = `${land.x}_${land.y}`;
+      currentHoverKeyRef.current = key;
+
+      const cached = ownershipCacheRef.current.get(key);
+      if (cached !== undefined) {
+        currentHoverOwnerRef.current = cached?.owner_id ?? null;
+        if (cached?.owner_id) {
+          highlightOwner(cached.owner_id);
+        } else {
+          resetOwnerHighlight();
+        }
+        return;
+      }
+
+      if (ownershipRequestsRef.current.has(key)) {
+        return;
+      }
+
+      const request = landsAPI
+        .getLandByCoords(land.x, land.y)
+        .then((response) => {
+          const data = response.data;
+          ownershipCacheRef.current.set(key, {
+            owner_id: data.owner_id,
+            owner_username: data.owner_username,
+            land_id: data.land_id,
+          });
+
+          if (currentHoverKeyRef.current !== key) {
+            return;
+          }
+
+          currentHoverOwnerRef.current = data.owner_id ?? null;
+          if (data.owner_id) {
+            highlightOwner(data.owner_id);
+          } else {
+            resetOwnerHighlight();
+          }
+        })
+        .catch((error) => {
+          if (error.response?.status === 404) {
+            ownershipCacheRef.current.set(key, null);
+            if (currentHoverKeyRef.current === key) {
+              currentHoverOwnerRef.current = null;
+              resetOwnerHighlight();
+            }
+          } else {
+            console.error("Failed to fetch land ownership", error);
+          }
+        })
+        .finally(() => {
+          ownershipRequestsRef.current.delete(key);
+        });
+
+      ownershipRequestsRef.current.set(key, request);
+    },
+    [highlightOwner, resetOwnerHighlight]
+  );
 
   // Initialize PixiJS application
   useEffect(() => {
@@ -59,6 +251,7 @@ function WorldRenderer() {
     // Create world container
     const worldContainer = new PIXI.Container();
     app.stage.addChild(worldContainer);
+    worldContainer.sortableChildren = true;
     worldContainerRef.current = worldContainer;
 
     // Handle window resize
@@ -164,6 +357,7 @@ function WorldRenderer() {
       );
 
       const chunkContainer = new PIXI.Container();
+      chunkContainer.sortableChildren = true;
 
       chunkData.lands.forEach((land) => {
         const g = new PIXI.Graphics();
@@ -190,6 +384,20 @@ function WorldRenderer() {
         g.x = baseX;
         g.y = baseY;
 
+        const landKey = `${land.x}_${land.y}`;
+        landLookupRef.current.set(landKey, {
+          graphic: g,
+          baseX,
+          baseY,
+          baseScaleX: g.scale.x,
+          baseScaleY: g.scale.y,
+          baseTint: g.tint ?? 0xffffff,
+        });
+
+        if (focusHighlightKeysRef.current.has(landKey)) {
+          applyHighlightToGraphic(landKey);
+        }
+
         // === Interactivity ===
         g.interactive = true;
         g.buttonMode = true;
@@ -197,9 +405,19 @@ function WorldRenderer() {
         g.on("pointerover", () => {
           g.alpha = 0.8;
           setHoveredLand(land);
+          handleLandHover(land);
         });
         g.on("pointerout", () => {
           g.alpha = 1;
+          if (currentHoverKeyRef.current === landKey) {
+            currentHoverKeyRef.current = null;
+            currentHoverOwnerRef.current = null;
+            resetOwnerHighlight();
+            if (focusHighlightKeysRef.current.size > 0) {
+              focusHighlightKeysRef.current.forEach((key) => applyHighlightToGraphic(key));
+              highlightedOwnerRef.current = focusTarget?.ownerId || "__focus__";
+            }
+          }
           setHoveredLand(null);
         });
         g.on("pointerdown", () => {
@@ -215,7 +433,15 @@ function WorldRenderer() {
       container.addChild(chunkContainer);
       landGraphicsRef.current.set(chunkId, chunkContainer);
     });
-  }, [chunks, setSelectedLand, setHoveredLand]);
+  }, [
+    chunks,
+    setSelectedLand,
+    setHoveredLand,
+    handleLandHover,
+    resetOwnerHighlight,
+    applyHighlightToGraphic,
+    focusTarget,
+  ]);
 
   // Camera controls - Pan
   useEffect(() => {

@@ -32,14 +32,57 @@ function LandInfoPanel({ land }) {
     try {
       // Try to get land from API (if it's owned)
       const response = await landsAPI.getLandByCoords(land.x, land.y);
-      setLandDetails(response.data);
+      const data = response.data;
+      setLandDetails({
+        ...data,
+        x: data.coordinates?.x ?? land.x,
+        y: data.coordinates?.y ?? land.y,
+        price_base_bdt: data.price_base_bdt ?? data.base_price_bdt ?? land.base_price_bdt,
+      });
     } catch (error) {
+      console.error('Failed to load land details from API', error);
+
+      // Fallback: try searching lands by owner (if logged in)
+      if (user) {
+        try {
+          const searchResponse = await landsAPI.searchLands({
+            owner_id: user.user_id,
+            x: land.x,
+            y: land.y,
+            radius: 1,
+            limit: 1,
+            page: 1,
+          });
+
+          const claimedLand = searchResponse.data?.data?.[0];
+
+          if (claimedLand) {
+            setLandDetails({
+              ...claimedLand,
+              x: claimedLand.coordinates?.x ?? land.x,
+              y: claimedLand.coordinates?.y ?? land.y,
+              price_base_bdt: claimedLand.price_base_bdt ?? claimedLand.base_price_bdt,
+            });
+            return;
+          }
+        } catch (searchError) {
+          console.error('Secondary land search failed', searchError);
+        }
+      }
+
       // Land not owned yet, use chunk data
       setLandDetails({
         ...land,
-        owner: null,
+        land_id: null,
+        owner_id: null,
+        owner_username: null,
         fenced: false,
         passcode: null,
+        price_base_bdt: land.base_price_bdt ?? land.price_base_bdt ?? land.base_price,
+        coordinates: {
+          x: land.x,
+          y: land.y,
+        },
       });
     } finally {
       setLoading(false);
@@ -104,8 +147,8 @@ function LandInfoPanel({ land }) {
     );
   }
 
-  const isOwner = landDetails.owner_id === user?.user_id;
-  const isOwned = !!landDetails.owner;
+  const isOwned = Boolean(landDetails.owner_id);
+  const isOwner = isOwned && landDetails.owner_id === user?.user_id;
   const biomeColor = getBiomeColorCSS(landDetails.biome);
 
   return (

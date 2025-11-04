@@ -3,7 +3,7 @@
  * Main game view with PixiJS world renderer
  */
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import useAuthStore from '../stores/authStore';
 import useWorldStore from '../stores/worldStore';
 import WorldRenderer from '../components/WorldRenderer';
@@ -13,9 +13,22 @@ import LandInfoPanel from '../components/LandInfoPanel';
 
 function WorldPage() {
   const { user } = useAuthStore();
-  const { selectedLand, loadWorldInfo } = useWorldStore();
+  const {
+    selectedLand,
+    loadWorldInfo,
+    focusTarget,
+    setCamera,
+    setSelectedLand,
+  } = useWorldStore((state) => ({
+    selectedLand: state.selectedLand,
+    loadWorldInfo: state.loadWorldInfo,
+    focusTarget: state.focusTarget,
+    setCamera: state.setCamera,
+    setSelectedLand: state.setSelectedLand,
+  }));
   const [showChat, setShowChat] = useState(true);
   const [showLandInfo, setShowLandInfo] = useState(false);
+  const handledFocusIdRef = useRef(null);
 
   useEffect(() => {
     // Load world information on mount
@@ -26,6 +39,32 @@ function WorldPage() {
     // Show land info panel when land is selected
     setShowLandInfo(!!selectedLand);
   }, [selectedLand]);
+
+  useEffect(() => {
+    if (!focusTarget || focusTarget.id === handledFocusIdRef.current) {
+      return;
+    }
+
+    handledFocusIdRef.current = focusTarget.id;
+
+    if (focusTarget.center) {
+      setCamera(focusTarget.center.x, focusTarget.center.y, focusTarget.zoom ?? 1);
+    }
+
+    if (focusTarget.primaryLand) {
+      setSelectedLand(focusTarget.primaryLand);
+    } else if (focusTarget.coordinates?.length) {
+      const first = focusTarget.coordinates[0];
+      setSelectedLand({
+        coordinates: { x: first.x, y: first.y },
+        x: first.x,
+        y: first.y,
+        land_id: first.land_id,
+        biome: first.biome,
+        price_base_bdt: first.price_base_bdt,
+      });
+    }
+  }, [focusTarget, setCamera, setSelectedLand]);
 
   return (
     <div className="relative w-screen h-screen overflow-hidden bg-gray-900">

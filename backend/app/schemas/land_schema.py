@@ -12,6 +12,7 @@ class LandResponse(BaseModel):
 
     land_id: str
     owner_id: str
+    owner_username: Optional[str] = None
     coordinates: dict
     biome: str
     elevation: float
@@ -29,6 +30,7 @@ class LandResponse(BaseModel):
             "example": {
                 "land_id": "land-uuid-1234",
                 "owner_id": "user-uuid-5678",
+                "owner_username": "john_doe",
                 "coordinates": {"x": 120, "y": 340, "z": 0},
                 "biome": "forest",
                 "elevation": 0.65,
