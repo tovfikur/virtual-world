@@ -28,6 +28,7 @@ function WorldRenderer() {
   const currentHoverOwnerRef = useRef(null);
   const focusHighlightKeysRef = useRef(new Set());
   const focusHandledIdRef = useRef(null);
+  const multiSelectHighlightKeysRef = useRef(new Set());
   const isDraggingRef = useRef(false);
   const lastPosRef = useRef({ x: 0, y: 0 });
 
@@ -47,6 +48,9 @@ function WorldRenderer() {
     getVisibleChunks,
     getLandAt,
     focusTarget,
+    multiSelectMode,
+    selectedLands,
+    toggleLandSelection,
   } = useWorldStore();
 
   const [viewport, setViewport] = useState({
@@ -172,6 +176,39 @@ function WorldRenderer() {
 
     highlightedOwnerRef.current = focusTarget?.ownerId || "__focus__";
   }, [focusTarget, applyHighlightToGraphic, resetOwnerHighlight]);
+
+  // Highlight multi-selected lands
+  useEffect(() => {
+    // Clear previous multi-select highlights
+    multiSelectHighlightKeysRef.current.forEach((key) => {
+      const meta = landLookupRef.current.get(key);
+      if (meta && !focusHighlightKeysRef.current.has(key)) {
+        const { graphic, baseX, baseY, baseScaleX, baseScaleY, baseTint } = meta;
+        graphic.scale.set(baseScaleX, baseScaleY);
+        graphic.position.set(baseX, baseY);
+        graphic.tint = baseTint;
+      }
+    });
+    multiSelectHighlightKeysRef.current.clear();
+
+    // Apply new multi-select highlights
+    selectedLands.forEach((land) => {
+      const key = `${land.x}_${land.y}`;
+      multiSelectHighlightKeysRef.current.add(key);
+
+      const meta = landLookupRef.current.get(key);
+      if (meta) {
+        const { graphic, baseX, baseY, baseScaleX, baseScaleY } = meta;
+        const targetScale = 1.1;
+        const offsetX = (LAND_SIZE * (targetScale - baseScaleX)) / 2;
+        const offsetY = (LAND_SIZE * (targetScale - baseScaleY)) / 2;
+
+        graphic.scale.set(targetScale, targetScale);
+        graphic.position.set(baseX - offsetX, baseY - offsetY);
+        graphic.tint = 0x00ffff; // Cyan color for multi-select
+      }
+    });
+  }, [selectedLands]);
 
   const handleLandHover = useCallback(
     (land) => {
@@ -420,10 +457,18 @@ function WorldRenderer() {
           }
           setHoveredLand(null);
         });
-        g.on("pointerdown", () => {
+        g.on("pointerdown", (event) => {
           if (!isDraggingRef.current) {
-            setSelectedLand(land);
-            toast.success(`Selected land at (${land.x}, ${land.y})`);
+            // Multi-select mode: toggle selection with Ctrl/Cmd key
+            if (event.data.originalEvent.ctrlKey || event.data.originalEvent.metaKey || multiSelectMode) {
+              const isSelected = selectedLands.some(l => l.x === land.x && l.y === land.y);
+              toggleLandSelection(land);
+              toast.success(isSelected ? `Deselected (${land.x}, ${land.y})` : `Selected (${land.x}, ${land.y})`);
+            } else {
+              // Single select mode
+              setSelectedLand(land);
+              toast.success(`Selected land at (${land.x}, ${land.y})`);
+            }
           }
         });
 

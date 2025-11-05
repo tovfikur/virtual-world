@@ -10,6 +10,7 @@ import WorldRenderer from '../components/WorldRenderer';
 import HUD from '../components/HUD';
 import ChatBox from '../components/ChatBox';
 import LandInfoPanel from '../components/LandInfoPanel';
+import MultiLandActionsPanel from '../components/MultiLandActionsPanel';
 
 function WorldPage() {
   const { user } = useAuthStore();
@@ -47,10 +48,13 @@ function WorldPage() {
 
     handledFocusIdRef.current = focusTarget.id;
 
+    // Set camera first
     if (focusTarget.center) {
+      console.log(`🎯 Focusing on coordinates: (${focusTarget.center.x}, ${focusTarget.center.y}) with zoom ${focusTarget.zoom ?? 1}`);
       setCamera(focusTarget.center.x, focusTarget.center.y, focusTarget.zoom ?? 1);
     }
 
+    // Set selected land
     if (focusTarget.primaryLand) {
       setSelectedLand(focusTarget.primaryLand);
     } else if (focusTarget.coordinates?.length) {
@@ -100,11 +104,15 @@ function WorldPage() {
         </div>
       )}
 
+      {/* Multi-Land Actions Panel - Bottom Center */}
+      <MultiLandActionsPanel />
+
       {/* Controls Help - Bottom Right */}
       <div className="absolute bottom-4 right-4 z-10 bg-gray-800/80 backdrop-blur-sm text-white px-4 py-3 rounded-lg shadow-lg border border-gray-600 text-sm">
         <div className="font-semibold mb-2">Controls:</div>
         <div className="space-y-1 text-gray-300">
           <div><kbd className="px-2 py-1 bg-gray-700 rounded">Click</kbd> - Select land</div>
+          <div><kbd className="px-2 py-1 bg-gray-700 rounded">Ctrl+Click</kbd> - Multi-select</div>
           <div><kbd className="px-2 py-1 bg-gray-700 rounded">Drag</kbd> - Pan camera</div>
           <div><kbd className="px-2 py-1 bg-gray-700 rounded">Scroll</kbd> - Zoom in/out</div>
         </div>

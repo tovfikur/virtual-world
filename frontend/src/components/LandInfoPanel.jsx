@@ -100,10 +100,12 @@ function LandInfoPanel({ land }) {
     }
 
     try {
-      await landsAPI.toggleFence(landDetails.land_id, {
-        fenced: !landDetails.fenced,
-        passcode: landDetails.fenced ? null : '1234', // Default passcode
-      });
+      const newFencedState = !landDetails.fenced;
+      await landsAPI.manageFence(
+        landDetails.land_id,
+        newFencedState,
+        newFencedState ? '1234' : null // Default passcode when enabling
+      );
       toast.success(`Fence ${landDetails.fenced ? 'disabled' : 'enabled'}`);
       loadLandDetails();
     } catch (error) {
@@ -123,14 +125,26 @@ function LandInfoPanel({ land }) {
       const listingData = {
         land_id: landDetails.land_id,
         listing_type: listingType,
-        starting_price_bdt: parseInt(price),
-        buy_now_price_bdt: listingType === 'auction_with_buynow' ? parseInt(buyNowPrice) : null,
-        duration_hours: listingType !== 'fixed_price' ? parseInt(duration) : null,
       };
+
+      // Set appropriate price fields based on listing type
+      if (listingType === 'fixed_price') {
+        listingData.buy_now_price_bdt = parseInt(price);
+      } else if (listingType === 'auction') {
+        listingData.starting_price_bdt = parseInt(price);
+        listingData.duration_hours = parseInt(duration);
+      } else if (listingType === 'auction_with_buynow') {
+        listingData.starting_price_bdt = parseInt(price);
+        listingData.buy_now_price_bdt = parseInt(buyNowPrice);
+        listingData.duration_hours = parseInt(duration);
+      }
 
       await marketplaceAPI.createListing(listingData);
       toast.success('Listing created successfully!');
       setShowListingForm(false);
+      setPrice('');
+      setBuyNowPrice('');
+      setDuration('24');
       loadLandDetails();
     } catch (error) {
       toast.error(error.response?.data?.detail || 'Failed to create listing');

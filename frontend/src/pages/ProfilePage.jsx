@@ -163,7 +163,7 @@ function ProfilePage() {
     // Heuristic zoom: keep large estates in view while focusing on smaller plots.
     const targetZoom = Math.min(2, Math.max(0.35, 32 / Math.max(maxDimension, 12)));
 
-    setFocusTarget({
+    const focusData = {
       id: Date.now(),
       type: 'profile-group',
       ownerId: user?.user_id ?? null,
@@ -177,8 +177,14 @@ function ProfilePage() {
       zoom: targetZoom,
       primaryLand: group[0],
       totalParcels: group.length,
-    });
+    };
 
+    console.log('🗺️ Setting focus target:', focusData);
+    setFocusTarget(focusData);
+
+    toast.success(`Viewing ${group.length} parcels on map`);
+
+    console.log('🧭 Navigating to /world');
     navigate('/world');
   }, [navigate, setFocusTarget, user]);
 
@@ -347,8 +353,11 @@ function ProfilePage() {
                     <div className="flex gap-2">
                       <button
                         onClick={() => handleViewOnMap(group)}
-                        className="flex-1 bg-gray-700 hover:bg-gray-600 text-white py-2 rounded-lg transition-colors text-sm font-semibold"
+                        className="flex-1 bg-gray-700 hover:bg-gray-600 text-white py-2 rounded-lg transition-colors text-sm font-semibold flex items-center justify-center gap-2"
                       >
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7" />
+                        </svg>
                         View on Map
                       </button>
                       <button className="flex-1 bg-blue-600 hover:bg-blue-700 text-white py-2 rounded-lg transition-colors text-sm font-semibold">

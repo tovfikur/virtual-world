@@ -18,8 +18,10 @@ const useWorldStore = create((set, get) => ({
     zoom: 1,
   },
   selectedLand: null,
+  selectedLands: [], // Array of selected lands for multi-select
   hoveredLand: null,
   focusTarget: null,
+  multiSelectMode: false, // Toggle for multi-select mode
 
   // World info
   worldSeed: null,
@@ -298,6 +300,50 @@ const useWorldStore = create((set, get) => ({
 
   setHoveredLand: (land) => {
     set({ hoveredLand: land });
+  },
+
+  // Multi-select actions
+  toggleMultiSelectMode: () => {
+    set((state) => ({
+      multiSelectMode: !state.multiSelectMode,
+      selectedLands: !state.multiSelectMode ? [] : state.selectedLands // Clear when disabling
+    }));
+  },
+
+  toggleLandSelection: (land) => {
+    set((state) => {
+      const landKey = `${land.x}_${land.y}`;
+      const isSelected = state.selectedLands.some(l => `${l.x}_${l.y}` === landKey);
+
+      if (isSelected) {
+        return { selectedLands: state.selectedLands.filter(l => `${l.x}_${l.y}` !== landKey) };
+      } else {
+        return { selectedLands: [...state.selectedLands, land] };
+      }
+    });
+  },
+
+  clearSelectedLands: () => {
+    set({ selectedLands: [] });
+  },
+
+  selectLandsInArea: (startLand, endLand) => {
+    const minX = Math.min(startLand.x, endLand.x);
+    const maxX = Math.max(startLand.x, endLand.x);
+    const minY = Math.min(startLand.y, endLand.y);
+    const maxY = Math.max(startLand.y, endLand.y);
+
+    const landsInArea = [];
+    for (let x = minX; x <= maxX; x++) {
+      for (let y = minY; y <= maxY; y++) {
+        const land = get().getLandAt(x, y);
+        if (land) {
+          landsInArea.push(land);
+        }
+      }
+    }
+
+    set({ selectedLands: landsInArea });
   },
 
   setFocusTarget: (target) => {
