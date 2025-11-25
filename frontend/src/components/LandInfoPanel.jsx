@@ -166,9 +166,9 @@ function LandInfoPanel({ land }) {
   const biomeColor = getBiomeColorCSS(landDetails.biome);
 
   return (
-    <div className="w-full md:w-96 bg-gray-800 rounded-lg shadow-xl border border-gray-700 overflow-hidden max-h-[90vh] overflow-y-auto">
+    <div className="w-full md:w-96 bg-gray-800 rounded-lg shadow-xl border border-gray-700 overflow-hidden max-h-[85vh] md:max-h-[90vh] overflow-y-auto">
       {/* Header */}
-      <div className="relative h-32 flex items-center justify-center" style={{ backgroundColor: biomeColor }}>
+      <div className="relative h-24 md:h-32 flex items-center justify-center" style={{ backgroundColor: biomeColor }}>
         <div className="text-center text-white">
           <h3 className="text-2xl font-bold capitalize">{getBiomeName(landDetails.biome)}</h3>
           <p className="text-sm opacity-90">{getBiomeRarity(landDetails.biome)} Biome</p>
@@ -184,7 +184,7 @@ function LandInfoPanel({ land }) {
       </div>
 
       {/* Content */}
-      <div className="p-6 space-y-4">
+      <div className="p-4 md:p-6 space-y-3 md:space-y-4">
         {/* Coordinates */}
         <div>
           <p className="text-gray-400 text-sm mb-1">Coordinates</p>
@@ -237,11 +237,11 @@ function LandInfoPanel({ land }) {
         )}
 
         {/* Actions */}
-        <div className="space-y-2 pt-4 border-t border-gray-700">
+        <div className="space-y-2 pt-3 md:pt-4 border-t border-gray-700">
           {!isOwned && (
             <button
               onClick={() => toast('Purchase via Marketplace', { icon: '🏪' })}
-              className="w-full bg-green-600 hover:bg-green-700 text-white font-semibold py-3 rounded-lg transition-colors"
+              className="w-full bg-green-600 hover:bg-green-700 text-white font-semibold py-2 md:py-3 rounded-lg transition-colors text-sm md:text-base"
             >
               Buy Land - {landDetails.price_base_bdt || landDetails.base_price} BDT
             </button>
@@ -251,7 +251,7 @@ function LandInfoPanel({ land }) {
             <>
               <button
                 onClick={handleFenceToggle}
-                className="w-full bg-yellow-600 hover:bg-yellow-700 text-white font-semibold py-2 rounded-lg transition-colors"
+                className="w-full bg-yellow-600 hover:bg-yellow-700 text-white font-semibold py-2 rounded-lg transition-colors text-sm md:text-base"
               >
                 {landDetails.fenced ? 'Disable' : 'Enable'} Fence
               </button>
@@ -259,12 +259,12 @@ function LandInfoPanel({ land }) {
               {!showListingForm ? (
                 <button
                   onClick={() => setShowListingForm(true)}
-                  className="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2 rounded-lg transition-colors"
+                  className="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2 rounded-lg transition-colors text-sm md:text-base"
                 >
                   List on Marketplace
                 </button>
               ) : (
-                <div className="bg-gray-700 rounded-lg p-4 space-y-3">
+                <div className="bg-gray-700 rounded-lg p-3 md:p-4 space-y-3">
                   <h4 className="text-white font-semibold mb-2">Create Listing</h4>
                   <form onSubmit={handleCreateListing} className="space-y-3">
                     <select

@@ -184,11 +184,11 @@ function MultiLandActionsPanel() {
   };
 
   return (
-    <div className="fixed bottom-20 left-1/2 transform -translate-x-1/2 z-30 bg-gray-800 rounded-lg shadow-2xl border-2 border-blue-500 p-4 min-w-96">
-      <div className="flex items-center justify-between mb-4">
+    <div className="fixed bottom-16 md:bottom-20 left-2 right-2 md:left-1/2 md:right-auto md:transform md:-translate-x-1/2 md:min-w-96 md:max-w-md z-30 bg-gray-800 rounded-lg shadow-2xl border-2 border-blue-500 p-3 md:p-4">
+      <div className="flex items-center justify-between mb-3 md:mb-4">
         <div>
-          <h3 className="text-white font-bold text-lg">Multi-Select Mode</h3>
-          <p className="text-gray-400 text-sm">
+          <h3 className="text-white font-bold text-base md:text-lg">Multi-Select Mode</h3>
+          <p className="text-gray-400 text-xs md:text-sm">
             {selectedLands.length} land{selectedLands.length !== 1 ? 's' : ''} selected
             {ownedLands.length < selectedLands.length && (
               <span className="text-yellow-400 ml-2">
@@ -229,25 +229,25 @@ function MultiLandActionsPanel() {
             <button
               onClick={() => handleBulkFence(true)}
               disabled={processing}
-              className="flex-1 bg-yellow-600 hover:bg-yellow-700 disabled:bg-gray-600 text-white font-semibold py-2 px-4 rounded-lg transition-colors text-sm"
+              className="flex-1 bg-yellow-600 hover:bg-yellow-700 disabled:bg-gray-600 text-white font-semibold py-2 px-2 md:px-4 rounded-lg transition-colors text-xs md:text-sm"
             >
-              {processing ? 'Processing...' : 'Enable Fence All'}
+              {processing ? 'Processing...' : 'Enable Fence'}
             </button>
             <button
               onClick={() => handleBulkFence(false)}
               disabled={processing}
-              className="flex-1 bg-yellow-700 hover:bg-yellow-800 disabled:bg-gray-600 text-white font-semibold py-2 px-4 rounded-lg transition-colors text-sm"
+              className="flex-1 bg-yellow-700 hover:bg-yellow-800 disabled:bg-gray-600 text-white font-semibold py-2 px-2 md:px-4 rounded-lg transition-colors text-xs md:text-sm"
             >
-              {processing ? 'Processing...' : 'Disable Fence All'}
+              {processing ? 'Processing...' : 'Disable Fence'}
             </button>
           </div>
 
           <button
             onClick={() => setShowListingForm(true)}
             disabled={processing}
-            className="w-full bg-blue-600 hover:bg-blue-700 disabled:bg-gray-600 text-white font-semibold py-2 px-4 rounded-lg transition-colors text-sm"
+            className="w-full bg-blue-600 hover:bg-blue-700 disabled:bg-gray-600 text-white font-semibold py-2 px-2 md:px-4 rounded-lg transition-colors text-xs md:text-sm"
           >
-            List All on Marketplace
+            List on Marketplace
           </button>
         </div>
       )}

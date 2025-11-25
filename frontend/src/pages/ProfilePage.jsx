@@ -221,47 +221,47 @@ function ProfilePage() {
   return (
     <div className="min-h-screen bg-gray-900 text-white">
       {/* Header */}
-      <div className="bg-gray-800 border-b border-gray-700 p-6">
+      <div className="bg-gray-800 border-b border-gray-700 p-4 md:p-6">
         <div className="max-w-7xl mx-auto">
-          <h1 className="text-3xl font-bold mb-2">{user.username}</h1>
-          <p className="text-gray-400">{user.email}</p>
+          <h1 className="text-2xl md:text-3xl font-bold mb-2">{user.username}</h1>
+          <p className="text-sm md:text-base text-gray-400">{user.email}</p>
         </div>
       </div>
 
-      <div className="max-w-7xl mx-auto p-6">
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      <div className="max-w-7xl mx-auto p-3 md:p-6">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-6">
           {/* Balance Card */}
-          <div className="bg-gradient-to-br from-blue-600 to-blue-800 rounded-lg p-6 shadow-xl">
-            <h2 className="text-lg font-semibold mb-2 text-blue-100">Balance</h2>
-            <p className="text-4xl font-bold mb-4">{balance?.balance_bdt || 0} BDT</p>
-            <button className="bg-white hover:bg-gray-100 text-blue-900 font-semibold px-4 py-2 rounded-lg transition-colors">
+          <div className="bg-gradient-to-br from-blue-600 to-blue-800 rounded-lg p-4 md:p-6 shadow-xl">
+            <h2 className="text-base md:text-lg font-semibold mb-2 text-blue-100">Balance</h2>
+            <p className="text-3xl md:text-4xl font-bold mb-3 md:mb-4">{balance?.balance_bdt || 0} BDT</p>
+            <button className="bg-white hover:bg-gray-100 text-blue-900 font-semibold px-3 md:px-4 py-2 rounded-lg transition-colors text-sm md:text-base">
               Top Up
             </button>
           </div>
 
           {/* Lands Owned */}
-          <div className="bg-gray-800 rounded-lg p-6 border border-gray-700">
-            <h2 className="text-lg font-semibold mb-2 text-gray-300">Lands Owned</h2>
-            <p className="text-4xl font-bold text-green-400">{stats?.lands_owned || 0}</p>
-            <p className="text-sm text-gray-400 mt-2">
+          <div className="bg-gray-800 rounded-lg p-4 md:p-6 border border-gray-700">
+            <h2 className="text-base md:text-lg font-semibold mb-2 text-gray-300">Lands Owned</h2>
+            <p className="text-3xl md:text-4xl font-bold text-green-400">{stats?.lands_owned || 0}</p>
+            <p className="text-xs md:text-sm text-gray-400 mt-2">
               Total Value: {stats?.total_land_value_bdt || 0} BDT
             </p>
           </div>
 
           {/* Transactions */}
-          <div className="bg-gray-800 rounded-lg p-6 border border-gray-700">
-            <h2 className="text-lg font-semibold mb-2 text-gray-300">Transactions</h2>
-            <p className="text-4xl font-bold text-purple-400">{stats?.total_transactions || 0}</p>
-            <p className="text-sm text-gray-400 mt-2">
+          <div className="bg-gray-800 rounded-lg p-4 md:p-6 border border-gray-700">
+            <h2 className="text-base md:text-lg font-semibold mb-2 text-gray-300">Transactions</h2>
+            <p className="text-3xl md:text-4xl font-bold text-purple-400">{stats?.total_transactions || 0}</p>
+            <p className="text-xs md:text-sm text-gray-400 mt-2">
               {stats?.transactions_as_buyer || 0} buys, {stats?.transactions_as_seller || 0} sales
             </p>
           </div>
         </div>
 
         {/* Owned Lands */}
-        <div className="mt-8">
-          <div className="flex justify-between items-center mb-4">
-            <h2 className="text-2xl font-bold">My Lands</h2>
+        <div className="mt-6 md:mt-8">
+          <div className="flex justify-between items-center mb-3 md:mb-4">
+            <h2 className="text-xl md:text-2xl font-bold">My Lands</h2>
             {pagination && (
               <p className="text-gray-400">
                 Showing {lands.length} of {pagination.total} lands
@@ -280,22 +280,22 @@ function ProfilePage() {
             </div>
           ) : (
             <>
-              <div className="space-y-4">
+              <div className="space-y-3 md:space-y-4">
                 {landGroups.map((group, groupIndex) => (
                   <div
                     key={groupIndex}
-                    className="bg-gray-800 rounded-lg p-6 border border-gray-700 hover:border-blue-500 transition-colors"
+                    className="bg-gray-800 rounded-lg p-4 md:p-6 border border-gray-700 hover:border-blue-500 transition-colors"
                   >
-                    <div className="flex justify-between items-start mb-4">
+                    <div className="flex justify-between items-start mb-3 md:mb-4">
                       <div>
-                        <h3 className="text-xl font-bold mb-1">
+                        <h3 className="text-lg md:text-xl font-bold mb-1">
                           {group.length === 1 ? 'Single Land Parcel' : `Connected Land Group`}
                         </h3>
-                        <p className="text-gray-400 text-sm">
+                        <p className="text-gray-400 text-xs md:text-sm">
                           {group.length} {group.length === 1 ? 'parcel' : 'parcels'} • Total Value: {group.reduce((sum, l) => sum + (l.price_base_bdt || 0), 0)} BDT
                         </p>
                       </div>
-                      <span className="px-3 py-1 bg-blue-600 text-sm rounded font-semibold">
+                      <span className="px-2 md:px-3 py-1 bg-blue-600 text-xs md:text-sm rounded font-semibold">
                         {group.length}x
                       </span>
                     </div>
@@ -350,17 +350,17 @@ function ProfilePage() {
                       </div>
                     )}
 
-                    <div className="flex gap-2">
+                    <div className="flex flex-col sm:flex-row gap-2">
                       <button
                         onClick={() => handleViewOnMap(group)}
-                        className="flex-1 bg-gray-700 hover:bg-gray-600 text-white py-2 rounded-lg transition-colors text-sm font-semibold flex items-center justify-center gap-2"
+                        className="flex-1 bg-gray-700 hover:bg-gray-600 text-white py-2 rounded-lg transition-colors text-xs md:text-sm font-semibold flex items-center justify-center gap-2"
                       >
-                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <svg className="w-3 h-3 md:w-4 md:h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7" />
                         </svg>
                         View on Map
                       </button>
-                      <button className="flex-1 bg-blue-600 hover:bg-blue-700 text-white py-2 rounded-lg transition-colors text-sm font-semibold">
+                      <button className="flex-1 bg-blue-600 hover:bg-blue-700 text-white py-2 rounded-lg transition-colors text-xs md:text-sm font-semibold">
                         Manage Group
                       </button>
                     </div>

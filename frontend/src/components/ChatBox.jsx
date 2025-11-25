@@ -81,9 +81,9 @@ function ChatBox({ onClose }) {
   };
 
   return (
-    <div className="w-full sm:w-96 h-96 bg-gray-800 rounded-lg shadow-xl border border-gray-700 flex flex-col">
+    <div className="w-full h-80 md:h-96 bg-gray-800 rounded-lg shadow-xl border border-gray-700 flex flex-col">
       {/* Header */}
-      <div className="flex items-center justify-between px-4 py-3 border-b border-gray-700">
+      <div className="flex items-center justify-between px-3 md:px-4 py-2 md:py-3 border-b border-gray-700">
         <div>
           <h3 className="text-white font-semibold">Chat</h3>
           <p className="text-xs text-gray-400">Room: {currentRoom}</p>
@@ -99,7 +99,7 @@ function ChatBox({ onClose }) {
       </div>
 
       {/* Messages */}
-      <div className="flex-1 overflow-y-auto p-4 space-y-3">
+      <div className="flex-1 overflow-y-auto p-3 md:p-4 space-y-2 md:space-y-3">
         {messages.length === 0 ? (
           <div className="text-center text-gray-500 mt-8">
             <p>No messages yet</p>
@@ -132,21 +132,21 @@ function ChatBox({ onClose }) {
       </div>
 
       {/* Input */}
-      <form onSubmit={handleSendMessage} className="p-4 border-t border-gray-700">
+      <form onSubmit={handleSendMessage} className="p-2 md:p-4 border-t border-gray-700">
         <div className="flex space-x-2">
           <input
             type="text"
             value={inputValue}
             onChange={handleInputChange}
             placeholder="Type a message..."
-            className="flex-1 px-3 py-2 bg-gray-700 text-white rounded-lg border border-gray-600 focus:border-blue-500 focus:outline-none text-sm"
+            className="flex-1 px-2 md:px-3 py-2 bg-gray-700 text-white rounded-lg border border-gray-600 focus:border-blue-500 focus:outline-none text-xs md:text-sm"
             maxLength={500}
           />
           <button
             type="submit"
-            className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors"
+            className="px-3 md:px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors"
           >
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <svg className="w-4 h-4 md:w-5 md:h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
             </svg>
           </button>
