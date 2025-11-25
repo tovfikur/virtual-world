@@ -17,7 +17,7 @@ class ListingType(str, PyEnum):
     """Listing type enumeration."""
     AUCTION = "auction"
     FIXED_PRICE = "fixed_price"
-    BUY_NOW = "buy_now"
+    AUCTION_WITH_BUYNOW = "auction_with_buynow"
 
 
 class ListingStatus(str, PyEnum):
@@ -194,17 +194,15 @@ class Listing(BaseModel):
             "listing_id": str(self.listing_id),
             "land_id": str(self.land_id),
             "seller_id": str(self.seller_id),
-            "type": self.type.value,
-            "description": self.description,
-            "images": self.images,
-            "price_bdt": self.price_bdt,
-            "reserve_price_bdt": self.reserve_price_bdt,
-            "auction_start_time": self.auction_start_time.isoformat() if self.auction_start_time else None,
-            "auction_end_time": self.auction_end_time.isoformat() if self.auction_end_time else None,
-            "auto_extend": self.auto_extend,
-            "buy_now_enabled": self.buy_now_enabled,
-            "buy_now_price_bdt": self.buy_now_price_bdt,
+            "listing_type": self.type.value,
             "status": self.status.value,
-            "sold_at": self.sold_at.isoformat() if self.sold_at else None,
-            "created_at": self.created_at.isoformat() if self.created_at else None
+            "starting_price_bdt": self.price_bdt if self.type in [ListingType.AUCTION, ListingType.AUCTION_WITH_BUYNOW] else None,
+            "current_price_bdt": self.price_bdt,
+            "reserve_price_bdt": self.reserve_price_bdt,
+            "buy_now_price_bdt": self.buy_now_price_bdt,
+            "bid_count": 0,  # TODO: Calculate from bids relationship
+            "highest_bidder_id": None,  # TODO: Get from bids
+            "ends_at": self.auction_end_time.isoformat() if self.auction_end_time else None,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+            "updated_at": self.updated_at.isoformat() if self.updated_at else None,
         }

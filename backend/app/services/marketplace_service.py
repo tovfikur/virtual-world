@@ -89,12 +89,12 @@ class MarketplaceService:
         listing = Listing(
             land_id=land_id,
             seller_id=seller_id,
-            listing_type=listing_type,
-            starting_price_bdt=starting_price_bdt,
-            current_price_bdt=starting_price_bdt or buy_now_price_bdt,
+            type=listing_type,
+            price_bdt=starting_price_bdt or buy_now_price_bdt,
             reserve_price_bdt=reserve_price_bdt,
             buy_now_price_bdt=buy_now_price_bdt,
-            ends_at=ends_at,
+            auction_end_time=ends_at,
+            auto_extend=(listing_type in [ListingType.AUCTION, ListingType.AUCTION_WITH_BUYNOW]),
             auto_extend_minutes=auto_extend_minutes
         )
 
@@ -148,7 +148,7 @@ class MarketplaceService:
         if listing.status != ListingStatus.ACTIVE:
             raise ValueError("Listing is not active")
 
-        if listing.listing_type == ListingType.FIXED_PRICE:
+        if listing.type == ListingType.FIXED_PRICE:
             raise ValueError("Cannot bid on fixed price listings")
 
         # Check if auction has ended

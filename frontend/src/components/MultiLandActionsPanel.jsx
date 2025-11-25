@@ -18,6 +18,7 @@ function MultiLandActionsPanel() {
   const [buyNowPrice, setBuyNowPrice] = useState('');
   const [duration, setDuration] = useState('24');
   const [processing, setProcessing] = useState(false);
+  const [progress, setProgress] = useState({ current: 0, total: 0 });
 
   if (selectedLands.length === 0) return null;
 
@@ -26,35 +27,70 @@ function MultiLandActionsPanel() {
   const unownedCount = selectedLands.length - ownedLands.length;
 
   const handleBulkFence = async (enable) => {
-    if (ownedLands.length === 0) {
-      toast.error('No owned lands selected');
+    if (selectedLands.length === 0) {
+      toast.error('No lands selected');
       return;
     }
 
     setProcessing(true);
+    setProgress({ current: 0, total: selectedLands.length });
     let successCount = 0;
     let failCount = 0;
+    const errors = [];
 
-    for (const land of ownedLands) {
+    // Process each land
+    for (let i = 0; i < selectedLands.length; i++) {
+      const land = selectedLands[i];
+      setProgress({ current: i + 1, total: selectedLands.length });
       try {
+        // If land doesn't have land_id, we need to fetch it first
+        let landId = land.land_id;
+
+        if (!landId) {
+          // Try to get land details by coordinates
+          try {
+            const response = await landsAPI.getLandByCoords(land.x, land.y);
+            landId = response.data.land_id;
+
+            // Check if current user owns it
+            if (response.data.owner_id !== user?.user_id) {
+              errors.push(`(${land.x}, ${land.y}) - Not owned by you`);
+              failCount++;
+              continue;
+            }
+          } catch (fetchError) {
+            errors.push(`(${land.x}, ${land.y}) - Not claimed yet`);
+            failCount++;
+            continue;
+          }
+        }
+
+        // Now fence the land
         await landsAPI.manageFence(
-          land.land_id,
+          landId,
           enable,
           enable ? '1234' : null
         );
         successCount++;
       } catch (error) {
-        console.error(`Failed to fence land ${land.land_id}:`, error);
+        console.error(`Failed to fence land at (${land.x}, ${land.y}):`, error);
+        const errorMsg = error.response?.data?.detail || error.message;
+        errors.push(`(${land.x}, ${land.y}) - ${errorMsg}`);
         failCount++;
       }
     }
 
     setProcessing(false);
+    setProgress({ current: 0, total: 0 });
+
     if (successCount > 0) {
       toast.success(`${enable ? 'Enabled' : 'Disabled'} fence on ${successCount} land(s)`);
     }
     if (failCount > 0) {
-      toast.error(`Failed to fence ${failCount} land(s)`);
+      const errorSummary = errors.slice(0, 3).join('\n');
+      const moreErrors = errors.length > 3 ? `\n...and ${errors.length - 3} more` : '';
+      toast.error(`Failed to fence ${failCount} land(s):\n${errorSummary}${moreErrors}`, { duration: 6000 });
+      console.error('Fence errors:', errors);
     }
 
     clearSelectedLands();
@@ -63,19 +99,45 @@ function MultiLandActionsPanel() {
   const handleBulkListing = async (e) => {
     e.preventDefault();
 
-    if (ownedLands.length === 0) {
-      toast.error('No owned lands selected');
+    if (selectedLands.length === 0) {
+      toast.error('No lands selected');
       return;
     }
 
     setProcessing(true);
+    setProgress({ current: 0, total: selectedLands.length });
     let successCount = 0;
     let failCount = 0;
+    const errors = [];
 
-    for (const land of ownedLands) {
+    for (let i = 0; i < selectedLands.length; i++) {
+      const land = selectedLands[i];
+      setProgress({ current: i + 1, total: selectedLands.length });
       try {
+        // If land doesn't have land_id, we need to fetch it first
+        let landId = land.land_id;
+
+        if (!landId) {
+          // Try to get land details by coordinates
+          try {
+            const response = await landsAPI.getLandByCoords(land.x, land.y);
+            landId = response.data.land_id;
+
+            // Check if current user owns it
+            if (response.data.owner_id !== user?.user_id) {
+              errors.push(`(${land.x}, ${land.y}) - Not owned by you`);
+              failCount++;
+              continue;
+            }
+          } catch (fetchError) {
+            errors.push(`(${land.x}, ${land.y}) - Not claimed yet`);
+            failCount++;
+            continue;
+          }
+        }
+
         const listingData = {
-          land_id: land.land_id,
+          land_id: landId,
           listing_type: listingType,
         };
 
@@ -94,17 +156,24 @@ function MultiLandActionsPanel() {
         await marketplaceAPI.createListing(listingData);
         successCount++;
       } catch (error) {
-        console.error(`Failed to list land ${land.land_id}:`, error);
+        console.error(`Failed to list land at (${land.x}, ${land.y}):`, error);
+        const errorMsg = error.response?.data?.detail || error.message;
+        errors.push(`(${land.x}, ${land.y}) - ${errorMsg}`);
         failCount++;
       }
     }
 
     setProcessing(false);
+    setProgress({ current: 0, total: 0 });
+
     if (successCount > 0) {
       toast.success(`Created ${successCount} listing(s)`);
     }
     if (failCount > 0) {
-      toast.error(`Failed to list ${failCount} land(s)`);
+      const errorSummary = errors.slice(0, 3).join('\n');
+      const moreErrors = errors.length > 3 ? `\n...and ${errors.length - 3} more` : '';
+      toast.error(`Failed to list ${failCount} land(s):\n${errorSummary}${moreErrors}`, { duration: 6000 });
+      console.error('Listing errors:', errors);
     }
 
     setShowListingForm(false);
@@ -138,6 +207,21 @@ function MultiLandActionsPanel() {
           </svg>
         </button>
       </div>
+
+      {processing && progress.total > 0 && (
+        <div className="mb-4">
+          <div className="flex justify-between text-sm text-gray-300 mb-2">
+            <span>Processing...</span>
+            <span>{progress.current} / {progress.total}</span>
+          </div>
+          <div className="w-full bg-gray-700 rounded-full h-2">
+            <div
+              className="bg-blue-600 h-2 rounded-full transition-all duration-300"
+              style={{ width: `${(progress.current / progress.total) * 100}%` }}
+            ></div>
+          </div>
+        </div>
+      )}
 
       {ownedLands.length > 0 && !showListingForm && (
         <div className="space-y-2">
