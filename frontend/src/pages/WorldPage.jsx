@@ -97,9 +97,9 @@ function WorldPage() {
         </button>
       )}
 
-      {/* Land Info Panel - Right Side */}
+      {/* Land Info Panel - Bottom on Mobile, Right Side on Desktop */}
       {showLandInfo && selectedLand && (
-        <div className="absolute top-16 md:top-20 left-0 right-0 md:left-auto md:right-4 z-20 px-2 md:px-0">
+        <div className="absolute bottom-0 left-0 right-0 md:bottom-auto md:top-20 md:left-auto md:right-4 z-20">
           <LandInfoPanel land={selectedLand} />
         </div>
       )}
