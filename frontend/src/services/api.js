@@ -304,13 +304,6 @@ export const adminAPI = {
   getAuditLogs: (params) =>
     api.get('/admin/system/audit-logs', { params }),
 
-  // World Configuration
-  getWorldConfig: () =>
-    api.get('/admin/config/world'),
-
-  updateWorldConfig: (data) =>
-    api.patch('/admin/config/world', data),
-
   // Marketplace & Economy
   getMarketplaceListings: (params) =>
     api.get('/admin/marketplace/listings', { params }),

@@ -18,16 +18,37 @@ from app.models.listing import Listing
 from app.models.transaction import Transaction
 from app.models.chat import ChatSession
 from app.models.chat import Message
-from app.models.audit_log import AuditLog
+from app.models.audit_log import AuditLog, AuditEventCategory
 from app.models.admin_config import AdminConfig
 from app.models.ban import Ban
 from app.models.announcement import Announcement
 from app.models.report import Report
 from app.services.cache_service import cache_service
+from app.services.websocket_service import connection_manager
 from pydantic import BaseModel
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/admin", tags=["admin"])
+
+
+def create_audit_log(
+    actor_id: str,
+    event_type: str,
+    resource_type: str,
+    resource_id: str = None,
+    action: str = None,
+    details: dict = None
+) -> AuditLog:
+    """Helper to create audit logs with correct field structure"""
+    return AuditLog(
+        actor_id=actor_id,
+        event_type=event_type,
+        event_category=AuditEventCategory.ADMIN,
+        resource_type=resource_type,
+        resource_id=str(resource_id) if resource_id else None,
+        action=action,
+        details=details
+    )
 
 
 # ============================================
@@ -52,13 +73,6 @@ class UserUpdateRequest(BaseModel):
     role: Optional[str] = None
     balance_bdt: Optional[int] = None
     is_active: Optional[bool] = None
-
-
-class WorldConfigUpdate(BaseModel):
-    default_world_seed: Optional[int] = None
-    chunk_cache_ttl: Optional[int] = None
-    max_chunks_in_memory: Optional[int] = None
-    enable_maintenance_mode: Optional[bool] = None
 
 
 # ============================================
@@ -140,11 +154,9 @@ async def get_dashboard_stats(
             )
         ) or 0
 
-        # Active chat sessions
+        # Active chat sessions (count sessions with recent messages)
         active_chat_sessions = await db.scalar(
-            select(func.count(ChatSession.session_id)).where(
-                ChatSession.status == "active"
-            )
+            select(func.count(ChatSession.session_id))
         )
 
         # Total messages
@@ -424,12 +436,13 @@ async def update_user(
         await db.refresh(user)
 
         # Log action
-        audit_log = AuditLog(
-            user_id=admin["sub"],
-            action="update_user",
+        audit_log = create_audit_log(
+            actor_id=admin["sub"],
+            event_type="update_user",
             resource_type="user",
             resource_id=user_id,
-            details=f"Admin updated user: {update_data.dict(exclude_none=True)}"
+            action="Admin updated user",
+            details={"changes": update_data.dict(exclude_none=True)}
         )
         db.add(audit_log)
         await db.commit()
@@ -511,10 +524,10 @@ async def get_audit_logs(
         query = select(AuditLog)
 
         if action:
-            query = query.where(AuditLog.action == action)
+            query = query.where(AuditLog.event_type == action)
 
         if user_id:
-            query = query.where(AuditLog.user_id == user_id)
+            query = query.where(AuditLog.actor_id == user_id)
 
         # Count total
         count_query = select(func.count()).select_from(query.subquery())
@@ -530,13 +543,12 @@ async def get_audit_logs(
         return {
             "data": [
                 {
-                    "log_id": log.log_id,
-                    "user_id": log.user_id,
-                    "action": log.action,
+                    "log_id": str(log.log_id),
+                    "user_id": str(log.actor_id) if log.actor_id else None,
+                    "action": log.event_type,
                     "resource_type": log.resource_type,
                     "resource_id": log.resource_id,
-                    "details": log.details,
-                    "ip_address": log.ip_address,
+                    "details": str(log.details) if log.details else None,
                     "created_at": log.created_at.isoformat()
                 }
                 for log in logs
@@ -554,100 +566,6 @@ async def get_audit_logs(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to fetch audit logs"
-        )
-
-
-# ============================================
-# World Configuration
-# ============================================
-
-@router.get("/config/world")
-async def get_world_config(
-    db: AsyncSession = Depends(get_db),
-    admin: dict = Depends(require_admin)
-):
-    """Get current world configuration"""
-    try:
-        result = await db.execute(select(AdminConfig).limit(1))
-        config = result.scalar_one_or_none()
-
-        if not config:
-            return {
-                "message": "No configuration found",
-                "config": None
-            }
-
-        return {
-            "config_id": config.config_id,
-            "default_world_seed": config.default_world_seed,
-            "enable_land_trading": config.enable_land_trading,
-            "enable_chat": config.enable_chat,
-            "maintenance_mode": config.maintenance_mode,
-            "max_land_price_bdt": config.max_land_price_bdt,
-            "min_land_price_bdt": config.min_land_price_bdt,
-            "auction_extend_minutes": config.auction_extend_minutes,
-            "updated_at": config.updated_at.isoformat() if config.updated_at else None
-        }
-
-    except Exception as e:
-        logger.error(f"Error getting world config: {e}")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Failed to fetch world configuration"
-        )
-
-
-@router.patch("/config/world")
-async def update_world_config(
-    config_update: WorldConfigUpdate,
-    db: AsyncSession = Depends(get_db),
-    admin: dict = Depends(require_admin)
-):
-    """Update world configuration"""
-    try:
-        result = await db.execute(select(AdminConfig).limit(1))
-        config = result.scalar_one_or_none()
-
-        if not config:
-            # Create new config
-            config = AdminConfig(
-                default_world_seed=config_update.default_world_seed or 12345
-            )
-            db.add(config)
-        else:
-            # Update existing
-            if config_update.default_world_seed is not None:
-                config.default_world_seed = config_update.default_world_seed
-
-            if config_update.enable_maintenance_mode is not None:
-                config.maintenance_mode = config_update.enable_maintenance_mode
-
-            config.updated_at = datetime.utcnow()
-
-        await db.commit()
-
-        # Log action
-        audit_log = AuditLog(
-            user_id=admin["sub"],
-            action="update_world_config",
-            resource_type="config",
-            resource_id=str(config.config_id),
-            details=f"Updated config: {config_update.dict(exclude_none=True)}"
-        )
-        db.add(audit_log)
-        await db.commit()
-
-        return {
-            "message": "World configuration updated successfully",
-            "updated_fields": config_update.dict(exclude_none=True)
-        }
-
-    except Exception as e:
-        logger.error(f"Error updating world config: {e}")
-        await db.rollback()
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Failed to update world configuration"
         )
 
 
@@ -736,12 +654,13 @@ async def remove_listing(
         listing.updated_at = datetime.utcnow()
 
         # Log action
-        audit_log = AuditLog(
-            user_id=admin["sub"],
-            action="remove_listing",
+        audit_log = create_audit_log(
+            actor_id=admin["sub"],
+            event_type="remove_listing",
             resource_type="listing",
             resource_id=listing_id,
-            details=f"Removed listing. Reason: {reason}"
+            action="Removed listing",
+            details={"reason": reason}
         )
         db.add(audit_log)
 
@@ -864,12 +783,13 @@ async def refund_transaction(
         transaction.updated_at = datetime.utcnow()
 
         # Log action
-        audit_log = AuditLog(
-            user_id=admin["sub"],
-            action="refund_transaction",
+        audit_log = create_audit_log(
+            actor_id=admin["sub"],
+            event_type="refund_transaction",
             resource_type="transaction",
             resource_id=transaction_id,
-            details=f"Refunded transaction. Reason: {reason}"
+            action="Refunded transaction",
+            details={"reason": reason, "amount_bdt": transaction.amount_bdt}
         )
         db.add(audit_log)
 
@@ -1040,12 +960,13 @@ async def update_economic_settings(
         await db.commit()
 
         # Log action
-        audit_log = AuditLog(
-            user_id=admin["sub"],
-            action="update_economic_settings",
+        audit_log = create_audit_log(
+            actor_id=admin["sub"],
+            event_type="update_economic_settings",
             resource_type="config",
             resource_id=str(config.config_id),
-            details=f"Updated economic settings: {settings.dict(exclude_none=True)}"
+            action="Updated economic settings",
+            details={"changes": settings.dict(exclude_none=True)}
         )
         db.add(audit_log)
         await db.commit()
@@ -1152,12 +1073,13 @@ async def transfer_land_ownership(
         land.updated_at = datetime.utcnow()
 
         # Log action
-        audit_log = AuditLog(
-            user_id=admin["sub"],
-            action="transfer_land",
+        audit_log = create_audit_log(
+            actor_id=admin["sub"],
+            event_type="transfer_land",
             resource_type="land",
             resource_id=land_id,
-            details=f"Transferred land from {old_owner_id} to {new_owner_id}. Reason: {reason}"
+            action="Transferred land ownership",
+            details={"old_owner_id": str(old_owner_id) if old_owner_id else None, "new_owner_id": new_owner_id, "reason": reason}
         )
         db.add(audit_log)
 
@@ -1201,12 +1123,13 @@ async def reclaim_land(
         land.updated_at = datetime.utcnow()
 
         # Log action
-        audit_log = AuditLog(
-            user_id=admin["sub"],
-            action="reclaim_land",
+        audit_log = create_audit_log(
+            actor_id=admin["sub"],
+            event_type="reclaim_land",
             resource_type="land",
             resource_id=land_id,
-            details=f"Reclaimed land from {old_owner_id}. Reason: {reason}"
+            action="Reclaimed land",
+            details={"previous_owner_id": str(old_owner_id) if old_owner_id else None, "reason": reason}
         )
         db.add(audit_log)
 
@@ -1276,12 +1199,13 @@ async def suspend_user(
         user.updated_at = datetime.utcnow()
 
         # Log action
-        audit_log = AuditLog(
-            user_id=admin["sub"],
-            action="suspend_user",
+        audit_log = create_audit_log(
+            actor_id=admin["sub"],
+            event_type="suspend_user",
             resource_type="user",
             resource_id=user_id,
-            details=f"Suspended user. Reason: {request.reason}, Duration: {request.duration_days or 'permanent'} days"
+            action="Suspended user",
+            details={"reason": request.reason, "duration_days": request.duration_days or "permanent"}
         )
         db.add(audit_log)
 
@@ -1323,12 +1247,13 @@ async def unsuspend_user(
         user.updated_at = datetime.utcnow()
 
         # Log action
-        audit_log = AuditLog(
-            user_id=admin["sub"],
-            action="unsuspend_user",
+        audit_log = create_audit_log(
+            actor_id=admin["sub"],
+            event_type="unsuspend_user",
             resource_type="user",
             resource_id=user_id,
-            details="Removed user suspension"
+            action="Removed user suspension",
+            details={}
         )
         db.add(audit_log)
 
@@ -1392,12 +1317,13 @@ async def ban_user(
             user.suspended_until = expires_at
 
         # Log action
-        audit_log = AuditLog(
-            user_id=admin["sub"],
-            action="ban_user",
+        audit_log = create_audit_log(
+            actor_id=admin["sub"],
+            event_type="ban_user",
             resource_type="user",
             resource_id=user_id,
-            details=f"Banned user ({request.ban_type}). Reason: {request.reason}"
+            action="Banned user",
+            details={"ban_type": request.ban_type, "reason": request.reason}
         )
         db.add(audit_log)
 
@@ -1452,12 +1378,13 @@ async def unban_user(
             user.suspended_until = None
 
         # Log action
-        audit_log = AuditLog(
-            user_id=admin["sub"],
-            action="unban_user",
+        audit_log = create_audit_log(
+            actor_id=admin["sub"],
+            event_type="unban_user",
             resource_type="user",
             resource_id=user_id,
-            details=f"Removed {len(bans)} active ban(s)"
+            action="Unbanned user",
+            details={"bans_removed": len(bans)}
         )
         db.add(audit_log)
 
@@ -1654,12 +1581,13 @@ async def update_feature_toggles(
         await db.commit()
 
         # Log action
-        audit_log = AuditLog(
-            user_id=admin["sub"],
-            action="update_feature_toggles",
+        audit_log = create_audit_log(
+            actor_id=admin["sub"],
+            event_type="update_feature_toggles",
             resource_type="config",
             resource_id=str(config.config_id),
-            details=f"Updated feature toggles: {settings.dict(exclude_none=True)}"
+            action="Updated feature toggles",
+            details={"changes": settings.dict(exclude_none=True)}
         )
         db.add(audit_log)
         await db.commit()
@@ -1741,12 +1669,13 @@ async def update_system_limits(
         await db.commit()
 
         # Log action
-        audit_log = AuditLog(
-            user_id=admin["sub"],
-            action="update_system_limits",
+        audit_log = create_audit_log(
+            actor_id=admin["sub"],
+            event_type="update_system_limits",
             resource_type="config",
             resource_id=str(config.config_id),
-            details=f"Updated system limits: {settings.dict(exclude_none=True)}"
+            action="Updated system limits",
+            details={"changes": settings.dict(exclude_none=True)}
         )
         db.add(audit_log)
         await db.commit()
@@ -1807,7 +1736,7 @@ async def get_chat_messages(
                 {
                     "message_id": str(m.message_id),
                     "sender_id": str(m.sender_id),
-                    "content": m.content,
+                    "content": m.content_encrypted,
                     "created_at": m.created_at.isoformat()
                 }
                 for m in messages
@@ -1847,12 +1776,13 @@ async def delete_message(
         await db.delete(message)
 
         # Log action
-        audit_log = AuditLog(
-            user_id=admin["sub"],
-            action="delete_message",
+        audit_log = create_audit_log(
+            actor_id=admin["sub"],
+            event_type="delete_message",
             resource_type="message",
             resource_id=message_id,
-            details=f"Deleted message from user {sender_id}. Reason: {reason}"
+            action="Deleted message",
+            details={"sender_id": str(sender_id), "reason": reason}
         )
         db.add(audit_log)
 
@@ -1908,12 +1838,13 @@ async def mute_user(
         db.add(ban)
 
         # Log action
-        audit_log = AuditLog(
-            user_id=admin["sub"],
-            action="mute_user",
+        audit_log = create_audit_log(
+            actor_id=admin["sub"],
+            event_type="mute_user",
             resource_type="user",
             resource_id=user_id,
-            details=f"Muted user for {request.duration_minutes} minutes. Reason: {reason}"
+            action="Muted user",
+            details={"duration_minutes": request.duration_minutes, "reason": reason}
         )
         db.add(audit_log)
 
@@ -2026,12 +1957,13 @@ async def resolve_report(
         report.resolved_at = datetime.utcnow()
 
         # Log action
-        audit_log = AuditLog(
-            user_id=admin["sub"],
-            action="resolve_report",
+        audit_log = create_audit_log(
+            actor_id=admin["sub"],
+            event_type="resolve_report",
             resource_type="report",
             resource_id=report_id,
-            details=f"Report {request.action}. Notes: {request.notes or 'None'}"
+            action=f"Report {request.action}",
+            details={"resolution": request.action, "notes": request.notes}
         )
         db.add(audit_log)
 
@@ -2155,12 +2087,13 @@ async def create_announcement(
         db.add(announcement)
 
         # Log action
-        audit_log = AuditLog(
-            user_id=admin["sub"],
-            action="create_announcement",
+        audit_log = create_audit_log(
+            actor_id=admin["sub"],
+            event_type="create_announcement",
             resource_type="announcement",
             resource_id=str(announcement.announcement_id),
-            details=f"Created announcement: {request.title}"
+            action="Created announcement",
+            details={"title": request.title}
         )
         db.add(audit_log)
 
@@ -2205,12 +2138,13 @@ async def update_announcement(
         announcement.end_date = request.end_date
 
         # Log action
-        audit_log = AuditLog(
-            user_id=admin["sub"],
-            action="update_announcement",
+        audit_log = create_audit_log(
+            actor_id=admin["sub"],
+            event_type="update_announcement",
             resource_type="announcement",
             resource_id=announcement_id,
-            details=f"Updated announcement: {request.title}"
+            action="Updated announcement",
+            details={"title": request.title}
         )
         db.add(audit_log)
 
@@ -2248,12 +2182,13 @@ async def delete_announcement(
         await db.delete(announcement)
 
         # Log action
-        audit_log = AuditLog(
-            user_id=admin["sub"],
-            action="delete_announcement",
+        audit_log = create_audit_log(
+            actor_id=admin["sub"],
+            event_type="delete_announcement",
             resource_type="announcement",
             resource_id=announcement_id,
-            details=f"Deleted announcement: {title}"
+            action="Deleted announcement",
+            details={"title": title}
         )
         db.add(audit_log)
 
@@ -2287,29 +2222,92 @@ async def send_broadcast(
     db: AsyncSession = Depends(get_db),
     admin: dict = Depends(require_admin)
 ):
-    """Send broadcast message to users (placeholder for WebSocket implementation)"""
+    """Send broadcast message to all connected users via WebSocket"""
     try:
-        # In a real implementation, this would:
-        # 1. Get list of target users based on request.target
-        # 2. Send WebSocket message to all connected users
-        # 3. Optionally save to database for offline users
+        from datetime import datetime
+        import uuid
+
+        # Get target users based on request.target
+        target_user_ids = []
+
+        if request.target == "online":
+            # Send only to currently online users
+            target_user_ids = connection_manager.get_all_online_users()
+        elif request.target == "admins":
+            # Get all admin user IDs who are online
+            online_users = connection_manager.get_all_online_users()
+            if online_users:
+                user_uuids = [uuid.UUID(uid) for uid in online_users]
+                result = await db.execute(
+                    select(User.user_id).where(
+                        and_(
+                            User.user_id.in_(user_uuids),
+                            User.role == "admin"
+                        )
+                    )
+                )
+                admin_ids = result.scalars().all()
+                target_user_ids = [str(uid) for uid in admin_ids]
+        elif request.target == "users":
+            # Get all non-admin users who are online
+            online_users = connection_manager.get_all_online_users()
+            if online_users:
+                user_uuids = [uuid.UUID(uid) for uid in online_users]
+                result = await db.execute(
+                    select(User.user_id).where(
+                        and_(
+                            User.user_id.in_(user_uuids),
+                            User.role != "admin"
+                        )
+                    )
+                )
+                user_ids = result.scalars().all()
+                target_user_ids = [str(uid) for uid in user_ids]
+        else:
+            # "all" - send to all online users
+            target_user_ids = connection_manager.get_all_online_users()
+
+        # Prepare broadcast message
+        broadcast_message = {
+            "type": "broadcast",
+            "title": request.title,
+            "message": request.message,
+            "from": "System Administrator",
+            "timestamp": datetime.utcnow().isoformat(),
+            "target": request.target
+        }
+
+        # Send to all target users
+        sent_count = 0
+        for user_id in target_user_ids:
+            success = await connection_manager.send_personal_message(broadcast_message, user_id)
+            if success:
+                sent_count += 1
 
         # Log action
-        audit_log = AuditLog(
-            user_id=admin["sub"],
-            action="send_broadcast",
+        audit_log = create_audit_log(
+            actor_id=admin["sub"],
+            event_type="send_broadcast",
             resource_type="broadcast",
             resource_id=None,
-            details=f"Sent broadcast to {request.target}: {request.message[:100]}"
+            action="Sent broadcast",
+            details={
+                "target": request.target,
+                "message_preview": request.message[:100],
+                "recipients_count": sent_count
+            }
         )
         db.add(audit_log)
 
         await db.commit()
 
+        logger.info(f"Broadcast sent to {sent_count} users (target: {request.target})")
+
         return {
             "message": "Broadcast message sent successfully",
             "target": request.target,
-            "note": "WebSocket implementation required for real-time delivery"
+            "recipients_count": sent_count,
+            "online_users": len(connection_manager.get_all_online_users())
         }
 
     except Exception as e:
@@ -2402,10 +2400,10 @@ async def get_security_logs(
             "delete_message", "mute_user", "resolve_report"
         ]
 
-        query = select(AuditLog).where(AuditLog.action.in_(security_actions))
+        query = select(AuditLog).where(AuditLog.event_type.in_(security_actions))
 
         if action_type:
-            query = query.where(AuditLog.action == action_type)
+            query = query.where(AuditLog.event_type == action_type)
 
         # Count total
         count_query = select(func.count()).select_from(query.subquery())
@@ -2422,12 +2420,11 @@ async def get_security_logs(
             "data": [
                 {
                     "log_id": str(log.log_id),
-                    "user_id": str(log.user_id),
-                    "action": log.action,
+                    "user_id": str(log.actor_id) if log.actor_id else None,
+                    "action": log.event_type,
                     "resource_type": log.resource_type,
                     "resource_id": str(log.resource_id) if log.resource_id else None,
-                    "details": log.details,
-                    "ip_address": log.ip_address,
+                    "details": str(log.details) if log.details else None,
                     "created_at": log.created_at.isoformat()
                 }
                 for log in logs

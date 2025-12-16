@@ -121,7 +121,8 @@ class Settings(BaseSettings):
     log_file: Optional[str] = Field(default=None, env="LOG_FILE")
 
     # World Generation
-    default_world_seed: int = Field(default=12345, env="DEFAULT_WORLD_SEED")
+    # Seed: "Topu" encoded as integer (84, 111, 112, 117 -> 1416589429)
+    default_world_seed: int = Field(default=1416589429, env="DEFAULT_WORLD_SEED")
     chunk_cache_ttl: int = Field(default=3600, env="CHUNK_CACHE_TTL")
     max_chunks_in_memory: int = Field(default=1000, env="MAX_CHUNKS_IN_MEMORY")
 

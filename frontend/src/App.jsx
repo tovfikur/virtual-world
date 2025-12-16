@@ -5,8 +5,9 @@
 
 import { useEffect } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
-import { Toaster } from 'react-hot-toast';
+import { Toaster, toast } from 'react-hot-toast';
 import useAuthStore from './stores/authStore';
+import { wsService } from './services/websocket';
 
 // Pages
 import LoginPage from './pages/LoginPage';
@@ -18,7 +19,6 @@ import ProfilePage from './pages/ProfilePage';
 // Admin Pages
 import AdminDashboardPage from './pages/AdminDashboardPage';
 import AdminUsersPage from './pages/AdminUsersPage';
-import AdminConfigPage from './pages/AdminConfigPage';
 import AdminLogsPage from './pages/AdminLogsPage';
 import AdminMarketplacePage from './pages/AdminMarketplacePage';
 import AdminLandsPage from './pages/AdminLandsPage';
@@ -39,6 +39,62 @@ function App() {
   useEffect(() => {
     loadUser();
   }, [loadUser]);
+
+  // Listen for broadcast messages from admin
+  useEffect(() => {
+    if (!isAuthenticated) return;
+
+    const handleBroadcast = (message) => {
+      // Show a custom toast for broadcast messages
+      toast.custom(
+        (t) => (
+          <div
+            className={`${
+              t.visible ? 'animate-enter' : 'animate-leave'
+            } max-w-md w-full bg-gradient-to-r from-blue-600 to-purple-600 shadow-lg rounded-lg pointer-events-auto flex ring-1 ring-black ring-opacity-5`}
+          >
+            <div className="flex-1 w-0 p-4">
+              <div className="flex items-start">
+                <div className="flex-shrink-0 pt-0.5">
+                  <svg className="h-10 w-10 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5.882V19.24a1.76 1.76 0 01-3.417.592l-2.147-6.15M18 13a3 3 0 100-6M5.436 13.683A4.001 4.001 0 017 6h1.832c4.1 0 7.625-1.234 9.168-3v14c-1.543-1.766-5.067-3-9.168-3H7a3.988 3.988 0 01-1.564-.317z" />
+                  </svg>
+                </div>
+                <div className="ml-3 flex-1">
+                  <p className="text-sm font-bold text-white">
+                    {message.title || 'System Announcement'}
+                  </p>
+                  <p className="mt-1 text-sm text-gray-100">
+                    {message.message}
+                  </p>
+                </div>
+              </div>
+            </div>
+            <div className="flex border-l border-white/20">
+              <button
+                onClick={() => toast.dismiss(t.id)}
+                className="w-full border border-transparent rounded-none rounded-r-lg p-4 flex items-center justify-center text-sm font-medium text-white hover:text-gray-200 focus:outline-none"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        ),
+        {
+          duration: 10000, // Show for 10 seconds
+          position: 'top-center',
+        }
+      );
+    };
+
+    // Subscribe to broadcast messages
+    const unsubscribe = wsService.on('broadcast', handleBroadcast);
+
+    // Cleanup on unmount
+    return () => {
+      if (unsubscribe) unsubscribe();
+    };
+  }, [isAuthenticated]);
 
   if (isLoading) {
     return <LoadingScreen />;
@@ -113,14 +169,6 @@ function App() {
           element={
             <ProtectedRoute>
               <AdminUsersPage />
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/admin/config"
-          element={
-            <ProtectedRoute>
-              <AdminConfigPage />
             </ProtectedRoute>
           }
         />
