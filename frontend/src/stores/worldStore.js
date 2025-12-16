@@ -3,8 +3,8 @@
  * Manages world state, chunks, and camera
  */
 
-import { create } from 'zustand';
-import { chunksAPI, chatAPI } from '../services/api';
+import { create } from "zustand";
+import { chunksAPI, chatAPI } from "../services/api";
 
 const useWorldStore = create((set, get) => ({
   // State
@@ -47,7 +47,11 @@ const useWorldStore = create((set, get) => ({
     }));
 
     try {
-      const response = await chunksAPI.getChunk(chunkX, chunkY, get().chunkSize);
+      const response = await chunksAPI.getChunk(
+        chunkX,
+        chunkY,
+        get().chunkSize
+      );
       const chunkData = response.data;
 
       // Store chunk
@@ -81,7 +85,10 @@ const useWorldStore = create((set, get) => ({
 
   loadChunksBatch: async (chunkCoords) => {
     try {
-      const response = await chunksAPI.getChunksBatch(chunkCoords, get().chunkSize);
+      const response = await chunksAPI.getChunksBatch(
+        chunkCoords,
+        get().chunkSize
+      );
       const { chunks: chunksData } = response.data;
 
       // Store all chunks
@@ -95,13 +102,17 @@ const useWorldStore = create((set, get) => ({
 
       return chunksData;
     } catch (error) {
-      console.error('Failed to load chunks batch:', error);
+      console.error("Failed to load chunks batch:", error);
       return [];
     }
   },
 
   // Load chunks sequentially in batches (only if in viewport)
-  loadChunksSequentially: async (chunkCoordsList, viewportWidth, viewportHeight) => {
+  loadChunksSequentially: async (
+    chunkCoordsList,
+    viewportWidth,
+    viewportHeight
+  ) => {
     const { batchSize, chunks, loadingChunks } = get();
 
     // Filter out already loaded or loading chunks
@@ -114,12 +125,22 @@ const useWorldStore = create((set, get) => ({
       return;
     }
 
-    console.log(`📦 Sequential loading: ${chunksToLoad.length} chunks in batches of ${batchSize}`);
+    console.log(
+      `📦 Sequential loading: ${chunksToLoad.length} chunks in batches of ${batchSize}`
+    );
 
     // Prevent concurrent batch loading
     if (get().isLoadingBatch) {
-      console.log('⏳ Already loading a batch, queuing chunks...');
-      set({ chunkQueue: [...get().chunkQueue, ...chunksToLoad.map(c => ({ coords: c, viewport: { width: viewportWidth, height: viewportHeight } }))] });
+      console.log("⏳ Already loading a batch, queuing chunks...");
+      set({
+        chunkQueue: [
+          ...get().chunkQueue,
+          ...chunksToLoad.map((c) => ({
+            coords: c,
+            viewport: { width: viewportWidth, height: viewportHeight },
+          })),
+        ],
+      });
       return;
     }
 
@@ -136,14 +157,16 @@ const useWorldStore = create((set, get) => ({
       const totalBatches = Math.ceil(chunksToLoad.length / batchSize);
 
       // Load the entire batch (trust initial visible list to be correct enough)
-      console.log(`🔄 Loading batch ${batchNumber}/${totalBatches} (${batch.length} chunks)...`);
+      console.log(
+        `🔄 Loading batch ${batchNumber}/${totalBatches} (${batch.length} chunks)...`
+      );
 
       // Mark batch as loading
       set((state) => ({
         loadingChunks: new Set([
           ...state.loadingChunks,
-          ...batch.map(([cx, cy]) => `${cx}_${cy}`)
-        ])
+          ...batch.map(([cx, cy]) => `${cx}_${cy}`),
+        ]),
       }));
 
       const batchPromises = batch.map(async ([cx, cy]) => {
@@ -186,16 +209,20 @@ const useWorldStore = create((set, get) => ({
       // WAIT for this entire batch to complete before proceeding
       await Promise.all(batchPromises);
 
-      console.log(`✅ Batch ${batchNumber}/${totalBatches} complete (Loaded: ${loadedCount}, Failed: ${failedCount})`);
+      console.log(
+        `✅ Batch ${batchNumber}/${totalBatches} complete (Loaded: ${loadedCount}, Failed: ${failedCount})`
+      );
 
       // Small delay between batches to avoid overwhelming the server
       if (i + batchSize < chunksToLoad.length) {
-        await new Promise(resolve => setTimeout(resolve, 30));
+        await new Promise((resolve) => setTimeout(resolve, 30));
       }
     }
 
     set({ isLoadingBatch: false });
-    console.log(`🎉 Sequential loading complete! Loaded: ${loadedCount}, Failed: ${failedCount}, Skipped: ${skippedCount}`);
+    console.log(
+      `🎉 Sequential loading complete! Loaded: ${loadedCount}, Failed: ${failedCount}, Skipped: ${skippedCount}`
+    );
 
     // Process queued chunks if any, filtering by current viewport
     const queue = get().chunkQueue;
@@ -203,22 +230,35 @@ const useWorldStore = create((set, get) => ({
       console.log(`📋 Processing ${queue.length} queued chunks...`);
 
       // Filter queue to only include chunks still in viewport
-      const currentVisibleChunks = get().getVisibleChunks(viewportWidth, viewportHeight);
-      const visibleQueuedChunks = queue.filter(item => {
+      const currentVisibleChunks = get().getVisibleChunks(
+        viewportWidth,
+        viewportHeight
+      );
+      const visibleQueuedChunks = queue.filter((item) => {
         const [cx, cy] = item.coords;
-        return currentVisibleChunks.some(([vcx, vcy]) => vcx === cx && vcy === cy);
+        return currentVisibleChunks.some(
+          ([vcx, vcy]) => vcx === cx && vcy === cy
+        );
       });
 
       const removedFromQueue = queue.length - visibleQueuedChunks.length;
       if (removedFromQueue > 0) {
-        console.log(`🗑️  Removed ${removedFromQueue} chunks from queue (no longer visible)`);
+        console.log(
+          `🗑️  Removed ${removedFromQueue} chunks from queue (no longer visible)`
+        );
       }
 
       set({ chunkQueue: [] });
 
       if (visibleQueuedChunks.length > 0) {
-        console.log(`📋 Loading ${visibleQueuedChunks.length} queued visible chunks...`);
-        get().loadChunksSequentially(visibleQueuedChunks.map(item => item.coords), viewportWidth, viewportHeight);
+        console.log(
+          `📋 Loading ${visibleQueuedChunks.length} queued visible chunks...`
+        );
+        get().loadChunksSequentially(
+          visibleQueuedChunks.map((item) => item.coords),
+          viewportWidth,
+          viewportHeight
+        );
       }
     }
   },
@@ -292,21 +332,28 @@ const useWorldStore = create((set, get) => ({
   toggleMultiSelectMode: () => {
     set((state) => ({
       multiSelectMode: !state.multiSelectMode,
-      selectedLands: !state.multiSelectMode ? [] : state.selectedLands // Clear when disabling
+      selectedLands: !state.multiSelectMode ? [] : state.selectedLands, // Clear when disabling
     }));
   },
 
   // Control multi-select actions panel visibility
   setMultiPanelExpanded: (val) => set({ isMultiPanelExpanded: val }),
-  toggleMultiPanelExpanded: () => set((state) => ({ isMultiPanelExpanded: !state.isMultiPanelExpanded })),
+  toggleMultiPanelExpanded: () =>
+    set((state) => ({ isMultiPanelExpanded: !state.isMultiPanelExpanded })),
 
   toggleLandSelection: (land) => {
     set((state) => {
       const landKey = `${land.x}_${land.y}`;
-      const isSelected = state.selectedLands.some(l => `${l.x}_${l.y}` === landKey);
+      const isSelected = state.selectedLands.some(
+        (l) => `${l.x}_${l.y}` === landKey
+      );
 
       if (isSelected) {
-        return { selectedLands: state.selectedLands.filter(l => `${l.x}_${l.y}` !== landKey) };
+        return {
+          selectedLands: state.selectedLands.filter(
+            (l) => `${l.x}_${l.y}` !== landKey
+          ),
+        };
       } else {
         return { selectedLands: [...state.selectedLands, land] };
       }
@@ -366,7 +413,7 @@ const useWorldStore = create((set, get) => ({
       updatedChunk.lands = [...chunk.lands];
       updatedChunk.lands[index] = {
         ...chunk.lands[index],
-        [property]: value
+        [property]: value,
       };
       newChunks.set(chunkId, updatedChunk);
       set({ chunks: newChunks });
@@ -384,7 +431,7 @@ const useWorldStore = create((set, get) => ({
         chunkSize: default_chunk_size,
       });
     } catch (error) {
-      console.error('Failed to load world info:', error);
+      console.error("Failed to load world info:", error);
     }
   },
 
@@ -394,7 +441,7 @@ const useWorldStore = create((set, get) => ({
       const response = await chatAPI.getUnreadMessages();
       set({ unreadMessagesByLand: response.data.messages_by_land });
     } catch (error) {
-      console.error('Failed to load unread messages:', error);
+      console.error("Failed to load unread messages:", error);
     }
   },
 
@@ -448,8 +495,18 @@ const useWorldStore = create((set, get) => ({
       }
     }
 
-    console.log(`📐 Viewport: ${viewportWidth}x${viewportHeight}, Zoom: ${scale.toFixed(2)}, Camera: (${camera.x.toFixed(0)}, ${camera.y.toFixed(0)})`);
-    console.log(`📊 Visible area: ${landsVisibleWidth.toFixed(1)}x${landsVisibleHeight.toFixed(1)} lands = ${visibleChunks.length} chunks`);
+    console.log(
+      `📐 Viewport: ${viewportWidth}x${viewportHeight}, Zoom: ${scale.toFixed(
+        2
+      )}, Camera: (${camera.x.toFixed(0)}, ${camera.y.toFixed(0)})`
+    );
+    console.log(
+      `📊 Visible area: ${landsVisibleWidth.toFixed(
+        1
+      )}x${landsVisibleHeight.toFixed(1)} lands = ${
+        visibleChunks.length
+      } chunks`
+    );
 
     return visibleChunks;
   },

@@ -194,11 +194,24 @@ function WorldPage() {
             className="bg-yellow-600 hover:bg-yellow-500 text-white p-2 md:px-4 md:py-2 rounded-lg shadow-md border border-yellow-400 transition-colors flex items-center justify-center gap-2 text-sm"
             title="Toggle Multi-Select Panel"
           >
-            <svg className="w-5 h-5 md:w-4 md:h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 7h18M3 12h18M3 17h18" />
+            <svg
+              className="w-5 h-5 md:w-4 md:h-4"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M3 7h18M3 12h18M3 17h18"
+              />
             </svg>
             <span className="hidden md:inline font-semibold whitespace-nowrap">
-              Multi-Select{selectedLands && selectedLands.length > 0 ? ` (${selectedLands.length})` : ""}
+              Multi-Select
+              {selectedLands && selectedLands.length > 0
+                ? ` (${selectedLands.length})`
+                : ""}
             </span>
           </button>
         </div>
@@ -208,20 +221,20 @@ function WorldPage() {
             onClick={() => setIsPanelExpanded(true)}
             className="bg-blue-600 hover:bg-blue-500 text-white p-2 md:px-4 md:py-2 rounded-lg shadow-lg border border-blue-400 transition-colors flex items-center justify-center gap-2"
             title="Show land details"
+          >
+            <svg
+              className="w-5 h-5"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
             >
-              <svg
-                className="w-5 h-5"
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-              >
               <path
                 strokeLinecap="round"
                 strokeLinejoin="round"
                 strokeWidth={2}
                 d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
-                />
-              </svg>
+              />
+            </svg>
             <span className="hidden md:inline font-semibold whitespace-nowrap">
               {selectedCoordsLabel ?? "Details"}
             </span>
@@ -232,11 +245,24 @@ function WorldPage() {
             className="bg-yellow-600 hover:bg-yellow-500 text-white p-2 md:px-4 md:py-2 rounded-lg shadow-md border border-yellow-400 transition-colors flex items-center justify-center gap-2 text-sm"
             title="Toggle Multi-Select Panel"
           >
-            <svg className="w-5 h-5 md:w-4 md:h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 7h18M3 12h18M3 17h18" />
+            <svg
+              className="w-5 h-5 md:w-4 md:h-4"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M3 7h18M3 12h18M3 17h18"
+              />
             </svg>
             <span className="hidden md:inline font-semibold whitespace-nowrap">
-              Multi-Select{selectedLands && selectedLands.length > 0 ? ` (${selectedLands.length})` : ""}
+              Multi-Select
+              {selectedLands && selectedLands.length > 0
+                ? ` (${selectedLands.length})`
+                : ""}
             </span>
           </button>
         </div>
