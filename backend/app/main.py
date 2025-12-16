@@ -5,7 +5,6 @@ Entry point for the backend API server
 
 from fastapi import FastAPI, Request, status
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.middleware.trustedhost import TrustedHostMiddleware
 # from starlette.middleware.gzip import GZIPMiddleware  # Temporarily disabled due to API change
 from fastapi.responses import JSONResponse
 from fastapi.exceptions import RequestValidationError
@@ -85,18 +84,11 @@ app = FastAPI(
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.cors_origins,
+    allow_origin_regex=getattr(settings, "cors_origin_regex", None),
     allow_credentials=settings.cors_credentials,
     allow_methods=settings.cors_methods,
     allow_headers=settings.cors_headers,
 )
-
-
-# Trusted Host Middleware (prevents host header attacks)
-if settings.environment == "production":
-    app.add_middleware(
-        TrustedHostMiddleware,
-        allowed_hosts=["api.virtuallandworld.com", "localhost"]
-    )
 
 
 # Gzip Compression Middleware - Temporarily disabled

@@ -11,8 +11,9 @@ import toast from 'react-hot-toast';
 
 function MultiLandActionsPanel() {
   const { user } = useAuthStore();
-  const { selectedLands, clearSelectedLands } = useWorldStore();
+  const { selectedLands, clearSelectedLands, updateLandProperty, isMultiPanelExpanded, setMultiPanelExpanded } = useWorldStore();
   const [showListingForm, setShowListingForm] = useState(false);
+  const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [listingType, setListingType] = useState('fixed_price');
   const [price, setPrice] = useState('');
   const [buyNowPrice, setBuyNowPrice] = useState('');
@@ -20,11 +21,88 @@ function MultiLandActionsPanel() {
   const [processing, setProcessing] = useState(false);
   const [progress, setProgress] = useState({ current: 0, total: 0 });
 
-  if (selectedLands.length === 0) return null;
+  // Panel is collapsed by default; only render when expanded
+  if (!isMultiPanelExpanded) return null;
 
-  // Count owned lands (with land_id)
-  const ownedLands = selectedLands.filter(land => land.land_id);
-  const unownedCount = selectedLands.length - ownedLands.length;
+  // Categorize lands by ownership
+  const myLands = selectedLands.filter(land => land.land_id && land.owner_id === user?.user_id);
+  const unownedLands = selectedLands.filter(land => !land.land_id);
+  const othersLands = selectedLands.filter(land => land.land_id && land.owner_id !== user?.user_id);
+
+  // For backward compatibility
+  const ownedLands = myLands;
+  const unownedCount = unownedLands.length;
+
+  // Calculate total price for unowned lands
+  const totalPrice = unownedLands.reduce((sum, land) => {
+    const landPrice = land.price_base_bdt || land.base_price_bdt || land.base_price || 0;
+    return sum + landPrice;
+  }, 0);
+
+  const handleBulkPurchase = async () => {
+    if (unownedLands.length === 0) {
+      toast.error('No unowned lands selected');
+      return;
+    }
+
+    // Check balance
+    if (user.balance_bdt < totalPrice) {
+      toast.error(`Insufficient balance. Need ${totalPrice} BDT, have ${user.balance_bdt} BDT`);
+      return;
+    }
+
+    setShowPaymentModal(false);
+    setProcessing(true);
+    setProgress({ current: 0, total: unownedLands.length });
+    let successCount = 0;
+    let failCount = 0;
+    const errors = [];
+
+    // Process each unowned land
+    for (let i = 0; i < unownedLands.length; i++) {
+      const land = unownedLands[i];
+      setProgress({ current: i + 1, total: unownedLands.length });
+
+      try {
+        // Call admin API to allocate land (purchase)
+        const response = await landsAPI.claimLand({
+          x: land.x,
+          y: land.y,
+          biome: land.biome,
+          elevation: land.elevation || 0.5,
+          price_base_bdt: land.price_base_bdt || land.base_price_bdt || land.base_price
+        });
+
+        // Update the chunk data to immediately show ownership
+        if (response.data.land_id) {
+          updateLandProperty(land.x, land.y, 'land_id', response.data.land_id);
+          updateLandProperty(land.x, land.y, 'owner_id', response.data.owner_id);
+        }
+
+        successCount++;
+      } catch (error) {
+        console.error(`Failed to purchase land at (${land.x}, ${land.y}):`, error);
+        const errorMsg = error.response?.data?.detail || error.message;
+        errors.push(`(${land.x}, ${land.y}) - ${errorMsg}`);
+        failCount++;
+      }
+    }
+
+    setProcessing(false);
+    setProgress({ current: 0, total: 0 });
+
+    if (successCount > 0) {
+      toast.success(`Successfully purchased ${successCount} land(s)!`);
+    }
+    if (failCount > 0) {
+      const errorSummary = errors.slice(0, 3).join('\n');
+      const moreErrors = errors.length > 3 ? `\n...and ${errors.length - 3} more` : '';
+      toast.error(`Failed to purchase ${failCount} land(s):\n${errorSummary}${moreErrors}`, { duration: 6000 });
+      console.error('Purchase errors:', errors);
+    }
+
+    clearSelectedLands();
+  };
 
   const handleBulkFence = async (enable) => {
     if (selectedLands.length === 0) {
@@ -71,6 +149,10 @@ function MultiLandActionsPanel() {
           enable,
           enable ? '1234' : null
         );
+
+        // Update the chunk data to immediately reflect fence status
+        updateLandProperty(land.x, land.y, 'fenced', enable);
+
         successCount++;
       } catch (error) {
         console.error(`Failed to fence land at (${land.x}, ${land.y}):`, error);
@@ -197,15 +279,26 @@ function MultiLandActionsPanel() {
             )}
           </p>
         </div>
-        <button
-          onClick={clearSelectedLands}
-          className="text-gray-400 hover:text-white transition-colors"
-          title="Clear selection"
-        >
-          <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-          </svg>
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={clearSelectedLands}
+            className="text-gray-400 hover:text-white transition-colors"
+            title="Clear selection"
+          >
+            <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+          <button
+            onClick={() => setMultiPanelExpanded(false)}
+            className="text-gray-400 hover:text-white transition-colors"
+            title="Collapse panel"
+          >
+            <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+            </svg>
+          </button>
+        </div>
       </div>
 
       {processing && progress.total > 0 && (
@@ -223,8 +316,34 @@ function MultiLandActionsPanel() {
         </div>
       )}
 
-      {ownedLands.length > 0 && !showListingForm && (
+      {/* Purchase Button for Unowned Lands */}
+      {unownedLands.length > 0 && !showListingForm && (
         <div className="space-y-2">
+          <div className="bg-gray-700 rounded-lg p-3 mb-3">
+            <div className="flex justify-between items-center">
+              <span className="text-gray-300 text-sm">Total Price:</span>
+              <span className="text-green-400 font-bold text-lg">{totalPrice.toLocaleString()} BDT</span>
+            </div>
+            <p className="text-gray-400 text-xs mt-1">
+              {unownedLands.length} unclaimed land{unownedLands.length !== 1 ? 's' : ''}
+            </p>
+          </div>
+          <button
+            onClick={() => setShowPaymentModal(true)}
+            disabled={processing}
+            className="w-full bg-green-600 hover:bg-green-700 disabled:bg-gray-600 text-white font-semibold py-3 rounded-lg transition-colors text-sm md:text-base shadow-lg"
+          >
+            {processing ? 'Processing...' : `Purchase via Marketplace - ${totalPrice.toLocaleString()} BDT`}
+          </button>
+        </div>
+      )}
+
+      {/* Fence & Listing Buttons for Owned Lands */}
+      {ownedLands.length > 0 && !showListingForm && (
+        <div className={`space-y-2 ${unownedLands.length > 0 ? 'mt-3 pt-3 border-t border-gray-600' : ''}`}>
+          <p className="text-gray-400 text-xs mb-2">
+            {ownedLands.length} owned land{ownedLands.length !== 1 ? 's' : ''}
+          </p>
           <div className="flex gap-2">
             <button
               onClick={() => handleBulkFence(true)}
@@ -326,6 +445,95 @@ function MultiLandActionsPanel() {
           💡 Hold <kbd className="px-2 py-1 bg-gray-700 rounded text-xs">Ctrl</kbd> or <kbd className="px-2 py-1 bg-gray-700 rounded text-xs">Cmd</kbd> and click to select multiple lands
         </p>
       </div>
+
+      {/* Payment Modal */}
+      {showPaymentModal && (
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-gray-800 rounded-xl shadow-2xl border-2 border-blue-500 max-w-md w-full p-6">
+            <div className="flex justify-between items-start mb-6">
+              <h3 className="text-xl font-bold text-white">Purchase Lands</h3>
+              <button
+                onClick={() => setShowPaymentModal(false)}
+                className="text-gray-400 hover:text-white transition-colors"
+              >
+                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+
+            <div className="space-y-4">
+              {/* Purchase Summary */}
+              <div className="bg-gray-700 rounded-lg p-4 space-y-2">
+                <div className="flex justify-between">
+                  <span className="text-gray-300">Lands:</span>
+                  <span className="text-white font-semibold">{unownedLands.length}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-gray-300">Total Price:</span>
+                  <span className="text-green-400 font-bold text-xl">{totalPrice.toLocaleString()} BDT</span>
+                </div>
+                <div className="border-t border-gray-600 pt-2 mt-2">
+                  <div className="flex justify-between">
+                    <span className="text-gray-300">Your Balance:</span>
+                    <span className="text-yellow-400 font-semibold">{(user?.balance_bdt || 0).toLocaleString()} BDT</span>
+                  </div>
+                  <div className="flex justify-between mt-1">
+                    <span className="text-gray-300">After Purchase:</span>
+                    <span className={`font-semibold ${(user?.balance_bdt || 0) >= totalPrice ? 'text-green-400' : 'text-red-400'}`}>
+                      {((user?.balance_bdt || 0) - totalPrice).toLocaleString()} BDT
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Payment Info */}
+              <div className="bg-blue-900/30 border border-blue-500/50 rounded-lg p-4">
+                <div className="flex items-start space-x-2">
+                  <svg className="w-5 h-5 text-blue-400 mt-0.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                  <div className="text-xs text-blue-200">
+                    <p className="font-semibold mb-1">Dummy Payment Gateway</p>
+                    <p>This is a simulated payment. Funds will be deducted from your account balance immediately.</p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Warning if insufficient balance */}
+              {(user?.balance_bdt || 0) < totalPrice && (
+                <div className="bg-red-900/30 border border-red-500/50 rounded-lg p-4">
+                  <div className="flex items-start space-x-2">
+                    <svg className="w-5 h-5 text-red-400 mt-0.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                    </svg>
+                    <p className="text-xs text-red-200">
+                      Insufficient balance. You need {(totalPrice - (user?.balance_bdt || 0)).toLocaleString()} more BDT.
+                    </p>
+                  </div>
+                </div>
+              )}
+
+              {/* Action Buttons */}
+              <div className="flex gap-3 pt-2">
+                <button
+                  onClick={() => setShowPaymentModal(false)}
+                  className="flex-1 bg-gray-700 hover:bg-gray-600 text-white font-semibold py-3 rounded-lg transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleBulkPurchase}
+                  disabled={(user?.balance_bdt || 0) < totalPrice}
+                  className="flex-1 bg-green-600 hover:bg-green-700 disabled:bg-gray-600 disabled:cursor-not-allowed text-white font-semibold py-3 rounded-lg transition-colors shadow-lg"
+                >
+                  Confirm Purchase
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

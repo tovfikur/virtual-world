@@ -371,6 +371,29 @@ class CacheService:
         """
         return await self.delete(key)
 
+    async def is_healthy(self) -> bool:
+        """
+        Check if Redis connection is healthy.
+
+        Returns:
+            bool: True if Redis is responding, False otherwise
+
+        Example:
+            ```python
+            if await cache_service.is_healthy():
+                print("Redis is healthy")
+            ```
+        """
+        if not self.client:
+            return False
+
+        try:
+            await self.client.ping()
+            return True
+        except Exception as e:
+            logger.error(f"Redis health check failed: {e}")
+            return False
+
     async def get_stats(self) -> dict:
         """
         Get cache statistics.

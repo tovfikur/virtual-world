@@ -23,9 +23,19 @@ from app.schemas.land_schema import (
 from app.dependencies import get_current_user, get_optional_user
 from app.services.cache_service import cache_service
 from app.config import CACHE_TTLS
+from pydantic import BaseModel
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/lands", tags=["lands"])
+
+
+class LandClaimRequest(BaseModel):
+    """Schema for claiming/purchasing land"""
+    x: int
+    y: int
+    biome: str
+    elevation: float
+    price_base_bdt: int
 
 
 async def _serialize_land(
@@ -132,8 +142,7 @@ async def get_owner_land_coordinates(
             Land.price_base_bdt
         )
         .where(
-            Land.owner_id == owner_uuid,
-            Land.deleted_at.is_(None)
+            Land.owner_id == owner_uuid
         )
     )
 
@@ -256,7 +265,7 @@ async def search_lands(
     - Sorting (price_asc, price_desc, created_at_asc, created_at_desc)
     """
     # Build query
-    query = select(Land).where(Land.deleted_at.is_(None))
+    query = select(Land)
 
     # Apply filters
     if biome:
@@ -546,6 +555,116 @@ async def transfer_land(
     }
 
 
+@router.post("/claim", response_model=LandResponse)
+async def claim_land(
+    claim_data: LandClaimRequest,
+    current_user: dict = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Purchase/claim unclaimed land at specific coordinates.
+
+    This endpoint allows users to purchase land that hasn't been claimed yet.
+    The land is generated from world data and assigned to the user.
+
+    Args:
+        claim_data: Land coordinates and details
+        current_user: Current authenticated user
+        db: Database session
+
+    Returns:
+        Newly claimed land details
+
+    Raises:
+        400: If land is already claimed or insufficient balance
+        404: If coordinates are invalid
+    """
+    user_id = uuid.UUID(current_user["sub"])
+
+    # Check if land already exists at these coordinates
+    result = await db.execute(
+        select(Land).where(
+            and_(
+                Land.x == claim_data.x,
+                Land.y == claim_data.y
+            )
+        )
+    )
+    existing_land = result.scalar_one_or_none()
+
+    if existing_land:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Land at ({claim_data.x}, {claim_data.y}) is already claimed"
+        )
+
+    # Get user to check balance
+    result = await db.execute(
+        select(User).where(User.user_id == user_id)
+    )
+    user = result.scalar_one_or_none()
+
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="User not found"
+        )
+
+    # Check if user has sufficient balance
+    if user.balance_bdt < claim_data.price_base_bdt:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Insufficient balance. Need {claim_data.price_base_bdt} BDT, have {user.balance_bdt} BDT"
+        )
+
+    # Get color based on biome
+    try:
+        biome_enum = Biome(claim_data.biome.lower())
+    except ValueError:
+        biome_enum = Biome.PLAINS  # Default fallback
+
+    # Map biome to color
+    biome_colors = {
+        Biome.OCEAN: "#1A5490",
+        Biome.BEACH: "#e8bd88",
+        Biome.PLAINS: "#7ba62a",
+        Biome.FOREST: "#2d5016",
+        Biome.DESERT: "#d4a26e",
+        Biome.MOUNTAIN: "#6b7280",
+        Biome.SNOW: "#f0f0f0"
+    }
+    color_hex = biome_colors.get(biome_enum, "#7ba62a")
+
+    # Create new land
+    new_land = Land(
+        owner_id=user_id,
+        x=claim_data.x,
+        y=claim_data.y,
+        z=0,
+        biome=biome_enum,
+        elevation=claim_data.elevation,
+        color_hex=color_hex,
+        price_base_bdt=claim_data.price_base_bdt,
+        for_sale=False,
+        fenced=False
+    )
+
+    # Deduct cost from user balance
+    user.balance_bdt -= claim_data.price_base_bdt
+
+    db.add(new_land)
+    await db.commit()
+    await db.refresh(new_land)
+
+    # Invalidate caches
+    await cache_service.delete(f"user_lands:{user_id}")
+
+    logger.info(f"Land claimed at ({claim_data.x}, {claim_data.y}) by user {user_id} for {claim_data.price_base_bdt} BDT")
+
+    # Return serialized land
+    return await _serialize_land(new_land, db)
+
+
 @router.get("/{land_id}/heatmap")
 async def get_land_heatmap(
     land_id: str,
@@ -581,8 +700,7 @@ async def get_land_heatmap(
         select(Land).where(
             and_(
                 Land.x.between(land.x - radius, land.x + radius),
-                Land.y.between(land.y - radius, land.y + radius),
-                Land.deleted_at.is_(None)
+                Land.y.between(land.y - radius, land.y + radius)
             )
         )
     )

@@ -4,22 +4,14 @@
  */
 
 import { useState, useEffect } from 'react';
-import { landsAPI, marketplaceAPI } from '../services/api';
+import { landsAPI } from '../services/api';
 import { getBiomeColorCSS, getBiomeName, getBiomeRarity } from '../utils/biomeColors';
 import useAuthStore from '../stores/authStore';
-import useWorldStore from '../stores/worldStore';
-import toast from 'react-hot-toast';
 
 function LandInfoPanel({ land }) {
   const { user } = useAuthStore();
-  const { setSelectedLand } = useWorldStore();
   const [landDetails, setLandDetails] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [showListingForm, setShowListingForm] = useState(false);
-  const [listingType, setListingType] = useState('fixed_price');
-  const [price, setPrice] = useState('');
-  const [buyNowPrice, setBuyNowPrice] = useState('');
-  const [duration, setDuration] = useState('24');
 
   useEffect(() => {
     if (land) {
@@ -89,73 +81,11 @@ function LandInfoPanel({ land }) {
     }
   };
 
-  const handleClose = () => {
-    setSelectedLand(null);
-  };
-
-  const handleFenceToggle = async () => {
-    if (!landDetails.land_id) {
-      toast.error('You must own this land to fence it');
-      return;
-    }
-
-    try {
-      const newFencedState = !landDetails.fenced;
-      await landsAPI.manageFence(
-        landDetails.land_id,
-        newFencedState,
-        newFencedState ? '1234' : null // Default passcode when enabling
-      );
-      toast.success(`Fence ${landDetails.fenced ? 'disabled' : 'enabled'}`);
-      loadLandDetails();
-    } catch (error) {
-      toast.error(error.response?.data?.detail || 'Failed to toggle fence');
-    }
-  };
-
-  const handleCreateListing = async (e) => {
-    e.preventDefault();
-
-    if (!landDetails.land_id) {
-      toast.error('You must own this land to list it');
-      return;
-    }
-
-    try {
-      const listingData = {
-        land_id: landDetails.land_id,
-        listing_type: listingType,
-      };
-
-      // Set appropriate price fields based on listing type
-      if (listingType === 'fixed_price') {
-        listingData.buy_now_price_bdt = parseInt(price);
-      } else if (listingType === 'auction') {
-        listingData.starting_price_bdt = parseInt(price);
-        listingData.duration_hours = parseInt(duration);
-      } else if (listingType === 'auction_with_buynow') {
-        listingData.starting_price_bdt = parseInt(price);
-        listingData.buy_now_price_bdt = parseInt(buyNowPrice);
-        listingData.duration_hours = parseInt(duration);
-      }
-
-      await marketplaceAPI.createListing(listingData);
-      toast.success('Listing created successfully!');
-      setShowListingForm(false);
-      setPrice('');
-      setBuyNowPrice('');
-      setDuration('24');
-      loadLandDetails();
-    } catch (error) {
-      toast.error(error.response?.data?.detail || 'Failed to create listing');
-    }
-  };
-
   if (loading) {
     return (
-      <div className="w-80 bg-gray-800 rounded-lg shadow-xl border border-gray-700 p-6">
-        <div className="flex justify-center items-center h-32">
-          <div className="w-8 h-8 border-4 border-blue-600 border-t-transparent rounded-full animate-spin"></div>
+      <div className="w-56 rounded-lg shadow-xl border border-gray-700 p-3" style={{ backgroundColor: '#4a5568' }}>
+        <div className="flex justify-center items-center h-12">
+          <div className="w-5 h-5 border-3 border-white border-t-transparent rounded-full animate-spin"></div>
         </div>
       </div>
     );
@@ -166,184 +96,82 @@ function LandInfoPanel({ land }) {
   const biomeColor = getBiomeColorCSS(landDetails.biome);
 
   return (
-    <div className="w-full md:w-96 bg-gray-800 rounded-t-2xl md:rounded-lg shadow-xl border-t border-x md:border border-gray-700 overflow-hidden max-h-[50vh] md:max-h-[90vh] overflow-y-auto">
-      {/* Header */}
-      <div className="relative h-16 md:h-32 flex items-center justify-center" style={{ backgroundColor: biomeColor }}>
-        <div className="text-center text-white">
-          <h3 className="text-lg md:text-2xl font-bold capitalize">{getBiomeName(landDetails.biome)}</h3>
-          <p className="text-xs md:text-sm opacity-90 hidden md:block">{getBiomeRarity(landDetails.biome)} Biome</p>
+    <div className="relative w-56 rounded-lg shadow-2xl overflow-hidden" style={{ backgroundColor: biomeColor }}>
+      {/* Fencing Ribbon - Top Left Corner */}
+      {isOwned && landDetails.fenced && (
+        <div className="absolute top-0 left-0 bg-red-600 text-white text-[10px] font-bold px-2 py-1 shadow-lg z-20" style={{ clipPath: 'polygon(0 0, 100% 0, 80% 100%, 0 100%)' }}>
+          🔒 FENCED
         </div>
-        <button
-          onClick={handleClose}
-          className="absolute top-2 right-2 md:top-4 md:right-4 text-white hover:bg-white/20 p-1 md:p-2 rounded-lg transition-colors"
-        >
-          <svg className="w-5 h-5 md:w-6 md:h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-          </svg>
-        </button>
-      </div>
+      )}
 
-      {/* Content */}
-      <div className="p-3 md:p-6 space-y-2 md:space-y-4">
-        {/* Coordinates & Price - Compact Row on Mobile */}
-        <div className="grid grid-cols-2 gap-3 md:block md:space-y-4">
-          {/* Coordinates */}
-          <div>
-            <p className="text-gray-400 text-xs md:text-sm mb-1">Coordinates</p>
-            <p className="text-white text-base md:text-xl font-bold">({landDetails.x}, {landDetails.y})</p>
-          </div>
+      {/* Content with Semi-transparent Overlay */}
+      <div className="bg-black/30 backdrop-blur-sm p-3 space-y-2">
+        {/* Biome Title */}
+        <div className="text-center pt-1">
+          <h3 className="text-lg font-bold text-white capitalize drop-shadow-lg">{getBiomeName(landDetails.biome)}</h3>
+          <p className="text-[10px] text-white/90 drop-shadow">{getBiomeRarity(landDetails.biome)} Biome</p>
+        </div>
 
-          {/* Price */}
-          <div>
-            <p className="text-gray-400 text-xs md:text-sm mb-1">Price</p>
-            <p className="text-green-400 text-base md:text-2xl font-bold">
+        {/* Coordinates Badge */}
+        <div className="flex justify-center">
+          <span className="inline-flex items-center px-3 py-1 rounded-full bg-white/90 backdrop-blur text-gray-900 font-bold text-xs shadow-lg">
+            📍 ({landDetails.x}, {landDetails.y})
+          </span>
+        </div>
+
+        {/* Info Grid - Compact Rows */}
+        <div className="space-y-1.5 text-white">
+          {/* Price Row */}
+          <div className="flex items-center justify-between bg-white/20 backdrop-blur rounded px-2 py-1.5">
+            <span className="text-[10px] font-medium">Price</span>
+            <span className="text-sm font-bold text-green-300">
               {landDetails.price_base_bdt || landDetails.base_price} BDT
-            </p>
-          </div>
-        </div>
-
-        {/* Elevation - Hidden on Mobile */}
-        {landDetails.elevation !== undefined && (
-          <div className="hidden md:block">
-            <p className="text-gray-400 text-sm mb-1">Elevation</p>
-            <p className="text-white">{landDetails.elevation.toFixed(2)}</p>
-          </div>
-        )}
-
-        {/* Ownership */}
-        <div>
-          <p className="text-gray-400 text-xs md:text-sm mb-1">Owner</p>
-          <p className="text-white text-sm md:text-base font-semibold">
-            {isOwned ? (
-              isOwner ? (
-                <span className="text-blue-400">You</span>
-              ) : (
-                landDetails.owner_username || 'Unknown'
-              )
-            ) : (
-              <span className="text-gray-500">Unclaimed</span>
-            )}
-          </p>
-        </div>
-
-        {/* Fencing Status */}
-        {isOwned && (
-          <div className="flex items-center justify-between py-1.5 md:py-2 px-2 md:px-3 bg-gray-700 rounded-lg">
-            <div className="flex items-center space-x-1 md:space-x-2">
-              <span className="text-yellow-400 text-sm">🔒</span>
-              <span className="text-white text-xs md:text-sm">Fencing</span>
-            </div>
-            <span className={`text-xs md:text-sm font-semibold ${landDetails.fenced ? 'text-green-400' : 'text-gray-400'}`}>
-              {landDetails.fenced ? 'On' : 'Off'}
             </span>
           </div>
-        )}
 
-        {/* Actions */}
-        <div className="space-y-2 pt-3 md:pt-4 border-t border-gray-700">
-          {!isOwned && (
-            <button
-              onClick={() => toast('Purchase via Marketplace', { icon: '🏪' })}
-              className="w-full bg-green-600 hover:bg-green-700 text-white font-semibold py-2 md:py-3 rounded-lg transition-colors text-sm md:text-base"
-            >
-              Buy Land - {landDetails.price_base_bdt || landDetails.base_price} BDT
-            </button>
-          )}
+          {/* Owner Row */}
+          <div className="flex items-center justify-between bg-white/20 backdrop-blur rounded px-2 py-1.5">
+            <span className="text-[10px] font-medium">Owner</span>
+            <span className="text-xs font-semibold">
+              {isOwned ? (
+                isOwner ? (
+                  <span className="text-blue-300">You</span>
+                ) : (
+                  landDetails.owner_username || 'Unknown'
+                )
+              ) : (
+                <span className="text-gray-300">Unclaimed</span>
+              )}
+            </span>
+          </div>
 
-          {isOwner && !showListingForm && (
-            <div className="grid grid-cols-2 gap-2">
-              <button
-                onClick={handleFenceToggle}
-                className="bg-yellow-600 hover:bg-yellow-700 text-white font-semibold py-2 rounded-lg transition-colors text-xs md:text-sm"
-              >
-                {landDetails.fenced ? 'Disable' : 'Enable'} Fence
-              </button>
-              <button
-                onClick={() => setShowListingForm(true)}
-                className="bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2 rounded-lg transition-colors text-xs md:text-sm"
-              >
-                List for Sale
-              </button>
+          {/* Elevation Row (if available) */}
+          {landDetails.elevation !== undefined && (
+            <div className="flex items-center justify-between bg-white/20 backdrop-blur rounded px-2 py-1.5">
+              <span className="text-[10px] font-medium">Elevation</span>
+              <span className="text-xs font-semibold">{landDetails.elevation.toFixed(2)}</span>
             </div>
           )}
 
-          {isOwner && showListingForm && (
-            <>
-              {!showListingForm ? null : (
-                <div className="bg-gray-700 rounded-lg p-2 md:p-4 space-y-2 md:space-y-3">
-                  <h4 className="text-white font-semibold text-sm md:text-base mb-1 md:mb-2">Create Listing</h4>
-                  <form onSubmit={handleCreateListing} className="space-y-2 md:space-y-3">
-                    <select
-                      value={listingType}
-                      onChange={(e) => setListingType(e.target.value)}
-                      className="w-full px-2 md:px-3 py-1.5 md:py-2 bg-gray-600 text-white rounded border border-gray-500 focus:border-blue-500 focus:outline-none text-xs md:text-sm"
-                    >
-                      <option value="fixed_price">Fixed Price</option>
-                      <option value="auction">Auction</option>
-                      <option value="auction_with_buynow">Auction + Buy Now</option>
-                    </select>
-
-                    <input
-                      type="number"
-                      value={price}
-                      onChange={(e) => setPrice(e.target.value)}
-                      placeholder={listingType === 'fixed_price' ? 'Price (BDT)' : 'Starting Price (BDT)'}
-                      required
-                      className="w-full px-2 md:px-3 py-1.5 md:py-2 bg-gray-600 text-white rounded border border-gray-500 focus:border-blue-500 focus:outline-none text-xs md:text-sm"
-                    />
-
-                    {listingType === 'auction_with_buynow' && (
-                      <input
-                        type="number"
-                        value={buyNowPrice}
-                        onChange={(e) => setBuyNowPrice(e.target.value)}
-                        placeholder="Buy Now Price (BDT)"
-                        required
-                        className="w-full px-2 md:px-3 py-1.5 md:py-2 bg-gray-600 text-white rounded border border-gray-500 focus:border-blue-500 focus:outline-none text-xs md:text-sm"
-                      />
-                    )}
-
-                    {listingType !== 'fixed_price' && (
-                      <select
-                        value={duration}
-                        onChange={(e) => setDuration(e.target.value)}
-                        className="w-full px-2 md:px-3 py-1.5 md:py-2 bg-gray-600 text-white rounded border border-gray-500 focus:border-blue-500 focus:outline-none text-xs md:text-sm"
-                      >
-                        <option value="12">12 hours</option>
-                        <option value="24">24 hours</option>
-                        <option value="48">48 hours</option>
-                        <option value="72">72 hours</option>
-                        <option value="168">7 days</option>
-                      </select>
-                    )}
-
-                    <div className="flex space-x-2">
-                      <button
-                        type="submit"
-                        className="flex-1 bg-green-600 hover:bg-green-700 text-white py-1.5 md:py-2 rounded transition-colors text-xs md:text-sm font-semibold"
-                      >
-                        Create
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setShowListingForm(false)}
-                        className="flex-1 bg-gray-600 hover:bg-gray-500 text-white py-1.5 md:py-2 rounded transition-colors text-xs md:text-sm"
-                      >
-                        Cancel
-                      </button>
-                    </div>
-                  </form>
-                </div>
-              )}
-            </>
-          )}
-        </div>
-
-        {/* Info - Hidden on Mobile */}
-        <div className="hidden md:block pt-4 border-t border-gray-700 text-xs text-gray-400">
-          <p>Land ID: {landDetails.land_id || 'Not claimed'}</p>
-          {landDetails.created_at && (
-            <p>Claimed: {new Date(landDetails.created_at).toLocaleDateString()}</p>
+          {/* Land ID Row (if claimed) */}
+          {landDetails.land_id && (
+            <div className="flex items-center justify-between bg-white/20 backdrop-blur rounded px-2 py-1.5">
+              <span className="text-[10px] font-medium">Land ID</span>
+              <button
+                onClick={async () => {
+                  await navigator.clipboard.writeText(landDetails.land_id);
+                  const toast = (await import('react-hot-toast')).default;
+                  toast.success('Land ID copied!', { duration: 2000 });
+                }}
+                className="text-[10px] font-mono hover:text-blue-300 transition-colors flex items-center gap-1"
+                title="Click to copy full ID"
+              >
+                {landDetails.land_id.substring(0, 8)}...
+                <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                </svg>
+              </button>
+            </div>
           )}
         </div>
       </div>

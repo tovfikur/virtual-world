@@ -111,7 +111,7 @@ class ChatService:
         chat_session = ChatSession(
             land_id=land_id,
             name=f"Land ({land.x}, {land.y})",
-            is_public=True  # Land chats are public by default
+            is_public="True"  # Land chats are public by default
         )
 
         db.add(chat_session)
@@ -153,7 +153,7 @@ class ChatService:
         # Create chat session
         chat_session = ChatSession(
             name=name or f"Private Chat ({len(participants)} users)",
-            is_public=False,
+            is_public="False",
             max_participants=len(participants)
         )
 
@@ -171,7 +171,8 @@ class ChatService:
         session_id: uuid.UUID,
         sender_id: uuid.UUID,
         content: str,
-        encrypt: bool = True
+        encrypt: bool = True,
+        is_leave_message: bool = False
     ) -> Message:
         """
         Send a message to a chat session.
@@ -185,6 +186,9 @@ class ChatService:
 
         Returns:
             Created Message instance
+
+        Raises:
+            ValueError: If chat session not found, sender not found, or fenced land restriction
         """
         # Verify chat session exists
         result = await db.execute(
@@ -204,6 +208,18 @@ class ChatService:
         if not sender:
             raise ValueError("Sender not found")
 
+        # Check fencing restrictions for land-based chats
+        if chat_session.land_id:
+            result = await db.execute(
+                select(Land).where(Land.land_id == chat_session.land_id)
+            )
+            land = result.scalar_one_or_none()
+
+            if land:
+                # If land is fenced and sender is not the owner, deny message
+                if land.fenced and land.owner_id != sender_id:
+                    raise ValueError(f"This land is fenced. Only the owner can receive messages here.")
+
         # Encrypt content if requested
         if encrypt:
             encrypted_content = self.encrypt_message(content)
@@ -215,7 +231,9 @@ class ChatService:
             session_id=session_id,
             sender_id=sender_id,
             content_encrypted=encrypted_content,
-            is_encrypted=encrypt
+            is_encrypted="True" if encrypt else "False",
+            is_leave_message="True" if is_leave_message else "False",
+            read_by_owner="False"
         )
 
         db.add(message)
@@ -250,7 +268,10 @@ class ChatService:
         Returns:
             List of Message instances (decrypted)
         """
-        query = select(Message).where(Message.session_id == session_id)
+        query = select(Message).where(
+            Message.session_id == session_id,
+            Message.deleted_at.is_(None)  # Exclude deleted messages
+        )
 
         # Pagination support
         if before_message_id:
@@ -266,7 +287,7 @@ class ChatService:
 
         # Decrypt messages
         for message in messages:
-            if message.is_encrypted:
+            if message.is_encrypted == "True":
                 try:
                     message.content_encrypted = self.decrypt_message(message.content_encrypted)
                 except Exception as e:
@@ -274,6 +295,133 @@ class ChatService:
                     message.content_encrypted = "[Decryption failed]"
 
         return list(reversed(messages))  # Return in chronological order
+
+    async def get_unread_messages_by_land(
+        self,
+        db: AsyncSession,
+        owner_id: uuid.UUID
+    ) -> Dict[str, Dict[str, int]]:
+        """
+        Get count of unread and read leave messages for each land owned by user.
+
+        Args:
+            db: Database session
+            owner_id: Land owner user ID
+
+        Returns:
+            Dict mapping land_id to {"unread": count, "read": count}
+        """
+        # Get all lands owned by user
+        result = await db.execute(
+            select(Land).where(Land.owner_id == owner_id)
+        )
+        lands = result.scalars().all()
+
+        if not lands:
+            return {}
+
+        # Get chat sessions for those lands
+        land_ids = [land.land_id for land in lands]
+        result = await db.execute(
+            select(ChatSession).where(ChatSession.land_id.in_(land_ids))
+        )
+        sessions = result.scalars().all()
+
+        # Count unread and read messages per session
+        message_counts = {}
+        for session in sessions:
+            # Count unread messages
+            result = await db.execute(
+                select(func.count(Message.message_id)).where(
+                    and_(
+                        Message.session_id == session.session_id,
+                        Message.is_leave_message == "True",
+                        Message.read_by_owner == "False",
+                        Message.deleted_at.is_(None)
+                    )
+                )
+            )
+            unread_count = result.scalar() or 0
+
+            # Count read messages
+            result = await db.execute(
+                select(func.count(Message.message_id)).where(
+                    and_(
+                        Message.session_id == session.session_id,
+                        Message.is_leave_message == "True",
+                        Message.read_by_owner == "True",
+                        Message.deleted_at.is_(None)
+                    )
+                )
+            )
+            read_count = result.scalar() or 0
+
+            # Only include lands with messages
+            if unread_count > 0 or read_count > 0:
+                message_counts[str(session.land_id)] = {
+                    "unread": unread_count,
+                    "read": read_count
+                }
+
+        return message_counts
+
+    async def mark_messages_as_read(
+        self,
+        db: AsyncSession,
+        session_id: uuid.UUID,
+        owner_id: uuid.UUID
+    ) -> int:
+        """
+        Mark all unread leave messages in a session as read by owner.
+
+        Args:
+            db: Database session
+            session_id: Chat session ID
+            owner_id: Land owner user ID
+
+        Returns:
+            int: Number of messages marked as read
+        """
+        # Verify the owner owns the land for this session
+        result = await db.execute(
+            select(ChatSession).where(ChatSession.session_id == session_id)
+        )
+        session = result.scalar_one_or_none()
+
+        if not session or not session.land_id:
+            return 0
+
+        result = await db.execute(
+            select(Land).where(Land.land_id == session.land_id)
+        )
+        land = result.scalar_one_or_none()
+
+        if not land or land.owner_id != owner_id:
+            return 0
+
+        # Mark all unread leave messages as read
+        result = await db.execute(
+            select(Message).where(
+                and_(
+                    Message.session_id == session_id,
+                    Message.is_leave_message == "True",
+                    Message.read_by_owner == "False",
+                    Message.deleted_at.is_(None)
+                )
+            )
+        )
+        messages = result.scalars().all()
+
+        count = 0
+        for message in messages:
+            message.mark_as_read()
+            count += 1
+
+        await db.commit()
+
+        logger.info(f"Marked {count} messages as read for session {session_id}")
+
+        return count
 
     async def get_land_chat_participants(
         self,
@@ -308,8 +456,7 @@ class ChatService:
             ).where(
                 and_(
                     Land.x.between(center_land.x - radius, center_land.x + radius),
-                    Land.y.between(center_land.y - radius, center_land.y + radius),
-                    Land.deleted_at.is_(None)
+                    Land.y.between(center_land.y - radius, center_land.y + radius)
                 )
             )
         )

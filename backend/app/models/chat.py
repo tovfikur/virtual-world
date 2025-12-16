@@ -23,8 +23,11 @@ class ChatSession(BaseModel):
     Attributes:
         session_id: Unique UUID identifier
         land_id: Reference to land (unique - one session per land)
-        status: Session status (active/archived/deleted)
-        participant_count: Number of users in session
+        name: Display name for the chat session
+        is_public: Whether the chat is public or private
+        max_participants: Maximum number of participants
+        message_count: Total number of messages
+        last_message_at: Timestamp of last message
     """
 
     __tablename__ = "chat_sessions"
@@ -42,20 +45,32 @@ class ChatSession(BaseModel):
         UUID(as_uuid=True),
         ForeignKey("lands.land_id"),
         unique=True,  # One session per land
-        nullable=False,
+        nullable=True,
         index=True
     )
 
     # Session Data
-    status = Column(
-        String(20),
-        default="active",
+    name = Column(
+        String(255),
+        nullable=True
+    )
+    is_public = Column(
+        String,  # Using String for compatibility, True/False stored as text
+        default="True",
         nullable=False
     )
-    participant_count = Column(
+    max_participants = Column(
+        Integer,
+        nullable=True
+    )
+    message_count = Column(
         Integer,
         default=0,
         nullable=False
+    )
+    last_message_at = Column(
+        DateTime(timezone=True),
+        nullable=True
     )
 
     # Relationships
@@ -65,19 +80,6 @@ class ChatSession(BaseModel):
         back_populates="session",
         cascade="all, delete-orphan"
     )
-
-    def add_participant(self) -> None:
-        """Increment participant count."""
-        self.participant_count += 1
-
-    def remove_participant(self) -> None:
-        """Decrement participant count."""
-        if self.participant_count > 0:
-            self.participant_count -= 1
-
-    def archive(self) -> None:
-        """Archive the chat session."""
-        self.status = "archived"
 
     def __repr__(self) -> str:
         """String representation of ChatSession."""
@@ -92,9 +94,11 @@ class ChatSession(BaseModel):
         """
         return {
             "session_id": str(self.session_id),
-            "land_id": str(self.land_id),
-            "status": self.status,
-            "participant_count": self.participant_count,
+            "land_id": str(self.land_id) if self.land_id else None,
+            "name": self.name,
+            "is_public": self.is_public,
+            "message_count": self.message_count,
+            "last_message_at": self.last_message_at.isoformat() if self.last_message_at else None,
             "created_at": self.created_at.isoformat() if self.created_at else None
         }
 
@@ -108,19 +112,20 @@ class MessageType(str, PyEnum):
 
 class Message(BaseModel):
     """
-    Encrypted chat message.
+    Chat message with encryption support.
 
-    Messages are encrypted client-side using E2EE (AES-256-GCM).
-    Server stores encrypted payload and initialization vector.
+    Messages can be encrypted using E2EE or stored as plaintext.
+    Supports read tracking for leave messages.
 
     Attributes:
         message_id: Unique UUID identifier
         session_id: Reference to chat session
         sender_id: Reference to user who sent message
-        encrypted_payload: Encrypted message content (AES-256-GCM)
-        encryption_version: Version of encryption scheme
-        iv: Initialization vector for AES-GCM
-        message_type: Type of message (text/image/attachment)
+        content_encrypted: Message content (encrypted or plaintext)
+        is_encrypted: Whether content is encrypted
+        is_leave_message: Whether this is a message left for offline owner
+        read_by_owner: Whether land owner has read this message
+        read_at: Timestamp when message was read by owner
         deleted_at: Soft delete timestamp
     """
 
@@ -129,6 +134,7 @@ class Message(BaseModel):
     __table_args__ = (
         Index("idx_messages_session", "session_id", "created_at"),
         Index("idx_messages_sender", "sender_id"),
+        Index("idx_messages_unread", "session_id", "read_by_owner"),
     )
 
     # Primary Key
@@ -153,26 +159,31 @@ class Message(BaseModel):
         index=True
     )
 
-    # Message Content (encrypted)
-    encrypted_payload = Column(
+    # Message Content
+    content_encrypted = Column(
         String,
         nullable=False
     )
-    encryption_version = Column(
-        String(10),
-        default="1.0",
-        nullable=False
-    )
-    iv = Column(
-        String(255),
+    is_encrypted = Column(
+        String,  # Using String for compatibility, stored as "True"/"False"
+        default="True",
         nullable=False
     )
 
-    # Message Type
-    message_type = Column(
-        SQLEnum(MessageType),
-        default=MessageType.TEXT,
+    # Leave Message tracking
+    is_leave_message = Column(
+        String,  # Using String for compatibility
+        default="False",
         nullable=False
+    )
+    read_by_owner = Column(
+        String,  # Using String for compatibility
+        default="False",
+        nullable=False
+    )
+    read_at = Column(
+        DateTime(timezone=True),
+        nullable=True
     )
 
     # Soft Delete
@@ -189,10 +200,20 @@ class Message(BaseModel):
         """Soft delete the message."""
         self.deleted_at = datetime.utcnow()
 
+    def mark_as_read(self) -> None:
+        """Mark message as read by owner."""
+        self.read_by_owner = "True"
+        self.read_at = datetime.utcnow()
+
     @property
     def is_deleted(self) -> bool:
         """Check if message is deleted."""
         return self.deleted_at is not None
+
+    @property
+    def is_read(self) -> bool:
+        """Check if message has been read by owner."""
+        return self.read_by_owner == "True"
 
     def __repr__(self) -> str:
         """String representation of Message."""
@@ -209,10 +230,11 @@ class Message(BaseModel):
             "message_id": str(self.message_id),
             "session_id": str(self.session_id),
             "sender_id": str(self.sender_id),
-            "encrypted_payload": self.encrypted_payload,
-            "encryption_version": self.encryption_version,
-            "iv": self.iv,
-            "message_type": self.message_type.value,
+            "content": self.content_encrypted,
+            "is_encrypted": self.is_encrypted == "True",
+            "is_leave_message": self.is_leave_message == "True",
+            "read_by_owner": self.read_by_owner == "True",
+            "read_at": self.read_at.isoformat() if self.read_at else None,
             "created_at": self.created_at.isoformat() if self.created_at else None,
             "deleted": self.is_deleted
         }

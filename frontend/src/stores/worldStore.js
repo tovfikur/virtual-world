@@ -4,7 +4,7 @@
  */
 
 import { create } from 'zustand';
-import { chunksAPI } from '../services/api';
+import { chunksAPI, chatAPI } from '../services/api';
 
 const useWorldStore = create((set, get) => ({
   // State
@@ -15,18 +15,21 @@ const useWorldStore = create((set, get) => ({
   camera: {
     x: 0,
     y: 0,
-    zoom: 1,
+    zoom: 0.5,
   },
   selectedLand: null,
   selectedLands: [], // Array of selected lands for multi-select
   hoveredLand: null,
+  // UI state for multi-select panel (collapsed by default)
+  isMultiPanelExpanded: false,
   focusTarget: null,
   multiSelectMode: false, // Toggle for multi-select mode
+  unreadMessagesByLand: {}, // Map of land_id -> unread count
 
   // World info
   worldSeed: null,
   chunkSize: 32,
-  batchSize: 5, // Number of chunks to load per batch
+  batchSize: 12, // Number of chunks to load per batch (higher to fill viewport quickly)
 
   // Actions
   loadChunk: async (chunkX, chunkY) => {
@@ -132,35 +135,18 @@ const useWorldStore = create((set, get) => ({
       const batchNumber = Math.floor(i / batchSize) + 1;
       const totalBatches = Math.ceil(chunksToLoad.length / batchSize);
 
-      // BEFORE loading, check if chunks are still visible
-      const visibleChunksInBatch = batch.filter(([cx, cy]) => {
-        const visibleChunks = get().getVisibleChunks(viewportWidth, viewportHeight);
-        return visibleChunks.some(([vcx, vcy]) => vcx === cx && vcy === cy);
-      });
+      // Load the entire batch (trust initial visible list to be correct enough)
+      console.log(`🔄 Loading batch ${batchNumber}/${totalBatches} (${batch.length} chunks)...`);
 
-      if (visibleChunksInBatch.length === 0) {
-        skippedCount += batch.length;
-        console.log(`⏭️  Skipping batch ${batchNumber}/${totalBatches} - all chunks are outside viewport`);
-        continue;
-      }
-
-      if (visibleChunksInBatch.length < batch.length) {
-        skippedCount += batch.length - visibleChunksInBatch.length;
-        console.log(`⏭️  Batch ${batchNumber}/${totalBatches}: ${batch.length - visibleChunksInBatch.length} chunks skipped (outside viewport)`);
-      }
-
-      console.log(`🔄 Loading batch ${batchNumber}/${totalBatches} (${visibleChunksInBatch.length} visible chunks)...`);
-
-      // Mark only VISIBLE chunks as loading
+      // Mark batch as loading
       set((state) => ({
         loadingChunks: new Set([
           ...state.loadingChunks,
-          ...visibleChunksInBatch.map(([cx, cy]) => `${cx}_${cy}`)
+          ...batch.map(([cx, cy]) => `${cx}_${cy}`)
         ])
       }));
 
-      // Load only VISIBLE chunks in this batch (wait for ALL to complete)
-      const batchPromises = visibleChunksInBatch.map(async ([cx, cy]) => {
+      const batchPromises = batch.map(async ([cx, cy]) => {
         const chunkId = `${cx}_${cy}`;
         try {
           const response = await chunksAPI.getChunk(cx, cy, get().chunkSize);
@@ -204,7 +190,7 @@ const useWorldStore = create((set, get) => ({
 
       // Small delay between batches to avoid overwhelming the server
       if (i + batchSize < chunksToLoad.length) {
-        await new Promise(resolve => setTimeout(resolve, 100));
+        await new Promise(resolve => setTimeout(resolve, 30));
       }
     }
 
@@ -310,6 +296,10 @@ const useWorldStore = create((set, get) => ({
     }));
   },
 
+  // Control multi-select actions panel visibility
+  setMultiPanelExpanded: (val) => set({ isMultiPanelExpanded: val }),
+  toggleMultiPanelExpanded: () => set((state) => ({ isMultiPanelExpanded: !state.isMultiPanelExpanded })),
+
   toggleLandSelection: (land) => {
     set((state) => {
       const landKey = `${land.x}_${land.y}`;
@@ -324,7 +314,7 @@ const useWorldStore = create((set, get) => ({
   },
 
   clearSelectedLands: () => {
-    set({ selectedLands: [] });
+    set({ selectedLands: [], isMultiPanelExpanded: false });
   },
 
   selectLandsInArea: (startLand, endLand) => {
@@ -354,6 +344,35 @@ const useWorldStore = create((set, get) => ({
     set({ focusTarget: null });
   },
 
+  // Update a land property in the chunks store (e.g., fenced status)
+  updateLandProperty: (x, y, property, value) => {
+    const { chunkSize, chunks } = get();
+    const chunkX = Math.floor(x / chunkSize);
+    const chunkY = Math.floor(y / chunkSize);
+    const chunkId = `${chunkX}_${chunkY}`;
+
+    const chunk = chunks.get(chunkId);
+    if (!chunk) return; // Chunk not loaded
+
+    // Find the land in the chunk
+    const localX = x - chunkX * chunkSize;
+    const localY = y - chunkY * chunkSize;
+    const index = localY * chunkSize + localX;
+
+    if (index >= 0 && index < chunk.lands.length) {
+      // Update the land property
+      const newChunks = new Map(chunks);
+      const updatedChunk = { ...chunk };
+      updatedChunk.lands = [...chunk.lands];
+      updatedChunk.lands[index] = {
+        ...chunk.lands[index],
+        [property]: value
+      };
+      newChunks.set(chunkId, updatedChunk);
+      set({ chunks: newChunks });
+    }
+  },
+
   // World info
   loadWorldInfo: async () => {
     try {
@@ -367,6 +386,31 @@ const useWorldStore = create((set, get) => ({
     } catch (error) {
       console.error('Failed to load world info:', error);
     }
+  },
+
+  // Unread messages
+  loadUnreadMessages: async () => {
+    try {
+      const response = await chatAPI.getUnreadMessages();
+      set({ unreadMessagesByLand: response.data.messages_by_land });
+    } catch (error) {
+      console.error('Failed to load unread messages:', error);
+    }
+  },
+
+  getUnreadCount: (landId) => {
+    const counts = get().unreadMessagesByLand[landId];
+    return counts ? counts.unread : 0;
+  },
+
+  getReadCount: (landId) => {
+    const counts = get().unreadMessagesByLand[landId];
+    return counts ? counts.read : 0;
+  },
+
+  hasMessages: (landId) => {
+    const counts = get().unreadMessagesByLand[landId];
+    return counts && (counts.unread > 0 || counts.read > 0);
   },
 
   // Utilities

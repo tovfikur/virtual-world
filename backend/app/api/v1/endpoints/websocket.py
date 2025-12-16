@@ -15,9 +15,11 @@ from datetime import datetime
 from app.db.session import get_db
 from app.models.user import User
 from app.models.land import Land
+from app.models.chat import ChatSession
 from app.services.websocket_service import connection_manager
 from app.services.chat_service import chat_service
 from app.services.auth_service import auth_service
+from sqlalchemy import and_
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/ws", tags=["websocket"])
@@ -169,15 +171,28 @@ async def handle_join_room(websocket: WebSocket, user_id: str, message: dict, db
     # Join the room
     await connection_manager.join_room(user_id, room_id)
 
-    # Get room info (if it's a land chat)
+    # Get room info
     try:
-        room_uuid = uuid.UUID(room_id)
-        chat_session = await chat_service.get_or_create_land_chat(db, room_uuid)
+        # Try UUID-based room (claimed land with land_id)
+        try:
+            room_uuid = uuid.UUID(room_id)
+            chat_session = await chat_service.get_or_create_land_chat(db, room_uuid)
+            room_name = chat_session.name
+        except (ValueError, TypeError):
+            # Coordinate-based room (e.g., "land_5_10")
+            if room_id.startswith("land_"):
+                coords = room_id.replace("land_", "").split("_")
+                if len(coords) == 2:
+                    room_name = f"Land ({coords[0]}, {coords[1]})"
+                else:
+                    room_name = room_id
+            else:
+                room_name = room_id
 
         await websocket.send_json({
             "type": "joined_room",
             "room_id": room_id,
-            "room_name": chat_session.name,
+            "room_name": room_name,
             "members": connection_manager.get_room_members(room_id),
             "timestamp": datetime.utcnow().isoformat()
         })
@@ -222,18 +237,13 @@ async def handle_send_message(websocket: WebSocket, user_id: str, message: dict,
         })
         return
 
-    try:
-        # Save message to database
-        room_uuid = uuid.UUID(room_id)
-        user_uuid = uuid.UUID(user_id)
+    user_uuid = None
+    sender = None
+    db_message = None
+    is_leave_message = False
 
-        db_message = await chat_service.send_message(
-            db=db,
-            session_id=room_uuid,
-            sender_id=user_uuid,
-            content=content,
-            encrypt=True
-        )
+    try:
+        user_uuid = uuid.UUID(user_id)
 
         # Get sender info
         result = await db.execute(
@@ -241,15 +251,126 @@ async def handle_send_message(websocket: WebSocket, user_id: str, message: dict,
         )
         sender = result.scalar_one_or_none()
 
-        # Broadcast to room
+    except Exception as e:
+        logger.error(f"Error getting sender info: {e}")
+
+    # Try to save message to database (don't let this fail the broadcast)
+    try:
+        # Try UUID-based room first
+        try:
+            room_uuid = uuid.UUID(room_id)
+
+            # Get the chat session and land info
+            result = await db.execute(
+                select(ChatSession).where(ChatSession.session_id == room_uuid)
+            )
+            chat_session = result.scalar_one_or_none()
+
+            if chat_session and chat_session.land_id:
+                # Get land owner
+                result = await db.execute(
+                    select(Land).where(Land.land_id == chat_session.land_id)
+                )
+                land = result.scalar_one_or_none()
+
+                if land and land.owner_id:
+                    # Check if land owner is in the room
+                    room_members = connection_manager.get_room_members(room_id)
+                    owner_online = str(land.owner_id) in room_members
+
+                    # Mark as leave message only if sender is not owner AND owner is offline
+                    if land.owner_id != user_uuid and not owner_online:
+                        is_leave_message = True
+
+            # ALWAYS save message to database for UUID-based rooms
+            db_message = await chat_service.send_message(
+                db=db,
+                session_id=room_uuid,
+                sender_id=user_uuid,
+                content=content,
+                encrypt=False,  # Don't encrypt for now to debug
+                is_leave_message=is_leave_message
+            )
+            logger.info(f"✓ Saved message to UUID room {room_id}, msg_id={db_message.message_id}")
+
+        except (ValueError, TypeError):
+            # Coordinate-based room (e.g., "land_5_10")
+            # Try to save if land is owned
+            if room_id.startswith("land_"):
+                coords = room_id.replace("land_", "").split("_")
+                if len(coords) == 2:
+                    try:
+                        land_x = int(coords[0])
+                        land_y = int(coords[1])
+
+                        # Check if land exists and is owned
+                        result = await db.execute(
+                            select(Land).where(
+                                and_(
+                                    Land.x == land_x,
+                                    Land.y == land_y
+                                )
+                            )
+                        )
+                        land = result.scalar_one_or_none()
+
+                        logger.info(f"=== Processing message for land ({land_x}, {land_y}) ===")
+                        logger.info(f"Land found: {land is not None}, Land owned: {land.owner_id if land else None}")
+
+                        if land and land.owner_id:
+                            logger.info(f"Land is OWNED by user_id={land.owner_id}")
+
+                            # Land is owned - ALWAYS save ALL messages (like WhatsApp)
+                            chat_session = await chat_service.get_or_create_land_chat(db, land.land_id)
+                            logger.info(f"Chat session: {chat_session.session_id}")
+
+                            # Check if owner is online to determine if it's a leave message
+                            room_members = connection_manager.get_room_members(room_id)
+                            owner_online = str(land.owner_id) in room_members
+                            logger.info(f"Room members: {room_members}, Owner online: {owner_online}")
+
+                            # Mark as "leave message" only if sender is not owner AND owner is offline
+                            # This affects the unread badge, but ALL messages are saved
+                            if land.owner_id != user_uuid and not owner_online:
+                                is_leave_message = True
+                                logger.info(f"Marking as LEAVE MESSAGE (sender != owner and owner offline)")
+                            else:
+                                logger.info(f"NOT a leave message (owner online or sender is owner)")
+
+                            # ALWAYS save message to database (regardless of who's online)
+                            logger.info(f"Saving message: content='{content}', encrypt=False, is_leave_message={is_leave_message}")
+                            db_message = await chat_service.send_message(
+                                db=db,
+                                session_id=chat_session.session_id,
+                                sender_id=user_uuid,
+                                content=content,
+                                encrypt=False,  # Don't encrypt for now to debug
+                                is_leave_message=is_leave_message
+                            )
+                            logger.info(f"✓✓✓ MESSAGE SAVED! msg_id={db_message.message_id}, session_id={chat_session.session_id}, land_id={land.land_id}")
+                            logger.info(f"=== Message save complete for land ({land_x}, {land_y}) ===")
+                        else:
+                            logger.info(f"Land at ({land_x}, {land_y}) is not owned - broadcasting only")
+
+                    except Exception as inner_e:
+                        logger.error(f"Error saving message for coordinates: {inner_e}")
+                        # Continue to broadcast even if save fails
+
+    except Exception as e:
+        logger.error(f"Error in message save logic: {e}")
+        # Continue to broadcast even if save fails
+
+    # ALWAYS BROADCAST - This must happen regardless of save success/failure
+    try:
         broadcast_data = {
             "type": "message",
-            "message_id": str(db_message.message_id),
+            "message_id": str(db_message.message_id) if db_message else str(uuid.uuid4()),
             "room_id": room_id,
             "sender_id": user_id,
             "sender_username": sender.username if sender else "Unknown",
-            "content": content,  # Send plaintext to clients (they handle E2EE)
-            "timestamp": db_message.created_at.isoformat()
+            "content": content,
+            "is_leave_message": is_leave_message,
+            "timestamp": db_message.created_at.isoformat() if db_message else datetime.utcnow().isoformat()
         }
 
         sent_count = await connection_manager.broadcast_to_room(
@@ -257,13 +378,21 @@ async def handle_send_message(websocket: WebSocket, user_id: str, message: dict,
             room_id
         )
 
-        logger.info(f"Message broadcast to {sent_count} connections in room {room_id}")
+        logger.info(f"✓ Message broadcast to {sent_count} connections in room {room_id}")
+
+        # Also send confirmation back to sender
+        await websocket.send_json({
+            "type": "message_sent",
+            "message_id": broadcast_data["message_id"],
+            "room_id": room_id,
+            "timestamp": broadcast_data["timestamp"]
+        })
 
     except Exception as e:
-        logger.error(f"Error sending message: {e}")
+        logger.error(f"Error broadcasting message: {e}")
         await websocket.send_json({
             "type": "error",
-            "message": f"Failed to send message: {str(e)}"
+            "message": f"Failed to broadcast message: {str(e)}"
         })
 
 

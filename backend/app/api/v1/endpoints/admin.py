@@ -5,7 +5,7 @@ Dashboard, user management, system monitoring, and configuration
 
 from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, func, desc, and_
+from sqlalchemy import select, func, desc, and_, or_
 from typing import List, Optional
 from datetime import datetime, timedelta
 import logging
@@ -143,7 +143,7 @@ async def get_dashboard_stats(
         # Active chat sessions
         active_chat_sessions = await db.scalar(
             select(func.count(ChatSession.session_id)).where(
-                ChatSession.is_active == True
+                ChatSession.status == "active"
             )
         )
 

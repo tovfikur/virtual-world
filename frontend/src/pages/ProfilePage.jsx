@@ -3,7 +3,7 @@
  * User profile with stats and owned lands
  */
 
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { usersAPI } from '../services/api';
 import useAuthStore from '../stores/authStore';
@@ -19,10 +19,7 @@ function ProfilePage() {
   const [landGroups, setLandGroups] = useState([]);
   const [balance, setBalance] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [page, setPage] = useState(1);
-  const [pagination, setPagination] = useState(null);
-  const [loadingMore, setLoadingMore] = useState(false);
-  const observerTarget = useRef(null);
+  const [loadingLands, setLoadingLands] = useState(false);
 
   useEffect(() => {
     if (user) {
@@ -34,20 +31,37 @@ function ProfilePage() {
 
   const loadProfileData = async () => {
     try {
-      const [statsRes, landsRes, balanceRes] = await Promise.all([
+      setLoadingLands(true);
+
+      // Load stats and balance first
+      const [statsRes, balanceRes] = await Promise.all([
         usersAPI.getUserStats(user.user_id),
-        usersAPI.getUserLands(user.user_id, 1, 20),
         usersAPI.getBalance(user.user_id)
       ]);
 
       setStats(statsRes.data.stats);
-      setLands(landsRes.data.data);
-      setPagination(landsRes.data.pagination);
       setBalance(balanceRes.data);
+      setLoading(false);
+
+      // Load ALL lands (fetch all pages)
+      const allLands = [];
+      let currentPage = 1;
+      let hasMore = true;
+
+      while (hasMore) {
+        const landsRes = await usersAPI.getUserLands(user.user_id, currentPage, 100);
+        allLands.push(...landsRes.data.data);
+
+        hasMore = landsRes.data.pagination.has_next;
+        currentPage++;
+      }
+
+      setLands(allLands);
+      setLoadingLands(false);
     } catch (error) {
       toast.error('Failed to load profile data');
-    } finally {
       setLoading(false);
+      setLoadingLands(false);
     }
   };
 
@@ -99,28 +113,12 @@ function ProfilePage() {
 
   useEffect(() => {
     if (lands.length > 0) {
+      console.log(`📊 Grouping ${lands.length} lands into connected groups...`);
       const groups = groupConnectedLands(lands);
+      console.log(`✅ Found ${groups.length} land groups`);
       setLandGroups(groups);
     }
   }, [lands, groupConnectedLands]);
-
-  const loadMoreLands = useCallback(async () => {
-    if (!pagination?.has_next || loadingMore) return;
-
-    setLoadingMore(true);
-    try {
-      const nextPage = page + 1;
-      const response = await usersAPI.getUserLands(user.user_id, nextPage, 20);
-
-      setLands([...lands, ...response.data.data]);
-      setPagination(response.data.pagination);
-      setPage(nextPage);
-    } catch (error) {
-      toast.error('Failed to load more lands');
-    } finally {
-      setLoadingMore(false);
-    }
-  }, [pagination, loadingMore, page, user, lands]);
 
   const handleViewOnMap = useCallback((group) => {
     if (!group || group.length === 0) {
@@ -188,28 +186,6 @@ function ProfilePage() {
     navigate('/world');
   }, [navigate, setFocusTarget, user]);
 
-  // Infinite scroll observer
-  useEffect(() => {
-    const observer = new IntersectionObserver(
-      entries => {
-        if (entries[0].isIntersecting && pagination?.has_next && !loadingMore) {
-          loadMoreLands();
-        }
-      },
-      { threshold: 0.1 }
-    );
-
-    if (observerTarget.current) {
-      observer.observe(observerTarget.current);
-    }
-
-    return () => {
-      if (observerTarget.current) {
-        observer.unobserve(observerTarget.current);
-      }
-    };
-  }, [pagination, loadingMore, loadMoreLands]);
-
   if (loading) {
     return (
       <div className="min-h-screen bg-gray-900 flex items-center justify-center">
@@ -262,13 +238,22 @@ function ProfilePage() {
         <div className="mt-6 md:mt-8">
           <div className="flex justify-between items-center mb-3 md:mb-4">
             <h2 className="text-xl md:text-2xl font-bold">My Lands</h2>
-            {pagination && (
+            {lands.length > 0 && (
               <p className="text-gray-400">
-                Showing {lands.length} of {pagination.total} lands
+                {lands.length} {lands.length === 1 ? 'land' : 'lands'} • {landGroups.length} {landGroups.length === 1 ? 'group' : 'groups'}
               </p>
             )}
           </div>
-          {lands.length === 0 ? (
+
+          {loadingLands ? (
+            <div className="bg-gray-800 rounded-lg p-12 text-center border border-gray-700">
+              <div className="flex flex-col items-center justify-center">
+                <div className="w-12 h-12 border-4 border-blue-600 border-t-transparent rounded-full animate-spin mb-4"></div>
+                <p className="text-gray-400 text-lg">Loading your lands...</p>
+                <p className="text-gray-500 text-sm mt-2">Calculating connected groups...</p>
+              </div>
+            </div>
+          ) : lands.length === 0 ? (
             <div className="bg-gray-800 rounded-lg p-12 text-center border border-gray-700">
               <p className="text-gray-400 text-lg mb-4">You don't own any land yet</p>
               <a
@@ -279,9 +264,8 @@ function ProfilePage() {
               </a>
             </div>
           ) : (
-            <>
-              <div className="space-y-3 md:space-y-4">
-                {landGroups.map((group, groupIndex) => (
+            <div className="space-y-3 md:space-y-4">
+              {landGroups.map((group, groupIndex) => (
                   <div
                     key={groupIndex}
                     className="bg-gray-800 rounded-lg p-4 md:p-6 border border-gray-700 hover:border-blue-500 transition-colors"
@@ -366,23 +350,7 @@ function ProfilePage() {
                     </div>
                   </div>
                 ))}
-              </div>
-
-              {/* Infinite Scroll Trigger */}
-              {pagination?.has_next && (
-                <div ref={observerTarget} className="mt-6 text-center py-8">
-                  {loadingMore && (
-                    <div className="flex items-center justify-center">
-                      <svg className="animate-spin h-8 w-8 text-blue-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                      </svg>
-                      <span className="ml-3 text-gray-400">Loading more lands...</span>
-                    </div>
-                  )}
-                </div>
-              )}
-            </>
+            </div>
           )}
         </div>
       </div>

@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Test Listing Creation</title>
+    <style>
+        body { font-family: Arial, sans-serif; padding: 20px; background: #1a1a1a; color: #fff; }
+        .container { max-width: 600px; margin: 0 auto; }
+        .section { background: #2a2a2a; padding: 20px; margin: 20px 0; border-radius: 8px; }
+        button { background: #4CAF50; color: white; padding: 10px 20px; border: none; border-radius: 4px; cursor: pointer; margin: 5px; }
+        button:hover { background: #45a049; }
+        input, select { width: 100%; padding: 8px; margin: 5px 0; box-sizing: border-box; background: #333; color: #fff; border: 1px solid #555; border-radius: 4px; }
+        .result { background: #333; padding: 10px; margin: 10px 0; border-radius: 4px; white-space: pre-wrap; font-family: monospace; font-size: 12px; }
+        .error { background: #f44336; }
+        .success { background: #4CAF50; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🧪 Test Marketplace Listing</h1>
+
+        <div class="section">
+            <h2>1. Login</h2>
+            <input type="text" id="email" placeholder="Email" value="topu@gmail.com">
+            <input type="password" id="password" placeholder="Password" value="DemoPassword123!">
+            <button onclick="login()">Login</button>
+            <div id="loginResult" class="result"></div>
+        </div>
+
+        <div class="section">
+            <h2>2. Get User Lands</h2>
+            <button onclick="getUserLands()">Get My Lands</button>
+            <div id="landsResult" class="result"></div>
+        </div>
+
+        <div class="section">
+            <h2>3. Create Listing</h2>
+            <input type="text" id="landId" placeholder="Land ID (from above)">
+            <select id="listingType">
+                <option value="fixed_price">Fixed Price</option>
+                <option value="auction">Auction</option>
+                <option value="auction_with_buynow">Auction + Buy Now</option>
+            </select>
+            <input type="number" id="price" placeholder="Price (BDT)" value="500">
+            <input type="number" id="buyNowPrice" placeholder="Buy Now Price (optional)" value="1000">
+            <input type="number" id="duration" placeholder="Duration (hours)" value="24">
+            <button onclick="createListing()">Create Listing</button>
+            <div id="listingResult" class="result"></div>
+        </div>
+    </div>
+
+    <script>
+        const API_URL = 'http://localhost:8000/api/v1';
+        let token = '';
+        let userId = '';
+
+        async function login() {
+            const email = document.getElementById('email').value;
+            const password = document.getElementById('password').value;
+            const resultDiv = document.getElementById('loginResult');
+
+            try {
+                const response = await fetch(`${API_URL}/auth/login`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ email, password })
+                });
+
+                const data = await response.json();
+                resultDiv.className = 'result ' + (response.ok ? 'success' : 'error');
+                resultDiv.textContent = JSON.stringify(data, null, 2);
+
+                if (response.ok) {
+                    token = data.access_token;
+                    userId = data.user.user_id;
+                    console.log('Token:', token);
+                    console.log('User ID:', userId);
+                }
+            } catch (error) {
+                resultDiv.className = 'result error';
+                resultDiv.textContent = 'Error: ' + error.message;
+            }
+        }
+
+        async function getUserLands() {
+            const resultDiv = document.getElementById('landsResult');
+
+            if (!token) {
+                resultDiv.className = 'result error';
+                resultDiv.textContent = 'Please login first!';
+                return;
+            }
+
+            try {
+                const response = await fetch(`${API_URL}/users/${userId}/lands?page=1&limit=10`, {
+                    headers: {
+                        'Authorization': `Bearer ${token}`,
+                        'Content-Type': 'application/json'
+                    }
+                });
+
+                const data = await response.json();
+                resultDiv.className = 'result ' + (response.ok ? 'success' : 'error');
+                resultDiv.textContent = JSON.stringify(data, null, 2);
+
+                // Auto-fill first land ID
+                if (response.ok && data.data && data.data.length > 0) {
+                    document.getElementById('landId').value = data.data[0].land_id;
+                }
+            } catch (error) {
+                resultDiv.className = 'result error';
+                resultDiv.textContent = 'Error: ' + error.message;
+            }
+        }
+
+        async function createListing() {
+            const resultDiv = document.getElementById('listingResult');
+
+            if (!token) {
+                resultDiv.className = 'result error';
+                resultDiv.textContent = 'Please login first!';
+                return;
+            }
+
+            const landId = document.getElementById('landId').value;
+            const listingType = document.getElementById('listingType').value;
+            const price = parseInt(document.getElementById('price').value);
+            const buyNowPrice = parseInt(document.getElementById('buyNowPrice').value);
+            const duration = parseInt(document.getElementById('duration').value);
+
+            const listingData = {
+                land_id: landId,
+                listing_type: listingType
+            };
+
+            // Set appropriate price fields
+            if (listingType === 'fixed_price') {
+                listingData.buy_now_price_bdt = price;
+            } else if (listingType === 'auction') {
+                listingData.starting_price_bdt = price;
+                listingData.duration_hours = duration;
+            } else if (listingType === 'auction_with_buynow') {
+                listingData.starting_price_bdt = price;
+                listingData.buy_now_price_bdt = buyNowPrice;
+                listingData.duration_hours = duration;
+            }
+
+            console.log('Creating listing:', listingData);
+
+            try {
+                const response = await fetch(`${API_URL}/marketplace/listings`, {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': `Bearer ${token}`,
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(listingData)
+                });
+
+                const data = await response.json();
+                resultDiv.className = 'result ' + (response.ok ? 'success' : 'error');
+                resultDiv.textContent = JSON.stringify(data, null, 2);
+            } catch (error) {
+                resultDiv.className = 'result error';
+                resultDiv.textContent = 'Error: ' + error.message;
+            }
+        }
+    </script>
+</body>
+</html>

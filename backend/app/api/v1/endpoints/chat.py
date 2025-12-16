@@ -17,6 +17,7 @@ from app.models.chat import Message
 from app.models.user import User
 from app.dependencies import get_current_user
 from app.services.chat_service import chat_service
+from app.services.websocket_service import connection_manager
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/chat", tags=["chat"])
@@ -172,6 +173,84 @@ async def send_chat_message(
     except ValueError as e:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e)
+        )
+
+
+@router.get("/land/{land_id}/messages")
+async def get_land_messages(
+    land_id: str,
+    limit: int = Query(50, ge=1, le=200),
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Get message history for a land (by land_id).
+
+    Returns all messages (both real-time and leave messages) for the land's chat session.
+    """
+    logger.info(f"=== GET /land/{land_id}/messages called ===")
+
+    try:
+        land_uuid = uuid.UUID(land_id)
+        logger.info(f"Valid land UUID: {land_uuid}")
+    except ValueError:
+        logger.error(f"Invalid land ID format: {land_id}")
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid land ID"
+        )
+
+    try:
+        # Get or create chat session for this land
+        logger.info(f"Getting/creating chat session for land {land_uuid}")
+        chat_session = await chat_service.get_or_create_land_chat(db, land_uuid)
+        logger.info(f"Chat session ID: {chat_session.session_id}")
+
+        # Get message history
+        logger.info(f"Fetching message history (limit={limit})")
+        messages = await chat_service.get_chat_history(
+            db=db,
+            session_id=chat_session.session_id,
+            limit=limit
+        )
+        logger.info(f"Found {len(messages)} messages in database")
+
+        # Get sender usernames
+        sender_ids = list(set(str(msg.sender_id) for msg in messages))
+        sender_uuids = [uuid.UUID(sid) for sid in sender_ids]
+
+        result = await db.execute(
+            select(User).where(User.user_id.in_(sender_uuids))
+        )
+        users = {str(u.user_id): u.username for u in result.scalars().all()}
+
+        response_messages = [
+            {
+                "message_id": str(msg.message_id),
+                "sender_id": str(msg.sender_id),
+                "sender_username": users.get(str(msg.sender_id), "Unknown"),
+                "content": msg.content_encrypted,  # Already decrypted by service
+                "created_at": msg.created_at.isoformat(),
+                "is_leave_message": msg.is_leave_message == "True",
+                "read_by_owner": msg.read_by_owner == "True"
+            }
+            for msg in messages
+        ]
+
+        logger.info(f"✓ Returning {len(response_messages)} messages")
+        logger.info(f"Messages: {[m['content'][:20] + '...' for m in response_messages]}")
+
+        return {
+            "land_id": land_id,
+            "session_id": str(chat_session.session_id),
+            "messages": response_messages,
+            "count": len(response_messages)
+        }
+
+    except ValueError as e:
+        logger.error(f"Error getting messages: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
             detail=str(e)
         )
 
@@ -348,3 +427,180 @@ async def get_chat_stats(
         "total_messages": total_messages,
         "timestamp": datetime.utcnow().isoformat()
     }
+
+
+@router.get("/unread-messages")
+async def get_unread_messages(
+    current_user: dict = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Get count of unread and read leave messages for all lands owned by current user.
+
+    Returns a dict mapping land_id to {"unread": count, "read": count}.
+    """
+    try:
+        user_uuid = uuid.UUID(current_user["sub"])
+    except ValueError:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid user ID"
+        )
+
+    message_counts = await chat_service.get_unread_messages_by_land(db, user_uuid)
+
+    # Calculate total unread
+    total_unread = sum(counts.get("unread", 0) for counts in message_counts.values())
+
+    return {
+        "messages_by_land": message_counts,
+        "total_unread": total_unread,
+        "timestamp": datetime.utcnow().isoformat()
+    }
+
+
+@router.post("/sessions/{session_id}/mark-read")
+async def mark_session_messages_read(
+    session_id: str,
+    current_user: dict = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Mark all unread leave messages in a session as read.
+
+    Only land owner can mark messages as read.
+    """
+    try:
+        session_uuid = uuid.UUID(session_id)
+        user_uuid = uuid.UUID(current_user["sub"])
+    except ValueError:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid ID format"
+        )
+
+    try:
+        count = await chat_service.mark_messages_as_read(db, session_uuid, user_uuid)
+
+        return {
+            "session_id": session_id,
+            "messages_marked_read": count,
+            "timestamp": datetime.utcnow().isoformat()
+        }
+    except Exception as e:
+        logger.error(f"Error marking messages as read: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to mark messages as read"
+        )
+
+
+@router.delete("/land/{land_id}/messages")
+async def clean_land_messages(
+    land_id: str,
+    current_user: dict = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Delete all messages for a land (clean the square).
+
+    Permission rules:
+    - If land is owned: only owner can clean
+    - If land is unclaimed: anyone can clean
+    """
+    try:
+        land_uuid = uuid.UUID(land_id)
+        user_uuid = uuid.UUID(current_user["sub"])
+    except ValueError:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid ID format"
+        )
+
+    try:
+        # Get land info
+        from app.models.land import Land
+        result = await db.execute(
+            select(Land).where(Land.land_id == land_uuid)
+        )
+        land = result.scalar_one_or_none()
+
+        if not land:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Land not found"
+            )
+
+        # Check permission
+        if land.owner_id:
+            # Land is owned - only owner can clean
+            if land.owner_id != user_uuid:
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail="Only the land owner can clean messages on owned land"
+                )
+        # If land is unclaimed (owner_id is None), anyone can clean
+
+        # Get chat session for this land
+        result = await db.execute(
+            select(ChatSession).where(ChatSession.land_id == land_uuid)
+        )
+        chat_session = result.scalar_one_or_none()
+
+        if not chat_session:
+            return {
+                "land_id": land_id,
+                "messages_deleted": 0,
+                "message": "No chat session found for this land"
+            }
+
+        # Delete all messages in this session (soft delete)
+        result = await db.execute(
+            select(Message).where(
+                Message.session_id == chat_session.session_id
+            )
+        )
+        messages = result.scalars().all()
+
+        deleted_count = 0
+        for msg in messages:
+            msg.deleted_at = datetime.utcnow()
+            deleted_count += 1
+
+        # Update chat session message count
+        chat_session.message_count = 0
+        chat_session.last_message_at = None
+
+        await db.commit()
+
+        logger.info(f"Cleaned {deleted_count} messages from land {land_id} by user {user_uuid}")
+
+        # Broadcast messages_cleaned event to all users in this land's room
+        room_id = f"land_{land.x}_{land.y}"
+        await connection_manager.broadcast_to_room(
+            {
+                "type": "messages_cleaned",
+                "land_id": str(land_id),
+                "room_id": room_id,
+                "deleted_count": deleted_count,
+                "timestamp": datetime.utcnow().isoformat()
+            },
+            room_id
+        )
+        logger.info(f"Broadcasted messages_cleaned event to room {room_id}")
+
+        return {
+            "land_id": land_id,
+            "messages_deleted": deleted_count,
+            "timestamp": datetime.utcnow().isoformat(),
+            "message": f"Successfully cleaned {deleted_count} messages"
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error cleaning land messages: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to clean messages"
+        )

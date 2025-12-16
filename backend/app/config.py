@@ -59,13 +59,11 @@ class Settings(BaseSettings):
     lockout_duration_minutes: int = Field(default=15, env="LOCKOUT_DURATION_MINUTES")
 
     # CORS
-    cors_origins: List[str] = Field(
-        default=["http://localhost:3000"],
-        env="CORS_ORIGINS"
-    )
+    cors_origins: List[str] = Field(default=[], env="CORS_ORIGINS")
+    cors_origin_regex: str = Field(default=".*", env="CORS_ORIGIN_REGEX")
     cors_credentials: bool = Field(default=True, env="CORS_CREDENTIALS")
     cors_methods: List[str] = Field(
-        default=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+        default=["*"],
         env="CORS_METHODS"
     )
     cors_headers: List[str] = Field(default=["*"], env="CORS_HEADERS")
@@ -118,7 +116,8 @@ class Settings(BaseSettings):
     encryption_key: str = Field(env="ENCRYPTION_KEY")
 
     # Logging
-    log_level: str = Field(default="INFO", env="LOG_LEVEL")
+    # Default to WARNING to avoid noisy output; can be overridden via LOG_LEVEL.
+    log_level: str = Field(default="WARNING", env="LOG_LEVEL")
     log_file: Optional[str] = Field(default=None, env="LOG_FILE")
 
     # World Generation

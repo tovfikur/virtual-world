@@ -15,8 +15,10 @@ class WebSocketService {
   }
 
   connect(token) {
-    const wsUrl = import.meta.env.VITE_WS_URL || 'ws://localhost:8000';
-    const url = `${wsUrl}/api/v1/ws/connect?token=${token}`;
+    const envWsUrl = import.meta.env.VITE_WS_URL;
+    const defaultWsUrl = `${window.location.protocol === 'https:' ? 'wss://' : 'ws://'}${window.location.host}`;
+    const wsUrl = envWsUrl && envWsUrl.trim() !== '' ? envWsUrl : defaultWsUrl;
+    const url = `${wsUrl.replace(/\/?$/, '')}/api/v1/ws/connect?token=${token}`;
 
     return new Promise((resolve, reject) => {
       try {

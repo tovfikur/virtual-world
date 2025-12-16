@@ -5,7 +5,7 @@
 
 import axios from 'axios';
 
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000/api/v1';
+const API_BASE_URL = import.meta.env.VITE_API_URL || `${window.location.origin}/api/v1`;
 
 // Create axios instance with default config
 const api = axios.create({
@@ -132,6 +132,9 @@ export const landsAPI = {
   searchLands: (params) =>
     api.get('/lands', { params }),
 
+  claimLand: (data) =>
+    api.post('/lands/claim', data),
+
   updateLand: (landId, data) =>
     api.put(`/lands/${landId}`, data),
 
@@ -231,6 +234,18 @@ export const chatAPI = {
 
   getChatStats: () =>
     api.get('/chat/stats'),
+
+  getUnreadMessages: () =>
+    api.get('/chat/unread-messages'),
+
+  markSessionAsRead: (sessionId) =>
+    api.post(`/chat/sessions/${sessionId}/mark-read`),
+
+  getLandMessages: (landId, limit = 50) =>
+    api.get(`/chat/land/${landId}/messages`, { params: { limit } }),
+
+  cleanLandMessages: (landId) =>
+    api.delete(`/chat/land/${landId}/messages`),
 };
 
 // ============================================

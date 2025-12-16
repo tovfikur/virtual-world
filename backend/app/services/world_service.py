@@ -204,7 +204,7 @@ class WorldGenerationService:
 
         return int(base * elevation_factor)
 
-    def generate_chunk(self, chunk_x: int, chunk_y: int, chunk_size: int = 32) -> Dict:
+    async def generate_chunk(self, chunk_x: int, chunk_y: int, chunk_size: int = 32) -> Dict:
         """
         Generate a chunk of land data.
 
@@ -227,7 +227,7 @@ class WorldGenerationService:
 
         # Check cache first
         cache_key = f"chunk:{chunk_id}:{chunk_size}"
-        cached_chunk = None  # Disable cache for now to ensure fresh generation
+        cached_chunk = await cache_service.get(cache_key)
 
         if cached_chunk:
             logger.debug(f"Cache hit for chunk {chunk_id}")
@@ -275,13 +275,13 @@ class WorldGenerationService:
         }
 
         # Cache the chunk (chunks are immutable)
-        # await cache_service.set(cache_key, chunk_data, ttl=CACHE_TTLS["chunk"])
+        await cache_service.set(cache_key, chunk_data, ttl=CACHE_TTLS["chunk"])
 
         logger.info(f"Generated chunk {chunk_id} with {len(lands)} lands")
 
         return chunk_data
 
-    def generate_chunks_batch(
+    async def generate_chunks_batch(
         self,
         chunks: List[Tuple[int, int]],
         chunk_size: int = 32
@@ -299,7 +299,7 @@ class WorldGenerationService:
         result = []
 
         for chunk_x, chunk_y in chunks:
-            chunk_data = self.generate_chunk(chunk_x, chunk_y, chunk_size)
+            chunk_data = await self.generate_chunk(chunk_x, chunk_y, chunk_size)
             result.append(chunk_data)
 
         logger.info(f"Generated {len(result)} chunks in batch")

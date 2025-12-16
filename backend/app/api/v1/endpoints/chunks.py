@@ -3,27 +3,99 @@ Chunk endpoints
 World generation and chunk retrieval
 """
 
-from fastapi import APIRouter, HTTPException, status, Query, Body, Path
-from typing import List, Tuple
+from fastapi import APIRouter, HTTPException, status, Query, Body, Path, Depends
+from typing import List, Tuple, Dict
 import logging
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select, and_
 
 from app.services.world_service import world_service
+from app.db.session import get_db
+from app.models.land import Land
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/chunks", tags=["chunks"])
+
+
+async def enrich_chunk_with_ownership(
+    chunk_data: Dict,
+    db: AsyncSession
+) -> Dict:
+    """
+    Enrich chunk data with ownership and fencing information.
+
+    Args:
+        chunk_data: Generated chunk data from world service
+        db: Database session
+
+    Returns:
+        Enriched chunk data with fencing flags
+    """
+    # Calculate coordinate range for this chunk
+    lands = chunk_data["lands"]
+    if not lands:
+        return chunk_data
+
+    # Get min/max coordinates for efficient query
+    x_coords = [land["x"] for land in lands]
+    y_coords = [land["y"] for land in lands]
+    min_x, max_x = min(x_coords), max(x_coords)
+    min_y, max_y = min(y_coords), max(y_coords)
+
+    # Query for owned lands in this chunk area
+    result = await db.execute(
+        select(Land.x, Land.y, Land.land_id, Land.owner_id, Land.fenced)
+        .where(
+            and_(
+                Land.x >= min_x,
+                Land.x <= max_x,
+                Land.y >= min_y,
+                Land.y <= max_y,
+                Land.owner_id.isnot(None)
+            )
+        )
+    )
+
+    owned_lands = result.all()
+
+    # Create a lookup map for owned lands with all ownership data
+    ownership_lookup = {
+        (row.x, row.y): {
+            "land_id": str(row.land_id),
+            "owner_id": str(row.owner_id),
+            "fenced": row.fenced
+        }
+        for row in owned_lands
+    }
+
+    # Enrich land data with ownership and fencing information
+    for land in lands:
+        coord_key = (land["x"], land["y"])
+        if coord_key in ownership_lookup:
+            # Land is owned - add ownership data
+            land["land_id"] = ownership_lookup[coord_key]["land_id"]
+            land["owner_id"] = ownership_lookup[coord_key]["owner_id"]
+            land["fenced"] = ownership_lookup[coord_key]["fenced"]
+        else:
+            # Land is not owned
+            land["fenced"] = False
+
+    return chunk_data
 
 
 @router.get("/{chunk_x}/{chunk_y}")
 async def get_chunk(
     chunk_x: int,
     chunk_y: int,
-    chunk_size: int = Query(32, ge=8, le=64, description="Chunk size (8-64)")
+    chunk_size: int = Query(32, ge=8, le=64, description="Chunk size (8-64)"),
+    db: AsyncSession = Depends(get_db)
 ):
     """
     Get a generated chunk at specified coordinates.
 
     Returns a chunk containing terrain data for all lands in the chunk.
     Chunks are generated deterministically and cached.
+    Includes fencing information for owned lands.
 
     Args:
         chunk_x: Chunk X coordinate
@@ -31,10 +103,12 @@ async def get_chunk(
         chunk_size: Size of chunk (default 32x32, max 64x64)
 
     Returns:
-        Chunk data with land information
+        Chunk data with land information including fencing flags
     """
     try:
-        chunk_data = world_service.generate_chunk(chunk_x, chunk_y, chunk_size)
+        chunk_data = await world_service.generate_chunk(chunk_x, chunk_y, chunk_size)
+        # Enrich with ownership/fencing data
+        chunk_data = await enrich_chunk_with_ownership(chunk_data, db)
         return chunk_data
     except Exception as e:
         logger.error(f"Failed to generate chunk {chunk_x},{chunk_y}: {e}")
@@ -51,19 +125,21 @@ async def get_chunks_batch(
         description="List of [chunk_x, chunk_y] coordinate pairs",
         example=[[0, 0], [0, 1], [1, 0], [1, 1]]
     ),
-    chunk_size: int = Query(32, ge=8, le=64)
+    chunk_size: int = Query(32, ge=8, le=64),
+    db: AsyncSession = Depends(get_db)
 ):
     """
     Get multiple chunks in a single request.
 
     Useful for loading a region of chunks at once (e.g., viewport streaming).
+    Includes fencing information for owned lands.
 
     Args:
         chunks: List of [chunk_x, chunk_y] coordinate pairs (max 25 chunks)
         chunk_size: Size of each chunk
 
     Returns:
-        List of chunk data
+        List of chunk data with fencing information
     """
     # Limit batch size to prevent abuse
     if len(chunks) > 25:
@@ -81,11 +157,17 @@ async def get_chunks_batch(
     try:
         # Convert list of lists to list of tuples
         chunk_tuples = [tuple(c) for c in chunks]
-        chunks_data = world_service.generate_chunks_batch(chunk_tuples, chunk_size)
+        chunks_data = await world_service.generate_chunks_batch(chunk_tuples, chunk_size)
+
+        # Enrich all chunks with ownership/fencing data
+        enriched_chunks = []
+        for chunk_data in chunks_data:
+            enriched_chunk = await enrich_chunk_with_ownership(chunk_data, db)
+            enriched_chunks.append(enriched_chunk)
 
         return {
-            "chunks": chunks_data,
-            "total": len(chunks_data),
+            "chunks": enriched_chunks,
+            "total": len(enriched_chunks),
             "chunk_size": chunk_size
         }
     except Exception as e:
