@@ -159,7 +159,7 @@ async def websocket_endpoint(
                     await handle_live_signal(user_id, message, signal_type="live_ice")
 
                 elif message_type == "live_status":
-                    await handle_live_status(websocket, message)
+                    await handle_live_status(websocket, user_id, message)
 
                 elif message_type == "ping":
                     # Heartbeat
@@ -612,17 +612,20 @@ async def handle_live_signal(user_id: str, message: dict, signal_type: str):
     payload = message.get("payload")
 
     if not room_id or not target_user_id or not payload:
-        logger.info(f"{signal_type} missing fields user={user_id} room={room_id} target={target_user_id}")
-        print(f"[live] {signal_type} missing fields user={user_id} room={room_id} target={target_user_id}")
+        logger.warning(f"🔴 {signal_type} MISSING FIELDS user={user_id} room={room_id} target={target_user_id}")
+        print(f"[live] ❌ {signal_type} missing fields user={user_id} room={room_id} target={target_user_id}")
         return
 
     # Ensure both users are in the same chat room
     room_members = connection_manager.rooms.get(room_id, set())
     if user_id not in room_members or target_user_id not in room_members:
-        logger.info(f"{signal_type} dropped user not in room user={user_id} target={target_user_id} room={room_id}")
-        print(f"[live] {signal_type} dropped not in room user={user_id} target={target_user_id} room={room_id}")
+        logger.warning(f"🔴 {signal_type} USER NOT IN ROOM user={user_id} target={target_user_id} room={room_id}")
+        print(f"[live] ❌ {signal_type} dropped not in room user={user_id} target={target_user_id} room={room_id}")
         return
 
+    signal_payload = payload.get("signal", {})
+    print(f"[live] 📨 {signal_type} signal_type={signal_payload.get('type')} from={user_id} to={target_user_id} room={room_id}")
+    
     await connection_manager.send_personal_message(
         {
             "type": signal_type,
@@ -633,11 +636,11 @@ async def handle_live_signal(user_id: str, message: dict, signal_type: str):
         },
         target_user_id,
     )
-    logger.info(f"{signal_type} forwarded room={room_id} from={user_id} to={target_user_id}")
-    print(f"[live] {signal_type} forwarded room={room_id} from={user_id} to={target_user_id}")
+    logger.info(f"✅ {signal_type} forwarded room={room_id} from={user_id} to={target_user_id}")
+    print(f"[live] ✅ {signal_type} forwarded room={room_id} from={user_id} to={target_user_id}")
 
 
-async def handle_live_status(websocket: WebSocket, message: dict):
+async def handle_live_status(websocket: WebSocket, user_id: str, message: dict):
     """Return current live participants for a room (observer mode)."""
     room_id = message.get("room_id")
     if not room_id:
@@ -646,13 +649,13 @@ async def handle_live_status(websocket: WebSocket, message: dict):
         await websocket.send_json({"type": "error", "message": "room_id required for live_status"})
         return
 
-    logger.info(f"live_status request room={room_id}")
-    print(f"[live] live_status room={room_id}")
+    logger.info(f"live_status request room={room_id} user={user_id}")
+    print(f"[live] live_status room={room_id} user={user_id}")
     await websocket.send_json(
         {
             "type": "live_peers",
             "room_id": room_id,
-            "peers": _get_live_peers(room_id),
+            "peers": _get_live_peers(room_id, exclude_user=user_id),
         }
     )
 

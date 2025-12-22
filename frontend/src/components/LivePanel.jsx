@@ -1,30 +1,30 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import SimplePeer from "simple-peer";
 import toast from "react-hot-toast";
 import { wsService } from "../services/websocket";
 
 /**
- * LivePanel
- * Lightweight group live-audio/video for the current land room.
- *
- * Flow:
- * - User clicks Go Live (audio-only or audio+video)
- * - We request media, mark as live, and ask the server for current peers
- * - Offers/answers/ICE are relayed via the existing WebSocket connection
- * - Peers connect in a mesh; everyone that is live can see/hear each other
+ * LivePanel - Using RTCPeerConnection directly (no SimplePeer)
+ * This avoids SimplePeer's internal stream handling bugs.
  */
 function LivePanel({ roomId, land, user }) {
   const [isLive, setIsLive] = useState(false);
-  const [mediaType, setMediaType] = useState(null); // "audio" | "video" | null
+  const [mediaType, setMediaType] = useState(null);
   const [localStream, setLocalStream] = useState(null);
   const [peerStreams, setPeerStreams] = useState({});
   const [debugLog, setDebugLog] = useState([]);
   const [inRoom, setInRoom] = useState(false);
   const peersRef = useRef(new Map());
+  const streamRef = useRef(null);
+
+  // Log component mount immediately
+  console.log("[live] 🎬 LivePanel component mounted/rendered", {
+    roomId,
+    land: !!land,
+    user: !!user,
+  });
 
   const log = useCallback((label, payload = {}) => {
     try {
-      // eslint-disable-next-line no-console
       console.log(`[live] ${label}`, payload);
       if (typeof window !== "undefined") {
         window.__LIVE_DEBUG = window.__LIVE_DEBUG || [];
@@ -51,9 +51,9 @@ function LivePanel({ roomId, land, user }) {
 
   const cleanupPeers = useCallback(() => {
     log("cleanupPeers");
-    peersRef.current.forEach((peer) => {
+    peersRef.current.forEach((peerData) => {
       try {
-        peer.destroy();
+        peerData.pc?.close();
       } catch (e) {
         // ignore
       }
@@ -70,25 +70,46 @@ function LivePanel({ roomId, land, user }) {
     setMediaType(null);
   }, [cleanupPeers, stopLocalStream, log]);
 
-  // Stop everything on unmount
   useEffect(() => {
-    log("mount", { roomId });
-    return () => teardown();
-  }, [teardown, log, roomId]);
+    streamRef.current = localStream;
+  }, [localStream]);
 
   useEffect(() => {
-    // When room changes, drop current live session
-    teardown();
-    setInRoom(false);
-    if (roomId && inRoom) {
-      log("requesting live_status", { roomId });
-      wsService.send("live_status", { room_id: roomId });
+    log("📍 mount", { roomId, isLive, mediaType });
+    return () => {
+      // Don't teardown if we're actively streaming or trying to stream
+      if (isLive || mediaType) {
+        log("🛡️ [UNMOUNT] isLive/mediaType set, skipping teardown", { roomId, isLive, mediaType });
+        return;
+      }
+      log("💥 [UNMOUNT] Calling teardown", { roomId, isLive, mediaType });
+      teardown();
+    };
+  }, [teardown, log, roomId, isLive, mediaType]);
+
+  useEffect(() => {
+    // Don't teardown if we're actively trying to be live
+    if (isLive || mediaType) {
+      log("🛡️ [EFFECT] isLive or mediaType set, skipping teardown", { roomId, isLive, mediaType });
+      return;
     }
-  }, [roomId, teardown, log, inRoom]);
+    
+    log("🔍 [EFFECT] Checking inRoom state", { roomId, inRoom, isLive, mediaType });
+    if (!roomId || !inRoom) {
+      // Only teardown if we're NOT in a room AND NOT trying to be live
+      log("💥 [EFFECT] Calling teardown because inRoom=false", { roomId, inRoom });
+      teardown();
+      setInRoom(false);
+      return;
+    }
+    // We ARE in a room, request live status
+    log("requesting live_status", { roomId });
+    wsService.send("live_status", { room_id: roomId });
+  }, [roomId, teardown, log, inRoom, isLive, mediaType]);
 
   const sendSignal = useCallback(
     (targetUserId, type, payload) => {
-      log("sendSignal", { targetUserId, type, roomId, payload });
+      log("sendSignal", { targetUserId, type, roomId });
       if (!roomId || !targetUserId) return;
       wsService.send(type, {
         room_id: roomId,
@@ -101,22 +122,30 @@ function LivePanel({ roomId, land, user }) {
 
   const handlePeerSignal = useCallback(
     (peerId, data, initiator) => {
-      // simple-peer emits offers/answers/ICE through a single channel
-      log("handlePeerSignal", { peerId, initiator, type: data?.type });
-      if (!roomId) return;
+      log(`📨 [SIGNAL] handlePeerSignal called`, {
+        peerId,
+        initiator,
+        type: data?.type,
+      });
+      if (!roomId) {
+        log("❌ No roomId, cannot send signal");
+        return;
+      }
       if (data.type === "offer") {
+        log(`📤 [OFFER] Sending offer to peer`, { peerId });
         sendSignal(peerId, "live_offer", {
           signal: data,
           media_type: mediaType || "video",
         });
       } else if (data.type === "answer") {
+        log(`📤 [ANSWER] Sending answer to peer`, { peerId });
         sendSignal(peerId, "live_answer", { signal: data });
       } else {
-        // ICE candidate
+        log(`📤 [ICE] Sending ICE candidate to peer`, { peerId });
         sendSignal(peerId, "live_ice", { signal: data });
       }
     },
-    [mediaType, roomId, sendSignal]
+    [mediaType, roomId, sendSignal, log]
   );
 
   const createPeerConnection = useCallback(
@@ -125,116 +154,194 @@ function LivePanel({ roomId, land, user }) {
         peerId,
         initiator,
         meta,
-        hasStream: !!localStream,
-        isLive,
       });
+
       if (peersRef.current.has(peerId)) {
-        const existingPeer = peersRef.current.get(peerId);
-        // If we're broadcasting and this peer doesn't have our stream yet, add it
-        if (isLive && localStream && !initiator) {
-          try {
-            localStream.getTracks().forEach((track) => {
-              existingPeer.addTrack(track, localStream);
-            });
-          } catch (e) {
-            log("Failed to add track to existing peer", { error: e });
-          }
-        }
-        return existingPeer;
+        return peersRef.current.get(peerId).pc;
       }
 
-      const peer = new SimplePeer({
-        initiator,
-        trickle: false,
-        // Include local stream if we're broadcasting
-        stream: (isLive && localStream) ? localStream : undefined,
-        config: {
-          iceServers: [
-            { urls: "stun:stun.l.google.com:19302" },
-            { urls: "stun:stun1.l.google.com:19302" },
-          ],
-        },
+      const pc = new RTCPeerConnection({
+        iceServers: [
+          { urls: "stun:stun.l.google.com:19302" },
+          { urls: "stun:stun1.l.google.com:19302" },
+        ],
       });
 
-      peersRef.current.set(peerId, peer);
+      // Handle ICE candidates
+      pc.onicecandidate = (event) => {
+        if (event.candidate) {
+          handlePeerSignal(peerId, event.candidate, initiator);
+        }
+      };
+
+      // Handle remote stream
+      pc.ontrack = (event) => {
+        log("🎵 ontrack event fired", {
+          peerId,
+          kind: event.track.kind,
+          enabled: event.track.enabled,
+          streamCount: event.streams?.length || 0,
+        });
+        if (event.streams && event.streams[0]) {
+          const remoteStream = event.streams[0];
+          log("✅ setting remote stream", {
+            peerId,
+            trackCount: remoteStream.getTracks().length,
+          });
+          setPeerStreams((prev) => ({
+            ...prev,
+            [peerId]: { ...prev[peerId], stream: remoteStream },
+          }));
+        } else {
+          log("⚠️ no streams in ontrack event", { peerId });
+        }
+      };
+
+      // Handle connection state changes
+      pc.onconnectionstatechange = () => {
+        log("connectionstatechange", {
+          peerId,
+          state: pc.connectionState,
+        });
+        if (
+          pc.connectionState === "failed" ||
+          pc.connectionState === "closed"
+        ) {
+          pc.close();
+          peersRef.current.delete(peerId);
+          setPeerStreams((prev) => {
+            const next = { ...prev };
+            delete next[peerId];
+            return next;
+          });
+        }
+      };
+
+      pc.onerror = (error) => {
+        log("pc error", { peerId, error: error.message });
+      };
+
+      // Add local stream tracks BEFORE creating offer
+      // This ensures the offer includes media sections
+      if (streamRef.current && streamRef.current.getTracks().length > 0) {
+        const tracks = streamRef.current.getTracks();
+        log("🎤 Adding local tracks to peer connection", {
+          peerId,
+          trackCount: tracks.length,
+          kinds: tracks.map((t) => t.kind),
+        });
+        tracks.forEach((track) => {
+          try {
+            pc.addTrack(track, streamRef.current);
+            log("✅ Track added", {
+              peerId,
+              kind: track.kind,
+              enabled: track.enabled,
+            });
+          } catch (error) {
+            log("❌ Error adding track", { peerId, error: error.message });
+          }
+        });
+      } else {
+        log("⚠️ No stream available to add tracks", { peerId });
+      }
+
+      // Create offer if initiator
+      if (initiator) {
+        setTimeout(() => {
+          // Small delay to ensure tracks are added
+          pc.createOffer()
+            .then((offer) => {
+              log("📋 Offer created", { peerId });
+              return pc.setLocalDescription(offer);
+            })
+            .then(() => {
+              log("📤 Offer set and sending", { peerId });
+              handlePeerSignal(peerId, pc.localDescription, initiator);
+            })
+            .catch((error) => {
+              log("❌ Error creating offer", { peerId, error: error.message });
+            });
+        }, 50);
+      }
+
+      const peerData = { pc, initiator, meta };
+      peersRef.current.set(peerId, peerData);
       setPeerStreams((prev) => ({
         ...prev,
         [peerId]: { ...meta, user_id: peerId },
       }));
 
-      peer.on("signal", (data) => handlePeerSignal(peerId, data, initiator));
-      peer.on("stream", (stream) => {
-        log("stream received", { from: peerId });
-        setPeerStreams((prev) => ({
-          ...prev,
-          [peerId]: { ...prev[peerId], stream },
-        }));
-      });
-      peer.on("close", () => {
-        log("peer close", { peerId });
-        peersRef.current.delete(peerId);
-        setPeerStreams((prev) => {
-          const next = { ...prev };
-          delete next[peerId];
-          return next;
-        });
-      });
-      peer.on("error", (err) => {
-        log("peer error", err);
-        peer.destroy();
-      });
-
-      return peer;
+      return pc;
     },
-    [handlePeerSignal, localStream, log, isLive]
+    [handlePeerSignal, log]
   );
 
-  const requestMedia = useCallback(async (mode) => {
-    log("requestMedia", { mode });
-    if (!navigator?.mediaDevices?.getUserMedia) {
-      throw new Error("Media devices are not available in this browser.");
-    }
-    const constraints = {
-      audio: true,
-      video: mode === "video",
-    };
-    return navigator.mediaDevices.getUserMedia(constraints);
-  }, []);
+  const requestMedia = useCallback(
+    async (mode) => {
+      log("requestMedia", { mode });
+      if (!navigator?.mediaDevices?.getUserMedia) {
+        throw new Error("Media devices are not available in this browser.");
+      }
+      const constraints = {
+        audio: true,
+        video: mode === "video",
+      };
+      return navigator.mediaDevices.getUserMedia(constraints);
+    },
+    [log]
+  );
 
   const startLive = useCallback(
     async (mode) => {
-      log("startLive click", { mode, roomId });
+      log("🔴 [START] Go Live button clicked", { mode, roomId, inRoom });
       if (!roomId) {
+        log("❌ No roomId, cannot go live");
         toast.error("Join a land first.");
         return;
       }
       try {
+        log("📱 Calling getUserMedia with constraints", {
+          mode,
+          audio: true,
+          video: mode === "video",
+        });
         const stream = await requestMedia(mode);
-        log("media granted", {
-          tracks: stream?.getTracks()?.map((t) => t.kind),
+        log("✅ [MEDIA] getUserMedia succeeded", {
+          tracks: stream
+            ?.getTracks()
+            ?.map((t) => ({ kind: t.kind, enabled: t.enabled, id: t.id })),
+          streamId: stream?.id,
         });
-        
-        // Add stream tracks to all existing peer connections
-        peersRef.current.forEach((peer) => {
-          try {
-            stream.getTracks().forEach((track) => {
-              peer.addTrack(track, stream);
-            });
-          } catch (e) {
-            log("Failed to add track to peer", { error: e });
-          }
-        });
-        
+
+        cleanupPeers();
         setLocalStream(stream);
+        streamRef.current = stream;
+        log("✅ [STREAM] Local stream stored in ref and state", {
+          streamId: stream?.id,
+          trackCount: stream?.getTracks()?.length,
+        });
+
         setIsLive(true);
+        log("✅ [STATE] isLive set to true");
+
         setMediaType(mode === "video" ? "video" : "audio");
+        log("✅ [STATE] mediaType set", { mediaType: mode });
+
+        log("📨 [BACKEND] Sending live_start to backend", {
+          roomId,
+          mediaType: mode,
+        });
         wsService.send("live_start", {
           room_id: roomId,
           media_type: mode === "video" ? "video" : "audio",
         });
-        log("live_start sent", { roomId });
+        log("✅ [BACKEND] live_start sent successfully");
       } catch (error) {
-        log("Failed to start live session", { error });
+        log("❌ [ERROR] Failed to start live session", {
+          error: error.message,
+          stack: error.stack,
+        });
         toast.error(
           error?.message ||
             "Failed to access microphone/camera. Check permissions."
@@ -242,7 +349,7 @@ function LivePanel({ roomId, land, user }) {
         teardown();
       }
     },
-    [requestMedia, roomId, teardown, log]
+    [requestMedia, roomId, cleanupPeers, teardown, log]
   );
 
   const stopLive = useCallback(() => {
@@ -258,50 +365,153 @@ function LivePanel({ roomId, land, user }) {
       if (message.room_id !== roomId) return;
       log("live_peers received", message);
 
-      // Update known peers for UI
       const indexed = {};
       (message.peers || []).forEach((peer) => {
         indexed[peer.user_id] = peer;
       });
       setPeerStreams((prev) => ({ ...prev, ...indexed }));
 
-      // Initiate offers to all live broadcasters so we can view them (even if we're not broadcasting)
+      log(`📋 Processing ${(message.peers || []).length} peers from list`, {
+        peers: (message.peers || []).map(p => ({
+          user_id: p.user_id,
+          media_type: p.media_type,
+        })),
+        currentUserId: user?.user_id,
+        isLive,
+      });
+
+      // Create peer connections to all live users (whether we're broadcasting or just listening)
       (message.peers || []).forEach((peer) => {
-        if (peer.user_id === user?.user_id) return;
-        createPeerConnection(peer.user_id, true, peer);
+        log(`🔍 Checking peer: ${peer.user_id} vs current user: ${user?.user_id}`, {});
+        if (peer.user_id === user?.user_id) {
+          log(`  ⏭️ Skipping own user`, {});
+          return;
+        }
+        log(`  🔗 Creating peer connection for ${peer.user_id}`, {
+          initiator: !!isLive,  // Only initiate if we're live
+          mode: isLive ? "broadcaster" : "listener",
+        });
+        // Create connection regardless of whether we're live
+        // Listeners will just answer offers without sending their own stream
+        createPeerConnection(peer.user_id, !!isLive, peer);
       });
     },
-    [createPeerConnection, roomId, user?.user_id]
+    [createPeerConnection, roomId, user?.user_id, log, isLive]
   );
 
   const handleOffer = useCallback(
     (message) => {
-      if (message.room_id !== roomId) return;
-      log("offer received", message);
+      if (message.room_id !== roomId) {
+        log("⚠️ ignoring offer from different room", {
+          messageRoom: message.room_id,
+          currentRoom: roomId,
+        });
+        return;
+      }
+      log(`📥 [OFFER] Received offer from ${message.from_user_id}`, {
+        from: message.from_user_id,
+      });
       const from = message.from_user_id;
       const signal = message.payload?.signal;
-      if (!from || !signal) return;
+      if (!from || !signal) {
+        log("❌ [OFFER] Invalid offer - missing from or signal");
+        return;
+      }
 
-      let peer = peersRef.current.get(from);
-      if (!peer) {
-        peer = createPeerConnection(from, false, {
+      let pc = peersRef.current.get(from)?.pc;
+      if (!pc) {
+        log(`🆕 [PEER] Creating new peer connection for offer from ${from}`, {
+          from,
+        });
+        pc = createPeerConnection(from, false, {
           media_type: message.payload?.media_type || "video",
         });
+      } else {
+        log(`♻️ [PEER] Reusing existing peer connection for ${from}`, { from });
       }
-      peer?.signal(signal);
+
+      if (pc && signal.type === "offer") {
+        log(`🔄 [SDP] Setting remote description (offer) from ${from}`, {
+          from,
+          signalType: signal.type,
+        });
+        pc.setRemoteDescription(new RTCSessionDescription(signal))
+          .then(() => {
+            log(`✅ [SDP] Offer set as remote description from ${from}`, {
+              from,
+            });
+            log(`🔨 [ANSWER] Creating answer for ${from}`, { from });
+            return pc.createAnswer();
+          })
+          .then((answer) => {
+            log(`✅ [ANSWER] Answer created for ${from}`, {
+              from,
+              type: answer.type,
+            });
+            return pc.setLocalDescription(answer);
+          })
+          .then(() => {
+            log(
+              `✅ [ANSWER] Answer set as local description, sending to ${from}`,
+              { from }
+            );
+            handlePeerSignal(from, pc.localDescription, false);
+          })
+          .catch((error) => {
+            log(
+              `❌ [ERROR] Failed to handle offer from ${from}: ${error.message}`,
+              { from, error: error.message }
+            );
+          });
+      }
     },
-    [createPeerConnection, roomId, log]
+    [createPeerConnection, roomId, log, handlePeerSignal]
   );
 
   const handleAnswerOrIce = useCallback(
     (message) => {
       if (message.room_id !== roomId) return;
-      log("answer/ice received", message);
+      log("📨 signal received from", {
+        from: message.from_user_id,
+        type: message.payload?.signal?.type,
+      });
       const from = message.from_user_id;
       const signal = message.payload?.signal;
-      if (!from || !signal) return;
-      const peer = peersRef.current.get(from);
-      peer?.signal(signal);
+      if (!from || !signal) {
+        log("⚠️ invalid signal - missing from or signal");
+        return;
+      }
+
+      const peerData = peersRef.current.get(from);
+      const pc = peerData?.pc;
+
+      if (!pc) {
+        log("⚠️ peer not found for signal", { from });
+        return;
+      }
+
+      if (signal.type === "answer") {
+        log("🔄 setting remote description (answer)", { from });
+        pc.setRemoteDescription(new RTCSessionDescription(signal))
+          .then(() => {
+            log("✅ answer set as remote description", { from });
+          })
+          .catch((error) => {
+            log("❌ error setting answer", { from, error: error.message });
+          });
+      } else if (signal.candidate) {
+        log("🧊 adding ICE candidate", { from });
+        pc.addIceCandidate(new RTCIceCandidate(signal))
+          .then(() => {
+            log("✅ ice candidate added", { from });
+          })
+          .catch((error) => {
+            log("❌ error adding ice candidate", {
+              from,
+              error: error.message,
+            });
+          });
+      }
     },
     [roomId, log]
   );
@@ -312,9 +522,10 @@ function LivePanel({ roomId, land, user }) {
       log("peer left", message);
       const peerId = message.user_id;
       if (!peerId) return;
-      const peer = peersRef.current.get(peerId);
-      if (peer) {
-        peer.destroy();
+
+      const peerData = peersRef.current.get(peerId);
+      if (peerData?.pc) {
+        peerData.pc.close();
         peersRef.current.delete(peerId);
       }
       setPeerStreams((prev) => {
@@ -507,6 +718,7 @@ function LivePanel({ roomId, land, user }) {
           renderMediaTile(peerId, data, false)
         )}
       </div>
+
       <div className="bg-gray-950/40 border border-gray-800 rounded p-2 max-h-32 overflow-y-auto text-[11px] text-gray-300">
         <div className="flex items-center justify-between">
           <span className="font-semibold text-gray-200">Live Debug</span>
@@ -520,8 +732,7 @@ function LivePanel({ roomId, land, user }) {
         ) : (
           debugLog.map((entry, idx) => (
             <div key={idx} className="text-gray-400">
-              {new Date(entry.ts).toLocaleTimeString()} - {entry.label}{" "}
-              {entry.payload ? JSON.stringify(entry.payload) : ""}
+              {new Date(entry.ts).toLocaleTimeString()} - {entry.label}
             </div>
           ))
         )}
