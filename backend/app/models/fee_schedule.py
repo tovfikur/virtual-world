@@ -186,7 +186,7 @@ class Commission(Base):
     __tablename__ = "commissions"
     
     id = Column(Integer, primary_key=True, index=True)
-    trade_id = Column(Integer, ForeignKey("trades.id"), nullable=False)
+    trade_id = Column(UUID(as_uuid=True), ForeignKey("trades.trade_id"), nullable=False)
     account_id = Column(Integer, ForeignKey("accounts.id"), nullable=False)
     
     # Fee breakdown

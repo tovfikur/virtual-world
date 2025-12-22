@@ -10,7 +10,7 @@ from datetime import datetime, timedelta
 import enum
 import uuid
 
-from app.database import Base
+from app.db.base import Base
 
 
 class SettlementStatus(str, enum.Enum):
@@ -48,14 +48,14 @@ class TradeConfirmation(Base):
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     
     # Trade reference
-    trade_id = Column(Integer, ForeignKey("trades.id"), nullable=False, unique=True)
+    trade_id = Column(UUID(as_uuid=True), ForeignKey("trades.trade_id"), nullable=False, unique=True)
     
     # Counterparties
     buyer_account_id = Column(Integer, ForeignKey("accounts.id"), nullable=False)
     seller_account_id = Column(Integer, ForeignKey("accounts.id"), nullable=False)
     
     # Trade details
-    instrument_id = Column(UUID(as_uuid=True), ForeignKey("instruments.id"), nullable=False)
+    instrument_id = Column(UUID(as_uuid=True), ForeignKey("instruments.instrument_id"), nullable=False)
     quantity = Column(Float, nullable=False)
     price = Column(Float, nullable=False)
     gross_amount = Column(Float, nullable=False)  # quantity * price
@@ -135,7 +135,7 @@ class CustodyBalance(Base):
     
     # Account and instrument
     account_id = Column(Integer, ForeignKey("accounts.id"), nullable=False)
-    instrument_id = Column(UUID(as_uuid=True), ForeignKey("instruments.id"), nullable=False)
+    instrument_id = Column(UUID(as_uuid=True), ForeignKey("instruments.instrument_id"), nullable=False)
     custody_type = Column(String(50), default=CustodyType.CASH)
     
     # Balance tracking
@@ -186,7 +186,7 @@ class SettlementRecord(Base):
     seller_account_id = Column(Integer, ForeignKey("accounts.id"), nullable=False)
     
     # Settlement details
-    instrument_id = Column(UUID(as_uuid=True), ForeignKey("instruments.id"), nullable=False)
+    instrument_id = Column(UUID(as_uuid=True), ForeignKey("instruments.instrument_id"), nullable=False)
     quantity = Column(Float, nullable=False)
     settlement_price = Column(Float, nullable=False)
     settlement_amount = Column(Float, nullable=False)
@@ -240,7 +240,7 @@ class NetSettlementBatch(Base):
     
     # Scope
     account_id = Column(Integer, ForeignKey("accounts.id"))  # Optional: specific account batch
-    instrument_id = Column(UUID(as_uuid=True), ForeignKey("instruments.id"))  # Optional: specific instrument batch
+    instrument_id = Column(UUID(as_uuid=True), ForeignKey("instruments.instrument_id"))  # Optional: specific instrument batch
     
     # Trade aggregation
     trade_count = Column(Integer, default=0)

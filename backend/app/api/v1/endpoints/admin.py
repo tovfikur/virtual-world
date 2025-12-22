@@ -2443,3 +2443,288 @@ async def get_security_logs(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to fetch security logs"
         )
+
+
+# ============================================================================
+# Trading Admin Endpoints (Instrument & Market Controls)
+# ============================================================================
+
+@router.get("/trading/instruments/{instrument_id}/control", tags=["trading-admin"], summary="Get instrument control settings")
+async def get_instrument_control(
+    instrument_id: str,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """Get trading control settings for an instrument."""
+    from app.services.admin_service import get_admin_service
+    
+    if not current_user.is_admin:
+        raise HTTPException(status_code=403, detail="Admin access required")
+    
+    admin_service = get_admin_service()
+    try:
+        from uuid import UUID
+        control = await admin_service.get_instrument_control(UUID(instrument_id), db)
+        
+        if not control:
+            raise HTTPException(status_code=404, detail="Instrument control not found")
+        
+        return {
+            "instrument_id": str(control.instrument_id),
+            "is_trading_enabled": control.is_trading_enabled,
+            "is_halted": control.is_halted,
+            "halt_reason": control.halt_reason,
+            "max_order_size": float(control.max_order_size),
+            "max_daily_volume": float(control.max_daily_volume),
+            "max_leverage": float(control.max_leverage),
+            "circuit_breaker_enabled": control.circuit_breaker_enabled,
+            "circuit_breaker_threshold": float(control.circuit_breaker_threshold),
+            "updated_at": control.updated_at.isoformat()
+        }
+    except Exception as e:
+        logger.error(f"Error getting instrument control: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/trading/instruments/{instrument_id}/halt", tags=["trading-admin"], summary="Halt trading for instrument")
+async def halt_instrument(
+    instrument_id: str,
+    duration_minutes: int = Query(..., ge=1, le=1440),
+    reason: str = Query(..., min_length=10),
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """Halt trading for an instrument with specified duration."""
+    from app.services.admin_service import get_admin_service
+    from uuid import UUID
+    
+    if not current_user.is_admin:
+        raise HTTPException(status_code=403, detail="Admin access required")
+    
+    admin_service = get_admin_service()
+    try:
+        control = await admin_service.halt_instrument(
+            UUID(instrument_id),
+            duration_minutes,
+            reason,
+            current_user.id,
+            db
+        )
+        
+        # Create audit log
+        create_audit_log(
+            actor_id=str(current_user.id),
+            event_type="halt_instrument",
+            resource_type="instrument",
+            resource_id=instrument_id,
+            action=f"Halted for {duration_minutes} minutes",
+            details={"reason": reason}
+        )
+        
+        return {
+            "status": "halted",
+            "instrument_id": str(control.instrument_id),
+            "halted_until": control.halted_until.isoformat() if control.halted_until else None,
+            "reason": control.halt_reason
+        }
+    except Exception as e:
+        logger.error(f"Error halting instrument: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/trading/instruments/{instrument_id}/resume", tags=["trading-admin"], summary="Resume trading for instrument")
+async def resume_instrument(
+    instrument_id: str,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """Resume trading for a halted instrument."""
+    from app.services.admin_service import get_admin_service
+    from uuid import UUID
+    
+    if not current_user.is_admin:
+        raise HTTPException(status_code=403, detail="Admin access required")
+    
+    admin_service = get_admin_service()
+    try:
+        control = await admin_service.resume_instrument(UUID(instrument_id), current_user.id, db)
+        
+        return {
+            "status": "resumed",
+            "instrument_id": str(control.instrument_id),
+            "is_trading_enabled": control.is_trading_enabled
+        }
+    except Exception as e:
+        logger.error(f"Error resuming instrument: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/trading/market/status", tags=["trading-admin"], summary="Get market status")
+async def get_market_status(
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """Get global market control status."""
+    from app.services.admin_service import get_admin_service
+    
+    if not current_user.is_admin:
+        raise HTTPException(status_code=403, detail="Admin access required")
+    
+    admin_service = get_admin_service()
+    try:
+        control = await admin_service.get_market_control(db)
+        
+        return {
+            "market_open": control.market_open,
+            "market_halted": control.market_halted,
+            "halt_reason": control.halt_reason,
+            "order_rate_limit": control.order_rate_limit,
+            "circuit_breaker_enabled": control.circuit_breaker_enabled,
+            "updated_at": control.updated_at.isoformat()
+        }
+    except Exception as e:
+        logger.error(f"Error getting market status: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/trading/market/halt", tags=["trading-admin"], summary="Halt entire market")
+async def halt_market(
+    duration_minutes: int = Query(..., ge=1, le=1440),
+    reason: str = Query(..., min_length=10),
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """Halt entire market trading."""
+    from app.services.admin_service import get_admin_service
+    
+    if not current_user.is_admin:
+        raise HTTPException(status_code=403, detail="Admin access required")
+    
+    admin_service = get_admin_service()
+    try:
+        control = await admin_service.halt_market(duration_minutes, reason, current_user.id, db)
+        
+        return {
+            "status": "halted",
+            "market_halted": control.market_halted,
+            "reason": control.halt_reason
+        }
+    except Exception as e:
+        logger.error(f"Error halting market: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/trading/market/resume", tags=["trading-admin"], summary="Resume market trading")
+async def resume_market(
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """Resume market trading."""
+    from app.services.admin_service import get_admin_service
+    
+    if not current_user.is_admin:
+        raise HTTPException(status_code=403, detail="Admin access required")
+    
+    admin_service = get_admin_service()
+    try:
+        control = await admin_service.resume_market(current_user.id, db)
+        
+        return {
+            "status": "resumed",
+            "market_open": control.market_open,
+            "market_halted": control.market_halted
+        }
+    except Exception as e:
+        logger.error(f"Error resuming market: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/trading/risk/config", tags=["trading-admin"], summary="Get risk configuration")
+async def get_risk_config(
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """Get global risk configuration parameters."""
+    from app.services.admin_service import get_admin_service
+    
+    if not current_user.is_admin:
+        raise HTTPException(status_code=403, detail="Admin access required")
+    
+    admin_service = get_admin_service()
+    try:
+        config = await admin_service.get_risk_config(db)
+        
+        return {
+            "maintenance_margin": float(config.maintenance_margin),
+            "initial_margin": float(config.initial_margin),
+            "liquidation_threshold": float(config.liquidation_threshold),
+            "max_position_size": float(config.max_position_size),
+            "max_account_leverage": float(config.max_account_leverage)
+        }
+    except Exception as e:
+        logger.error(f"Error getting risk config: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/trading/fees/config", tags=["trading-admin"], summary="Get fee configuration")
+async def get_fee_config(
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """Get current fee configuration."""
+    from app.services.admin_service import get_admin_service
+    
+    if not current_user.is_admin:
+        raise HTTPException(status_code=403, detail="Admin access required")
+    
+    admin_service = get_admin_service()
+    try:
+        config = await admin_service.get_fee_config(db)
+        
+        return {
+            "maker_fee": float(config.maker_fee),
+            "taker_fee": float(config.taker_fee),
+            "funding_fee": float(config.funding_fee),
+            "swap_fee": float(config.swap_fee),
+            "effective_from": config.effective_from.isoformat()
+        }
+    except Exception as e:
+        logger.error(f"Error getting fee config: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/trading/surveillance/alerts", tags=["trading-admin"], summary="Get surveillance alerts")
+async def get_surveillance_alerts(
+    account_id: Optional[int] = Query(None),
+    severity: Optional[str] = Query(None),
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """Get active surveillance alerts."""
+    from app.services.surveillance_service import get_surveillance_service
+    
+    if not current_user.is_admin:
+        raise HTTPException(status_code=403, detail="Admin access required")
+    
+    surveillance = get_surveillance_service()
+    try:
+        alerts = await surveillance.get_active_alerts(account_id, severity, db)
+        
+        return {
+            "count": len(alerts),
+            "alerts": [
+                {
+                    "alert_id": a.id,
+                    "anomaly_type": a.anomaly_type,
+                    "severity": a.severity,
+                    "account_id": a.account_id,
+                    "instrument_id": str(a.instrument_id) if a.instrument_id else None,
+                    "description": a.description,
+                    "detected_at": a.detected_at.isoformat()
+                }
+                for a in alerts
+            ]
+        }
+    except Exception as e:
+        logger.error(f"Error getting surveillance alerts: {e}")
+        raise HTTPException(status_code=500, detail=str(e))

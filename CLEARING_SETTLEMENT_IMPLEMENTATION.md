@@ -3,6 +3,7 @@
 ## Overview
 
 Complete trade clearing and settlement system with:
+
 - **Trade Confirmation**: Bilateral confirmation after order match
 - **Netting Pipeline**: Multi-trade consolidation for net settlement
 - **T+N Settlement**: Configurable settlement dates (T+0, T+1, T+2, T+N)
@@ -38,6 +39,7 @@ Broker Payout
 ### 1. Settlement Models (`models/settlement.py`)
 
 #### TradeConfirmation
+
 Created immediately after order match. Tracks both parties' confirmation status.
 
 ```python
@@ -59,6 +61,7 @@ TradeConfirmation(
 ```
 
 **Status Flow**:
+
 ```
 PENDING → CONFIRMED → NETTED → SETTLED
                                    ↓
@@ -66,6 +69,7 @@ PENDING → CONFIRMED → NETTED → SETTLED
 ```
 
 #### SettlementQueue
+
 Queues trades for settlement processing.
 
 ```python
@@ -80,6 +84,7 @@ SettlementQueue(
 ```
 
 #### CustodyBalance
+
 Tracks settled and pending asset balances.
 
 ```python
@@ -98,6 +103,7 @@ CustodyBalance(
 ```
 
 #### SettlementRecord
+
 Permanent settlement transaction record.
 
 ```python
@@ -123,6 +129,7 @@ SettlementRecord(
 ```
 
 #### NetSettlementBatch
+
 Groups multiple trades for efficient net settlement.
 
 ```python
@@ -142,6 +149,7 @@ NetSettlementBatch(
 ```
 
 #### SettlementException
+
 Failed settlement tracking for manual intervention.
 
 ```python
@@ -159,6 +167,7 @@ SettlementException(
 ### 2. Settlement Service (`services/settlement_service.py`)
 
 #### create_trade_confirmation
+
 Creates confirmation record after order match.
 
 ```python
@@ -172,6 +181,7 @@ confirmation = await service.create_trade_confirmation(
 **Result**: TradeConfirmation with status PENDING
 
 #### confirm_trade
+
 One party confirms settlement.
 
 ```python
@@ -184,11 +194,13 @@ confirmation = await service.confirm_trade(
 ```
 
 **Logic**:
+
 - Validate account matches buyer or seller
 - Mark as confirmed
 - If both confirmed, status → CONFIRMED
 
 #### net_trades
+
 Groups trades for net settlement.
 
 ```python
@@ -201,12 +213,14 @@ batch = await service.net_trades(
 ```
 
 **Netting Algorithm**:
+
 - Find all CONFIRMED trades for settlement date
 - Aggregate quantities and amounts
 - Calculate net position
 - Create NetSettlementBatch
 
 #### settle_trade
+
 Settle individual trade and update balances.
 
 ```python
@@ -217,6 +231,7 @@ settlement = await service.settle_trade(
 ```
 
 **Operations**:
+
 1. Validate both parties confirmed
 2. Deduct buyer balance
 3. Credit seller balance
@@ -225,6 +240,7 @@ settlement = await service.settle_trade(
 6. Mark as SETTLED
 
 #### settle_batch
+
 Settle all trades in batch.
 
 ```python
@@ -244,6 +260,7 @@ result = await service.settle_batch(
 ```
 
 #### reconcile_custody
+
 Validate custody balances.
 
 ```python
@@ -255,11 +272,13 @@ report = await service.reconcile_custody(
 ```
 
 **Checks**:
+
 - Expected vs actual balances
 - Trade count matching
 - Custody account validation
 
 #### process_broker_payout
+
 Process payment to broker.
 
 ```python
@@ -276,6 +295,7 @@ success = await service.process_broker_payout(
 Get trade confirmation details.
 
 **Response**:
+
 ```json
 {
   "id": "uuid",
@@ -303,6 +323,7 @@ Get trade confirmation details.
 Confirm trade from one party.
 
 **Request**:
+
 ```json
 {
   "confirmation_id": "uuid",
@@ -311,6 +332,7 @@ Confirm trade from one party.
 ```
 
 **Response**:
+
 ```json
 {
   "status": "success",
@@ -326,6 +348,7 @@ Confirm trade from one party.
 Portfolio settlement summary.
 
 **Response**:
+
 ```json
 {
   "account_id": 1,
@@ -343,11 +366,13 @@ Portfolio settlement summary.
 Get settlement records.
 
 **Query Parameters**:
+
 - `status`: Filter by status (settled, failed)
 - `limit`: Max results (default 50, max 500)
 - `offset`: Pagination offset
 
 **Response**:
+
 ```json
 [
   {
@@ -373,9 +398,11 @@ Get settlement records.
 Get custody balances.
 
 **Query Parameters**:
+
 - `include_zero`: Include zero balances (default false)
 
 **Response**:
+
 ```json
 [
   {
@@ -404,6 +431,7 @@ Get specific custody balance.
 Request reconciliation.
 
 **Response**:
+
 ```json
 {
   "status": "success",
@@ -422,6 +450,7 @@ Request reconciliation.
 Get all pending settlements.
 
 **Response**:
+
 ```json
 {
   "count": 5,
@@ -444,9 +473,11 @@ Get all pending settlements.
 Settlement statistics.
 
 **Query Parameters**:
+
 - `days`: Period (default 30, max 365)
 
 **Response**:
+
 ```json
 {
   "period_days": 30,
@@ -564,12 +595,15 @@ if success:
 ## Settlement Types
 
 ### Cash Settlement
+
 For FX and CFDs. Cash transferred on settlement date.
 
 ### Delivery vs Payment (DVP)
+
 For equities and bonds. Securities delivered when payment received.
 
 ### Netting
+
 Multiple trades combined for net settlement. Reduces settlement risk.
 
 ## T+N Settlement
@@ -582,6 +616,7 @@ Configurable settlement dates:
 - **T+3+**: Custom periods for specific instruments
 
 **Calculation**:
+
 ```
 Settlement Date = Trade Date + N Business Days (excluding weekends/holidays)
 ```
@@ -589,14 +624,18 @@ Settlement Date = Trade Date + N Business Days (excluding weekends/holidays)
 ## Error Handling
 
 ### Insufficient Funds
+
 When buyer balance too low for settlement:
+
 1. Create SettlementException
 2. Mark settlement FAILED
 3. Notify parties
 4. Allow retry or settlement reversal
 
 ### Custody Mismatch
+
 When actual custody differs from internal records:
+
 1. Create ReconciliationReport
 2. Flag for manual review
 3. Generate discrepancy report
@@ -605,6 +644,7 @@ When actual custody differs from internal records:
 ## Database Schema
 
 ### settlement_confirmations
+
 ```sql
 CREATE TABLE trade_confirmations (
     id UUID PRIMARY KEY,
@@ -631,6 +671,7 @@ CREATE TABLE trade_confirmations (
 ```
 
 ### settlement_records
+
 ```sql
 CREATE TABLE settlement_records (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -656,6 +697,7 @@ CREATE TABLE settlement_records (
 ```
 
 ### custody_balances
+
 ```sql
 CREATE TABLE custody_balances (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -670,7 +712,7 @@ CREATE TABLE custody_balances (
     custodian VARCHAR(255),
     is_reconciled BOOLEAN DEFAULT FALSE,
     created_at TIMESTAMP DEFAULT NOW(),
-    
+
     UNIQUE(account_id, instrument_id)
 );
 ```
@@ -684,6 +726,7 @@ pytest tests/test_settlement_service.py -v
 ```
 
 Test coverage:
+
 - ✅ Create trade confirmation
 - ✅ Buyer confirmation
 - ✅ Seller confirmation
@@ -703,7 +746,9 @@ Test coverage:
 ## Performance Considerations
 
 ### Batch Processing
+
 Settle in batches rather than individually:
+
 ```python
 # Efficient: One batch transaction
 batch = await service.net_trades(settlement_date=date, db=db)
@@ -715,38 +760,48 @@ for confirmation in confirmations:
 ```
 
 ### Database Indexes
+
 Critical indexes:
+
 - `settlement_queue(status, settlement_date)`
 - `trade_confirmations(settlement_status, settlement_date)`
 - `custody_balances(account_id, instrument_id)`
 - `settlement_records(actual_settlement_date)`
 
 ### Caching
+
 Cache custody balances (TTL: 5-10 minutes)
 
 ## Future Enhancements
 
 ### Real-time Settlement
+
 Straight-through processing (STP) for immediate settlement
 
 ### DVP Automation
+
 Atomic securities + cash settlement
 
 ### FX Netting
+
 Multi-currency netting across trading pairs
 
 ### Regulatory Reporting
+
 EMIR, SFTR, MiFID II reporting
 
 ### Settlement Holds
+
 Automatic settlement on hold for compliance checks
 
 ### Auto-reconciliation
+
 Daily automated reconciliation with custodians
 
 ## Monitoring
 
 Monitor key metrics:
+
 - Settlement lag (time from T to actual settlement)
 - Exception rate (failed settlements %)
 - Netting efficiency (net vs gross volume ratio)
@@ -756,6 +811,7 @@ Monitor key metrics:
 ## Conclusion
 
 Complete clearing and settlement system with:
+
 - ✅ Bilateral trade confirmation
 - ✅ Flexible T+N settlement
 - ✅ Multi-trade netting

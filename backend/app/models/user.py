@@ -124,6 +124,12 @@ class User(BaseModel):
     )
 
     # Relationships
+    account = relationship(
+        "Account",
+        back_populates="user",
+        uselist=False,
+        cascade="all, delete-orphan"
+    )
     lands = relationship(
         "Land",
         back_populates="owner",

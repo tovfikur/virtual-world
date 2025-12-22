@@ -27,6 +27,11 @@ from app.models.settlement import (
     NetSettlementBatch, SettlementException, ReconciliationReport,
     SettlementStatus, SettlementType, CustodyType
 )
+from app.models.admin import (
+    AdminUser, InstrumentControl, MarketControl, RiskConfigurable, FeeConfig,
+    BrokerAccount, SurveillanceAlert, ComplianceReport, AuditAction,
+    RegulatoryExemption, AdminRole, BrokerType, BookType, AnomalyType
+)
 from app.models.audit_log import AuditLog, AuditEventCategory
 from app.models.admin_config import AdminConfig
 
@@ -101,4 +106,19 @@ __all__ = [
     "SettlementStatus",
     "SettlementType",
     "CustodyType",
+    # Admin, Broker & Compliance
+    "AdminUser",
+    "InstrumentControl",
+    "MarketControl",
+    "RiskConfigurable",
+    "FeeConfig",
+    "BrokerAccount",
+    "SurveillanceAlert",
+    "ComplianceReport",
+    "AuditAction",
+    "RegulatoryExemption",
+    "AdminRole",
+    "BrokerType",
+    "BookType",
+    "AnomalyType",
 ]
