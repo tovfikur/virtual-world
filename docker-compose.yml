@@ -1,4 +1,4 @@
-version: '3.8'
+version: "3.8"
 
 services:
   # PostgreSQL Database
@@ -64,6 +64,23 @@ services:
     networks:
       - virtualworld-network
 
+  # Livekit Server (Audio/Video Streaming)
+  livekit:
+    image: livekit/livekit-server:latest
+    container_name: virtualworld-livekit
+    restart: unless-stopped
+    environment:
+      - LIVEKIT_API_KEY=devkey
+      - LIVEKIT_API_SECRET=secret
+      - LIVEKIT_BIND_ADDRESSES=0.0.0.0
+      - LIVEKIT_BIND_PORT=7880
+    ports:
+      - "7880:7880"
+      - "7881:7881"
+      - "50000-50100:50000-50100/udp"
+    networks:
+      - virtualworld-network
+
   # Frontend
   frontend:
     build:
@@ -75,10 +92,12 @@ services:
       - "80:80"
     depends_on:
       - backend
+      - livekit
     networks:
       - virtualworld-network
     environment:
       - VITE_API_URL=http://localhost:8000/api/v1
+      - VITE_LIVEKIT_URL=ws://localhost:7880
 
 volumes:
   postgres_data:

@@ -23,6 +23,7 @@ from app.api.v1.endpoints import (
     market,
     marketdata,
     marketdata_ws,
+    livekit,
 )
 
 # Create main API router
@@ -48,3 +49,6 @@ api_router.include_router(marketdata.router)
 api_router.include_router(websocket.router)
 api_router.include_router(webrtc.router)
 api_router.include_router(marketdata_ws.router)
+
+# Include Livekit router
+api_router.include_router(livekit.router)

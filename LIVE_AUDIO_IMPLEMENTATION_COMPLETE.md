@@ -1,7 +1,9 @@
 # ✅ Live Audio Broadcasting System - Implementation Complete
 
 ## Problem Statement
+
 Users needed simple zone-based audio/video broadcasting:
+
 - **One user broadcasts** their audio/video
 - **Other users in the same land square/zone can hear/see them**
 - **No complex peer mesh - just simple one-way or bidirectional streams**
@@ -10,6 +12,7 @@ Users needed simple zone-based audio/video broadcasting:
 ## Solution Implemented
 
 ### Architecture
+
 ```
 Broadcaster (User A) ─────┐
                           ├──→ RTCPeerConnection ─→ Listener (User B) ✅ Hears
@@ -21,6 +24,7 @@ Different room (land square) ─ No connection ✅
 ```
 
 ### Key Features
+
 1. **Location-based broadcasting** - Works by `room_id` (same land coordinates)
 2. **Broadcaster/Listener modes** - Users can broadcast or just listen
 3. **Automatic peer discovery** - Backend tells users who's broadcasting
@@ -31,6 +35,7 @@ Different room (land square) ─ No connection ✅
 ## Code Changes
 
 ### 1. Backend Fix: Exclude Self from Peer List
+
 **File**: `backend/app/api/v1/endpoints/websocket.py`
 
 **Change**: Modified `handle_live_status` to exclude the requesting user
@@ -50,9 +55,11 @@ async def handle_live_status(websocket: WebSocket, user_id: str, message: dict):
 ---
 
 ### 2. Frontend: Broadcaster/Listener Modes
+
 **File**: `frontend/src/components/LivePanel.jsx`
 
 #### Change 2a: Track Addition Before Offer
+
 ```javascript
 // Lines 165-197: Add tracks BEFORE creating offer
 if (streamRef.current && streamRef.current.getTracks().length > 0) {
@@ -74,6 +81,7 @@ if (initiator) {
 **Why**: Offers must include media sections - tracks must be added BEFORE creating the offer.
 
 #### Change 2b: Support Broadcaster and Listener Modes
+
 ```javascript
 // Lines 370-401: handlePeerList updated
 
@@ -127,6 +135,7 @@ if (initiator) {
 ## Zone System (Already Built)
 
 The zone system works via `room_id`:
+
 - **land_265_86** = Land at coordinates (265, 86)
 - Users only see live status for their `room_id`
 - Different coordinates = different zone = can't hear each other
@@ -146,11 +155,13 @@ live_rooms = {
 ## Testing Checklist
 
 ### ✅ Single User (Broadcaster)
+
 - [ ] User goes live → No peers to connect to → Waits
 - [ ] Backend returns: `live_peers: []`
 - [ ] No peer connections created ✅
 
 ### ✅ Two Users Same Zone (Broadcaster + Listener)
+
 - [ ] User A goes live
 - [ ] User B joins same room
 - [ ] User B requests live_status
@@ -161,6 +172,7 @@ live_rooms = {
 - [ ] ✅ User B hears User A
 
 ### ✅ Two Users Different Zones
+
 - [ ] User A in land_265_86 goes live
 - [ ] User B in land_270_70
 - [ ] User B requests live_status
@@ -169,6 +181,7 @@ live_rooms = {
 - [ ] ✅ Users can't hear each other ✅
 
 ### ✅ Bidirectional Audio
+
 - [ ] User A broadcasting, User B listening
 - [ ] User B clicks "Go Live"
 - [ ] User A gets updated peer list with B
@@ -182,11 +195,13 @@ live_rooms = {
 ## Configuration
 
 ### Environment: `frontend/.env`
+
 ```
 VITE_SILENCE_LOGS=false  # ✅ Logs enabled for debugging
 ```
 
 ### Backend Settings: `backend/app/api/v1/endpoints/websocket.py`
+
 ```python
 live_rooms = {}  # Global dict tracking live users per room
 # Structure: {room_id: {user_id: {media_type, username}, ...}, ...}
@@ -229,7 +244,7 @@ All operations have clear logging:
 ## Performance Considerations
 
 1. **Scalability**: Each user has 1-N peer connections (N = other live users in zone)
-2. **Bandwidth**: 
+2. **Bandwidth**:
    - Audio: ~128 kbps per connection
    - Video: ~500-2000 kbps per connection
 3. **Latency**: RTCPeerConnection provides optimized P2P routing (~50-200ms)
@@ -257,12 +272,14 @@ All operations have clear logging:
 ## Summary
 
 ✅ **What was fixed**:
+
 1. Backend excludes self from peer list (was causing self-connections)
 2. Frontend adds tracks before creating offer (was sending empty SDP)
 3. Frontend supports broadcaster/listener modes (was only broadcaster)
 4. Zone-based filtering already works (room_id based)
 
 ✅ **How it works**:
+
 - Broadcasters initiate peer connections and send their stream
 - Listeners just answer offers and receive streams
 - Each zone (land square) is isolated - no cross-zone audio

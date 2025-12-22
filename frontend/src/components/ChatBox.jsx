@@ -11,7 +11,7 @@ import { wsService } from '../services/websocket';
 import { landsAPI, chatAPI, wsAPI, usersAPI } from '../services/api';
 import useAuthStore from '../stores/authStore';
 import toast from 'react-hot-toast';
-import LivePanel from './LivePanel';
+import LiveRoom from './LiveRoom';
 
 function ChatBox({ onClose, land, mode = 'proximity' }) {
   const { user } = useAuthStore();
@@ -740,7 +740,7 @@ function ChatBox({ onClose, land, mode = 'proximity' }) {
 
       {currentRoom && land && chatMode !== 'restricted' && (
         <div className="px-3 md:px-4 py-2 border-b border-gray-700 bg-gray-900/30">
-          <LivePanel roomId={currentRoom} land={land} user={user} />
+          <LiveRoom roomId={currentRoom} land={land} user={user} />
         </div>
       )}
 

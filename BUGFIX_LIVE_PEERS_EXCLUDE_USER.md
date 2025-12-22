@@ -1,12 +1,15 @@
 # 🔧 CRITICAL BUG FIX: Live Peers Not Including Other Users
 
 ## Problem
+
 Audio was not being transmitted between users even though the local stream was being kept alive. The root cause was identified through detailed logging: **The frontend was receiving its own user ID in the peer list and filtering it out**, preventing peer connections from being created.
 
 ## Root Cause Analysis
+
 The backend's `handle_live_status` function was returning ALL live users in a room including the requesting user, instead of returning OTHER live users.
 
 ### Example Flow (BROKEN):
+
 1. User A goes live in room "land_265_86"
 2. User B joins the room
 3. User B's frontend requests `live_status`
@@ -23,6 +26,7 @@ The backend's `handle_live_status` function was returning ALL live users in a ro
 ### File: `backend/app/api/v1/endpoints/websocket.py`
 
 **Change 1 - Line 162**: Pass user_id to handle_live_status
+
 ```python
 # BEFORE:
 await handle_live_status(websocket, message)
@@ -32,6 +36,7 @@ await handle_live_status(websocket, user_id, message)
 ```
 
 **Change 2 - Lines 643-665**: Update function signature and use exclude_user parameter
+
 ```python
 # BEFORE:
 async def handle_live_status(websocket: WebSocket, message: dict):
@@ -65,6 +70,7 @@ def _get_live_peers(room_id: str, exclude_user: Optional[str] = None) -> list:
 ```
 
 ## Corrected Flow (FIXED):
+
 1. User A goes live in room "land_265_86"
 2. User B joins the room
 3. User B's frontend requests `live_status`
@@ -77,12 +83,15 @@ def _get_live_peers(room_id: str, exclude_user: Optional[str] = None) -> list:
 10. **Audio transmitted successfully** ✅
 
 ## Status
+
 - ✅ Backend fix deployed
 - ✅ Docker image rebuilt
 - ✅ Fix verified in logs: `[live] live_status room=land_283_69 user=eda5e993-e52b-47c9-ac3e-ea153f698655`
 
 ## Next Steps for Testing
+
 To fully verify, you need TWO simultaneous users:
+
 1. User 1 goes live
 2. User 2 joins the same room
 3. User 2 goes live

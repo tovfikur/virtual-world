@@ -1,7 +1,9 @@
 # 🎙️ Live Audio Broadcasting - Simplified Zone-Based System
 
 ## Overview
+
 Implemented a simplified live audio/video broadcasting system where:
+
 - **One user broadcasts** their audio/video to their land/zone
 - **Other users in the same room/zone can hear/see them**
 - **Location-based** (same land square only)
@@ -10,11 +12,13 @@ Implemented a simplified live audio/video broadcasting system where:
 ## Fixes Applied
 
 ### 1. Backend: Exclude Self from Peer List
+
 **File**: `backend/app/api/v1/endpoints/websocket.py`
 
 **Problem**: Backend was returning the requesting user in the peer list, causing frontend to skip peer creation.
 
 **Fix**:
+
 ```python
 # Line 162: Pass user_id to handle_live_status
 await handle_live_status(websocket, user_id, message)
@@ -26,11 +30,13 @@ async def handle_live_status(websocket: WebSocket, user_id: str, message: dict):
 ```
 
 ### 2. Frontend: Ensure Tracks Added Before Offer
+
 **File**: `frontend/src/components/LivePanel.jsx`
 
 **Problem**: Tracks were being added after creating the peer connection, but the offer needs tracks to include audio/video sections.
 
 **Fixes**:
+
 - ✅ Move track addition BEFORE offer creation (lines 171-197)
 - ✅ Check that stream has tracks before adding them
 - ✅ Add small delay (50ms) before creating offer to ensure tracks propagate
@@ -57,13 +63,16 @@ if (initiator) {
 ```
 
 ### 3. Backend: Zone-Based Broadcasting
+
 **Status**: Already implemented via `live_rooms` per `room_id`
+
 - Users in different rooms don't see each other's broadcasts
 - `_get_live_peers(room_id)` returns only peers in the SAME room/zone
 
 ## How It Works Now
 
 ### Broadcast Flow:
+
 ```
 User A (land_265_86) goes live
   ↓
@@ -83,11 +92,13 @@ User B's frontend gets audio stream from User A
 ```
 
 ### Zone Rules:
+
 - Only users in the **same room_id** (land square) can establish peer connections
 - Different zones = no audio connection
 - Scales naturally with game zones/regions
 
 ## Testing Checklist
+
 - [ ] User 1 goes live in land_265_86
 - [ ] User 2 joins same land
 - [ ] User 2 goes live
@@ -98,18 +109,21 @@ User B's frontend gets audio stream from User A
 - [ ] Users rejoin → reconnect automatically
 
 ## Technical Stack
+
 - **Frontend**: React 18 + RTCPeerConnection (native WebRTC)
 - **Backend**: FastAPI + WebSocket signaling
 - **Zone System**: Based on `room_id` (land coordinate-based)
 - **Signaling**: WebSocket-based SDP offer/answer/ICE candidate relay
 
 ## Key Improvements Made This Session
+
 1. ✅ Fixed backend excluding self from peer list
 2. ✅ Ensured tracks added before offer creation
 3. ✅ Added comprehensive logging for debugging
 4. ✅ Simplified to room-based broadcasting (zones work automatically)
 
 ## Next Steps if Issues Persist
+
 1. Check browser console for WebRTC connection errors
 2. Verify ICE candidates are exchanged (look for "Sending ICE candidate" logs)
 3. Confirm `ontrack` event fires on listening peer

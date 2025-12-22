@@ -79,7 +79,11 @@ function LivePanel({ roomId, land, user }) {
     return () => {
       // Don't teardown if we're actively streaming or trying to stream
       if (isLive || mediaType) {
-        log("🛡️ [UNMOUNT] isLive/mediaType set, skipping teardown", { roomId, isLive, mediaType });
+        log("🛡️ [UNMOUNT] isLive/mediaType set, skipping teardown", {
+          roomId,
+          isLive,
+          mediaType,
+        });
         return;
       }
       log("💥 [UNMOUNT] Calling teardown", { roomId, isLive, mediaType });
@@ -90,14 +94,26 @@ function LivePanel({ roomId, land, user }) {
   useEffect(() => {
     // Don't teardown if we're actively trying to be live
     if (isLive || mediaType) {
-      log("🛡️ [EFFECT] isLive or mediaType set, skipping teardown", { roomId, isLive, mediaType });
+      log("🛡️ [EFFECT] isLive or mediaType set, skipping teardown", {
+        roomId,
+        isLive,
+        mediaType,
+      });
       return;
     }
-    
-    log("🔍 [EFFECT] Checking inRoom state", { roomId, inRoom, isLive, mediaType });
+
+    log("🔍 [EFFECT] Checking inRoom state", {
+      roomId,
+      inRoom,
+      isLive,
+      mediaType,
+    });
     if (!roomId || !inRoom) {
       // Only teardown if we're NOT in a room AND NOT trying to be live
-      log("💥 [EFFECT] Calling teardown because inRoom=false", { roomId, inRoom });
+      log("💥 [EFFECT] Calling teardown because inRoom=false", {
+        roomId,
+        inRoom,
+      });
       teardown();
       setInRoom(false);
       return;
@@ -372,7 +388,7 @@ function LivePanel({ roomId, land, user }) {
       setPeerStreams((prev) => ({ ...prev, ...indexed }));
 
       log(`📋 Processing ${(message.peers || []).length} peers from list`, {
-        peers: (message.peers || []).map(p => ({
+        peers: (message.peers || []).map((p) => ({
           user_id: p.user_id,
           media_type: p.media_type,
         })),
@@ -382,13 +398,16 @@ function LivePanel({ roomId, land, user }) {
 
       // Create peer connections to all live users (whether we're broadcasting or just listening)
       (message.peers || []).forEach((peer) => {
-        log(`🔍 Checking peer: ${peer.user_id} vs current user: ${user?.user_id}`, {});
+        log(
+          `🔍 Checking peer: ${peer.user_id} vs current user: ${user?.user_id}`,
+          {}
+        );
         if (peer.user_id === user?.user_id) {
           log(`  ⏭️ Skipping own user`, {});
           return;
         }
         log(`  🔗 Creating peer connection for ${peer.user_id}`, {
-          initiator: !!isLive,  // Only initiate if we're live
+          initiator: !!isLive, // Only initiate if we're live
           mode: isLive ? "broadcaster" : "listener",
         });
         // Create connection regardless of whether we're live

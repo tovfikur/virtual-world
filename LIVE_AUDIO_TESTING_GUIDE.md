@@ -3,11 +3,13 @@
 ## What Was Fixed
 
 Your audio wasn't working because:
+
 1. ✅ **Backend was returning the user's own ID in peer list** → User skipped connecting to themselves
 2. ✅ **Frontend wasn't adding audio tracks before creating offers** → Empty SDP = no audio
 3. ✅ **Only broadcasters could receive streams, not listeners** → Added bidirectional support
 
 Now it works like a game:
+
 - **One user broadcasts** their voice
 - **Others in the same land square hear them**
 - **Location-based (same zone only)**
@@ -17,6 +19,7 @@ Now it works like a game:
 ## How to Test
 
 ### Test 1: Single User (Baseline)
+
 ```
 1. Open http://localhost in browser
 2. Login
@@ -30,6 +33,7 @@ Now it works like a game:
 ---
 
 ### Test 2: Two Users - Same Zone (THE REAL TEST)
+
 ```
 Browser 1 (User A):
   1. Login as user@example.com
@@ -43,7 +47,7 @@ Browser 2 (User B):
   2. Go to SAME land (265, 86)
   3. Console shows: "📋 Processing 1 peers"
   4. Should see: "🔗 Creating peer connection"
-  
+
 Browser 1 (User A):
   5. Now gets updated: "📋 Processing 1 peers" (sees User B)
   6. Creates peer connection back to B
@@ -55,6 +59,7 @@ Both:
 ---
 
 ### Test 3: Two Users - Different Zones (Isolation)
+
 ```
 Browser 1 (User A):
   1. Go to land 265_86
@@ -63,7 +68,7 @@ Browser 1 (User A):
 Browser 2 (User B):
   1. Go to land 270_70 (DIFFERENT location)
   2. Check console: "📋 Processing 0 peers"
-  
+
 Expected: ✅ No peer connections (different zones)
 Result: ✅ User B doesn't hear User A
 ```
@@ -73,6 +78,7 @@ Result: ✅ User B doesn't hear User A
 ## Console Logs to Look For
 
 ### ✅ Good Signs (Audio Working)
+
 ```
 🎤 Adding local tracks to peer connection
 ✅ Track added (kind: audio, enabled: true)
@@ -85,6 +91,7 @@ Result: ✅ User B doesn't hear User A
 ```
 
 ### ❌ Bad Signs (Debug These)
+
 ```
 ⚠️ No stream available to add tracks      ← Stream not ready
 ❌ Error creating offer                    ← SDP error
@@ -107,7 +114,7 @@ Result: ✅ User B doesn't hear User A
       │   (media transport)                   │
       └──────────────────────────────────────►
            Audio Stream → User B hears A
-           
+
 Same room_id (e.g., "land_265_86") = can connect
 Different room_id = backend filters them out
 ```
@@ -117,6 +124,7 @@ Different room_id = backend filters them out
 ## Files Changed
 
 1. **`backend/app/api/v1/endpoints/websocket.py`**
+
    - Line 162: Pass `user_id` to `handle_live_status`
    - Lines 643-665: Exclude self from peer list
 
@@ -131,6 +139,7 @@ Different room_id = backend filters them out
 ## Troubleshooting
 
 ### "No sound on other side"
+
 1. Check both users are in **same room** (same land coordinates)
 2. Check console for 🎤 logs (tracks being added)
 3. Check console for 📥 [OFFER] logs (negotiation happening)
@@ -138,12 +147,14 @@ Different room_id = backend filters them out
 5. Check microphone permissions granted
 
 ### "Peer connection not creating"
+
 1. Check other user actually went live (they sent live_start)
 2. Check backend logs: `docker logs virtualworld-backend | grep live_status`
 3. Check frontend logs for "🔗 Creating peer connection"
 4. Check no errors in console
 
 ### "Only one direction works"
+
 1. Both users must go "Live" for bidirectional
 2. If only A broadcasts, B just listens (one-way is OK)
 3. For both directions: both click "Go Live"
@@ -153,6 +164,7 @@ Different room_id = backend filters them out
 ## Environment Check
 
 ### Frontend `.env`
+
 ```bash
 cat frontend/.env | grep VITE_SILENCE
 # Should output: VITE_SILENCE_LOGS=false
@@ -160,12 +172,14 @@ cat frontend/.env | grep VITE_SILENCE
 ```
 
 ### Backend Status
+
 ```bash
 docker logs virtualworld-backend | tail -5 | grep -E "live_status|ERROR"
 # Should show recent live_status requests, no errors
 ```
 
 ### Containers
+
 ```bash
 docker-compose ps
 # All should be "Up" (healthy = green, starting = yellow)
