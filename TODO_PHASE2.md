@@ -33,9 +33,9 @@
 
 ## Portfolio, Positions, History
 
-- [ ] Positions service (net/hedged modes), add/hedge/close/partial close, reverse position.
+- [x] Positions service (net/hedged modes), add/hedge/close/partial close, reverse position.
 - [x] Orders/trades/fees/taxes history endpoints; filters and pagination (orders/trades now include instrument filter + limit/offset; orders ordered latest-first).
-- [ ] Portfolio & dashboard endpoints: balance, equity, margin level, alerts.
+- [x] Portfolio & dashboard endpoints: balance, equity, margin level, alerts.
   - [x] Trades history: basic per-user listing (no filters/pagination yet).
 
 ## Clearing & Settlement
