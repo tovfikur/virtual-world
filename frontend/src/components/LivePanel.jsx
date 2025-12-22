@@ -255,7 +255,7 @@ function LivePanel({ roomId, land, user }) {
       }
       peer?.signal(signal);
     },
-    [createPeerConnection, roomId]
+    [createPeerConnection, roomId, log]
   );
 
   const handleAnswerOrIce = useCallback(
@@ -268,7 +268,7 @@ function LivePanel({ roomId, land, user }) {
       const peer = peersRef.current.get(from);
       peer?.signal(signal);
     },
-    [roomId]
+    [roomId, log]
   );
 
   const handlePeerLeft = useCallback((message) => {
@@ -286,7 +286,7 @@ function LivePanel({ roomId, land, user }) {
       delete next[peerId];
       return next;
     });
-  }, [roomId]);
+  }, [roomId, log]);
 
   useEffect(() => {
     const unsubPeers = wsService.on("live_peers", handlePeerList);
