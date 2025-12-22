@@ -11,12 +11,12 @@ class MarketState(str, Enum):
 
 class MarketStatusOut(BaseModel):
     state: MarketState
-    reason: str | None = None
+    reason: Optional[str] = None
 
 
 class MarketStatusUpdate(BaseModel):
     state: MarketState = Field(..., description="open/halted/closed")
-    reason: str | None = Field(None, max_length=256)
+    reason: Optional[str] = Field(None, max_length=256)
 
 
 class QuoteResponse(BaseModel):

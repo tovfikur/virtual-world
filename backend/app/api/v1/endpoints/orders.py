@@ -2,6 +2,7 @@
 Order entry endpoints (scaffolded).
 """
 from uuid import UUID
+from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, delete
@@ -34,9 +35,9 @@ async def place_order(
 
 @router.get("", response_model=list[OrderOut])
 async def list_orders(
-    instrument_id: UUID | None = None,
-    side: str | None = None,
-    status_filter: str | None = None,
+    instrument_id: Optional[UUID] = None,
+    side: Optional[str] = None,
+    status_filter: Optional[str] = None,
     limit: int = 50,
     offset: int = 0,
     current_user: dict = Depends(get_current_user),

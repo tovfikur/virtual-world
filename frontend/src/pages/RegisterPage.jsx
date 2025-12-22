@@ -3,16 +3,16 @@
  * User registration form with validation
  */
 
-import { useState, useEffect } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
-import toast from 'react-hot-toast';
-import useAuthStore from '../stores/authStore';
+import { useState, useEffect } from "react";
+import { Link, useNavigate } from "react-router-dom";
+import toast from "react-hot-toast";
+import useAuthStore from "../stores/authStore";
 
 function RegisterPage() {
-  const [username, setUsername] = useState('');
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [confirmPassword, setConfirmPassword] = useState('');
+  const [username, setUsername] = useState("");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
   const { register, isLoading, error, clearError } = useAuthStore();
   const navigate = useNavigate();
 
@@ -23,13 +23,16 @@ function RegisterPage() {
 
   const validatePassword = () => {
     if (password.length < 6) {
-      return 'Password must be at least 6 characters';
+      return "Password must be at least 6 characters";
     }
     return null;
   };
 
   const passwordsMatch = password.length > 0 && password === confirmPassword;
-  const passwordsMismatch = password.length > 0 && confirmPassword.length > 0 && password !== confirmPassword;
+  const passwordsMismatch =
+    password.length > 0 &&
+    confirmPassword.length > 0 &&
+    password !== confirmPassword;
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -40,32 +43,36 @@ function RegisterPage() {
 
     // Validation
     if (trimmedPassword !== trimmedConfirmPassword) {
-      toast.error('Passwords do not match');
+      toast.error("Passwords do not match");
       return;
     }
 
     if (trimmedPassword.length < 6) {
-      toast.error('Password must be at least 6 characters');
+      toast.error("Password must be at least 6 characters");
       return;
     }
 
     if (!username.trim()) {
-      toast.error('Username is required');
+      toast.error("Username is required");
       return;
     }
 
     if (!email.trim()) {
-      toast.error('Email is required');
+      toast.error("Email is required");
       return;
     }
 
-    const result = await register(username.trim(), email.trim(), trimmedPassword);
+    const result = await register(
+      username.trim(),
+      email.trim(),
+      trimmedPassword
+    );
 
     if (result.success) {
-      toast.success('Account created! Welcome to Virtual Land World!');
-      navigate('/world');
+      toast.success("Account created! Welcome to Virtual Land World!");
+      navigate("/world");
     } else {
-      toast.error(result.error || 'Registration failed');
+      toast.error(result.error || "Registration failed");
     }
   };
 
@@ -154,10 +161,10 @@ function RegisterPage() {
                 onChange={(e) => setConfirmPassword(e.target.value)}
                 className={`w-full px-4 py-2 bg-gray-700 text-white rounded-lg border focus:outline-none transition-colors ${
                   confirmPassword.length === 0
-                    ? 'border-gray-600 focus:border-blue-500'
+                    ? "border-gray-600 focus:border-blue-500"
                     : passwordsMatch
-                    ? 'border-green-500 focus:border-green-400'
-                    : 'border-red-500 focus:border-red-400'
+                    ? "border-green-500 focus:border-green-400"
+                    : "border-red-500 focus:border-red-400"
                 }`}
                 placeholder="Confirm your password"
                 required
@@ -179,17 +186,23 @@ function RegisterPage() {
 
             <button
               type="submit"
-              disabled={isLoading || (confirmPassword.length > 0 && !passwordsMatch)}
+              disabled={
+                isLoading || (confirmPassword.length > 0 && !passwordsMatch)
+              }
               className="w-full bg-blue-600 hover:bg-blue-700 disabled:bg-gray-600 text-white font-semibold py-3 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-              title={confirmPassword.length > 0 && !passwordsMatch ? 'Passwords must match' : ''}
+              title={
+                confirmPassword.length > 0 && !passwordsMatch
+                  ? "Passwords must match"
+                  : ""
+              }
             >
-              {isLoading ? 'Creating account...' : 'Create Account'}
+              {isLoading ? "Creating account..." : "Create Account"}
             </button>
           </form>
 
           <div className="mt-6 text-center">
             <p className="text-gray-400">
-              Already have an account?{' '}
+              Already have an account?{" "}
               <Link
                 to="/login"
                 className="text-blue-400 hover:text-blue-300 font-medium"

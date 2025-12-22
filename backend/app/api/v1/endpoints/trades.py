@@ -2,7 +2,7 @@
 Trade history endpoints (scaffold).
 """
 from uuid import UUID
-from typing import List
+from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, or_
@@ -17,7 +17,7 @@ router = APIRouter(prefix="/trades", tags=["trades"])
 
 @router.get("", response_model=List[TradeOut])
 async def list_trades(
-    instrument_id: UUID | None = None,
+    instrument_id: Optional[UUID] = None,
     limit: int = 50,
     offset: int = 0,
     current_user: dict = Depends(get_current_user),
