@@ -30,7 +30,10 @@ function LivePanel({ roomId, land, user }) {
         window.__LIVE_DEBUG = window.__LIVE_DEBUG || [];
         window.__LIVE_DEBUG.push({ ts: Date.now(), label, payload });
       }
-      setDebugLog((prev) => [...prev.slice(-40), { ts: Date.now(), label, payload }]);
+      setDebugLog((prev) => [
+        ...prev.slice(-40),
+        { ts: Date.now(), label, payload },
+      ]);
     } catch (e) {
       /* noop */
     }
@@ -118,16 +121,33 @@ function LivePanel({ roomId, land, user }) {
 
   const createPeerConnection = useCallback(
     (peerId, initiator, meta = {}) => {
-      log("createPeerConnection", { peerId, initiator, meta, hasStream: !!localStream });
+      log("createPeerConnection", {
+        peerId,
+        initiator,
+        meta,
+        hasStream: !!localStream,
+        isLive,
+      });
       if (peersRef.current.has(peerId)) {
-        return peersRef.current.get(peerId);
+        const existingPeer = peersRef.current.get(peerId);
+        // If we're broadcasting and this peer doesn't have our stream yet, add it
+        if (isLive && localStream && !initiator) {
+          try {
+            localStream.getTracks().forEach((track) => {
+              existingPeer.addTrack(track, localStream);
+            });
+          } catch (e) {
+            log("Failed to add track to existing peer", { error: e });
+          }
+        }
+        return existingPeer;
       }
 
       const peer = new SimplePeer({
         initiator,
         trickle: false,
-        // Allow view-only if the user isn't broadcasting
-        stream: localStream || undefined,
+        // Include local stream if we're broadcasting
+        stream: (isLive && localStream) ? localStream : undefined,
         config: {
           iceServers: [
             { urls: "stun:stun.l.google.com:19302" },
@@ -166,7 +186,7 @@ function LivePanel({ roomId, land, user }) {
 
       return peer;
     },
-    [handlePeerSignal, localStream, log]
+    [handlePeerSignal, localStream, log, isLive]
   );
 
   const requestMedia = useCallback(async (mode) => {
@@ -190,7 +210,21 @@ function LivePanel({ roomId, land, user }) {
       }
       try {
         const stream = await requestMedia(mode);
-        log("media granted", { tracks: stream?.getTracks()?.map((t) => t.kind) });
+        log("media granted", {
+          tracks: stream?.getTracks()?.map((t) => t.kind),
+        });
+        
+        // Add stream tracks to all existing peer connections
+        peersRef.current.forEach((peer) => {
+          try {
+            stream.getTracks().forEach((track) => {
+              peer.addTrack(track, stream);
+            });
+          } catch (e) {
+            log("Failed to add track to peer", { error: e });
+          }
+        });
+        
         setLocalStream(stream);
         setIsLive(true);
         setMediaType(mode === "video" ? "video" : "audio");
@@ -202,7 +236,8 @@ function LivePanel({ roomId, land, user }) {
       } catch (error) {
         log("Failed to start live session", { error });
         toast.error(
-          error?.message || "Failed to access microphone/camera. Check permissions."
+          error?.message ||
+            "Failed to access microphone/camera. Check permissions."
         );
         teardown();
       }
@@ -271,22 +306,25 @@ function LivePanel({ roomId, land, user }) {
     [roomId, log]
   );
 
-  const handlePeerLeft = useCallback((message) => {
-    if (message.room_id !== roomId) return;
-    log("peer left", message);
-    const peerId = message.user_id;
-    if (!peerId) return;
-    const peer = peersRef.current.get(peerId);
-    if (peer) {
-      peer.destroy();
-      peersRef.current.delete(peerId);
-    }
-    setPeerStreams((prev) => {
-      const next = { ...prev };
-      delete next[peerId];
-      return next;
-    });
-  }, [roomId, log]);
+  const handlePeerLeft = useCallback(
+    (message) => {
+      if (message.room_id !== roomId) return;
+      log("peer left", message);
+      const peerId = message.user_id;
+      if (!peerId) return;
+      const peer = peersRef.current.get(peerId);
+      if (peer) {
+        peer.destroy();
+        peersRef.current.delete(peerId);
+      }
+      setPeerStreams((prev) => {
+        const next = { ...prev };
+        delete next[peerId];
+        return next;
+      });
+    },
+    [roomId, log]
+  );
 
   useEffect(() => {
     const unsubPeers = wsService.on("live_peers", handlePeerList);
@@ -321,7 +359,16 @@ function LivePanel({ roomId, land, user }) {
       unsubAnswer();
       unsubIce();
     };
-  }, [createPeerConnection, handleAnswerOrIce, handleOffer, handlePeerLeft, handlePeerList, roomId, user?.user_id, log]);
+  }, [
+    createPeerConnection,
+    handleAnswerOrIce,
+    handleOffer,
+    handlePeerLeft,
+    handlePeerList,
+    roomId,
+    user?.user_id,
+    log,
+  ]);
 
   useEffect(() => {
     const unsubJoinedRoom = wsService.on("joined_room", (msg) => {
@@ -348,7 +395,9 @@ function LivePanel({ roomId, land, user }) {
 
   const renderMediaTile = (peerId, data, isSelf = false) => {
     const isVideo = data?.media_type !== "audio";
-    const label = isSelf ? "You" : data?.username || peerId?.slice(0, 6) || "User";
+    const label = isSelf
+      ? "You"
+      : data?.username || peerId?.slice(0, 6) || "User";
     const stream = data?.stream;
 
     return (
@@ -447,7 +496,11 @@ function LivePanel({ roomId, land, user }) {
         {isLive &&
           renderMediaTile(
             user?.user_id || "self",
-            { media_type: mediaType || "video", stream: localStream, username: user?.username || "You" },
+            {
+              media_type: mediaType || "video",
+              stream: localStream,
+              username: user?.username || "You",
+            },
             true
           )}
         {Object.entries(peerStreams).map(([peerId, data]) =>
@@ -458,7 +511,8 @@ function LivePanel({ roomId, land, user }) {
         <div className="flex items-center justify-between">
           <span className="font-semibold text-gray-200">Live Debug</span>
           <span className="text-gray-500">
-            Room: {roomId || 'n/a'} | InRoom: {inRoom ? 'yes' : 'no'} | WS: {wsService.isConnected ? 'on' : 'off'}
+            Room: {roomId || "n/a"} | InRoom: {inRoom ? "yes" : "no"} | WS:{" "}
+            {wsService.isConnected ? "on" : "off"}
           </span>
         </div>
         {debugLog.length === 0 ? (
@@ -466,7 +520,8 @@ function LivePanel({ roomId, land, user }) {
         ) : (
           debugLog.map((entry, idx) => (
             <div key={idx} className="text-gray-400">
-              {new Date(entry.ts).toLocaleTimeString()} - {entry.label} {entry.payload ? JSON.stringify(entry.payload) : ''}
+              {new Date(entry.ts).toLocaleTimeString()} - {entry.label}{" "}
+              {entry.payload ? JSON.stringify(entry.payload) : ""}
             </div>
           ))
         )}

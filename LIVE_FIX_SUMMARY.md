@@ -25,7 +25,7 @@ This caused **stale closures** where the callbacks held onto old state and could
 Added missing `log` dependencies to three critical WebRTC handlers:
 
 1. **handleOffer** - Processes incoming WebRTC offers from peers
-2. **handleAnswerOrIce** - Processes answers and ICE candidates  
+2. **handleAnswerOrIce** - Processes answers and ICE candidates
 3. **handlePeerLeft** - Handles peer disconnection cleanup
 
 ## Files Changed
@@ -34,13 +34,13 @@ Added missing `log` dependencies to three critical WebRTC handlers:
 
 ## Impact
 
-| Feature | Before | After |
-|---------|--------|-------|
-| Go Live (Audio) | ❌ Not working | ✅ Working |
-| Go Live (Video) | ❌ Not working | ✅ Working |
-| Peer Connections | ❌ Hanging | ✅ Proper setup |
-| Signal Handling | ❌ Stale closures | ✅ Fresh state |
-| Multiple Peers | ❌ Failed | ✅ Mesh network |
+| Feature          | Before            | After           |
+| ---------------- | ----------------- | --------------- |
+| Go Live (Audio)  | ❌ Not working    | ✅ Working      |
+| Go Live (Video)  | ❌ Not working    | ✅ Working      |
+| Peer Connections | ❌ Hanging        | ✅ Proper setup |
+| Signal Handling  | ❌ Stale closures | ✅ Fresh state  |
+| Multiple Peers   | ❌ Failed         | ✅ Mesh network |
 
 ## How to Test
 
@@ -55,6 +55,7 @@ Added missing `log` dependencies to three critical WebRTC handlers:
 ## Deployment Status
 
 ✅ **Docker containers rebuilt and running**
+
 - Frontend: Updated with fix, new asset bundle deployed
 - Backend: WebSocket handlers ready (no changes needed)
 - All containers healthy
