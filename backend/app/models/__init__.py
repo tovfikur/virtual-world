@@ -22,6 +22,11 @@ from app.models.fee_schedule import (
     FeeSchedule, FeeVolumeTier, InstrumentFeeOverride, AccountFeeSchedule,
     SwapRate, FundingRate, Commission, FeeType
 )
+from app.models.settlement import (
+    TradeConfirmation, SettlementQueue, CustodyBalance, SettlementRecord,
+    NetSettlementBatch, SettlementException, ReconciliationReport,
+    SettlementStatus, SettlementType, CustodyType
+)
 from app.models.audit_log import AuditLog, AuditEventCategory
 from app.models.admin_config import AdminConfig
 
@@ -85,4 +90,15 @@ __all__ = [
     "FundingRate",
     "Commission",
     "FeeType",
+    # Settlement & Clearing
+    "TradeConfirmation",
+    "SettlementQueue",
+    "CustodyBalance",
+    "SettlementRecord",
+    "NetSettlementBatch",
+    "SettlementException",
+    "ReconciliationReport",
+    "SettlementStatus",
+    "SettlementType",
+    "CustodyType",
 ]

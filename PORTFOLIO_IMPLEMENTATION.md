@@ -13,11 +13,13 @@ Handles position lifecycle and operations in both **Net** and **Hedged** modes.
 #### Position Modes
 
 **Net Mode** (default):
+
 - Single position per instrument
 - Opposite orders automatically net out
 - Example: LONG 1.0, then SHORT 0.5 → LONG 0.5
 
 **Hedged Mode**:
+
 - Separate long and short positions allowed
 - Can hedge existing positions
 - Example: LONG 1.0 and SHORT 0.5 exist simultaneously
@@ -25,6 +27,7 @@ Handles position lifecycle and operations in both **Net** and **Hedged** modes.
 #### Operations
 
 **Add to Position**:
+
 ```python
 from app.services.position_service import get_position_service, PositionMode
 
@@ -42,6 +45,7 @@ position = await service.add_to_position(
 ```
 
 **Partial Close**:
+
 ```python
 pnl = await service.partial_close(
     position=position,
@@ -52,6 +56,7 @@ pnl = await service.partial_close(
 ```
 
 **Reverse Position**:
+
 ```python
 new_pos = await service.reverse_position(
     position=long_position,
@@ -62,6 +67,7 @@ new_pos = await service.reverse_position(
 ```
 
 **Hedge Position** (hedged mode only):
+
 ```python
 service = get_position_service(PositionMode.HEDGED)
 
@@ -84,18 +90,19 @@ REST endpoints for portfolio dashboard and management.
 Portfolio overview with balance, equity, margin, and P&L.
 
 **Response**:
+
 ```json
 {
   "account_id": 123,
-  "balance": 10000.00,
-  "equity": 10500.50,
-  "used_margin": 1000.00,
-  "free_margin": 9500.50,
+  "balance": 10000.0,
+  "equity": 10500.5,
+  "used_margin": 1000.0,
+  "free_margin": 9500.5,
   "margin_level": 1050.05,
-  "unrealized_pnl": 500.50,
+  "unrealized_pnl": 500.5,
   "realized_pnl_today": 125.75,
   "open_positions": 3,
-  "total_exposure": 100000.00,
+  "total_exposure": 100000.0,
   "available_leverage": 100.0
 }
 ```
@@ -105,9 +112,11 @@ Portfolio overview with balance, equity, margin, and P&L.
 List all open positions with details.
 
 **Query Parameters**:
+
 - `include_closed` (bool): Include closed positions
 
 **Response**:
+
 ```json
 [
   {
@@ -116,13 +125,13 @@ List all open positions with details.
     "instrument_symbol": "EUR/USD",
     "side": "LONG",
     "quantity": 1.5,
-    "entry_price": 1.1000,
-    "current_price": 1.1050,
-    "unrealized_pnl": 75.00,
+    "entry_price": 1.1,
+    "current_price": 1.105,
+    "unrealized_pnl": 75.0,
     "pnl_percent": 0.45,
-    "margin_used": 165.00,
+    "margin_used": 165.0,
     "leverage_used": 10.0,
-    "swap_accumulated": -5.50,
+    "swap_accumulated": -5.5,
     "opened_at": "2024-01-15T10:30:00Z"
   }
 ]
@@ -133,9 +142,11 @@ List all open positions with details.
 Performance metrics for specified period.
 
 **Query Parameters**:
+
 - `period`: "24h", "7d", "30d", "all"
 
 **Response**:
+
 ```json
 {
   "period": "30d",
@@ -143,12 +154,12 @@ Performance metrics for specified period.
   "total_trades": 45,
   "win_rate": 62.5,
   "profit_factor": 1.85,
-  "avg_win": 75.50,
+  "avg_win": 75.5,
   "avg_loss": -45.25,
-  "largest_win": 250.00,
-  "largest_loss": -125.50,
+  "largest_win": 250.0,
+  "largest_loss": -125.5,
   "sharpe_ratio": 1.45,
-  "max_drawdown": -350.00
+  "max_drawdown": -350.0
 }
 ```
 
@@ -157,17 +168,19 @@ Performance metrics for specified period.
 Portfolio value history over time.
 
 **Query Parameters**:
+
 - `period`: "24h", "7d", "30d"
 - `resolution`: "5m", "15m", "1h", "4h", "1d"
 
 **Response**:
+
 ```json
 [
   {
     "timestamp": "2024-01-15T10:00:00Z",
-    "equity": 10500.00,
-    "balance": 10000.00,
-    "unrealized_pnl": 500.00
+    "equity": 10500.0,
+    "balance": 10000.0,
+    "unrealized_pnl": 500.0
   }
 ]
 ```
@@ -177,15 +190,16 @@ Portfolio value history over time.
 Exposure breakdown by instrument and asset class.
 
 **Response**:
+
 ```json
 {
-  "total_exposure": 250000.00,
+  "total_exposure": 250000.0,
   "by_instrument": {
     "EUR/USD": {
       "positions": 2,
       "total_quantity": 2.5,
-      "exposure": 137500.00,
-      "unrealized_pnl": 325.50
+      "exposure": 137500.0,
+      "unrealized_pnl": 325.5
     }
   },
   "by_side": {
@@ -201,6 +215,7 @@ Exposure breakdown by instrument and asset class.
 Active portfolio alerts (margin calls, risk warnings).
 
 **Response**:
+
 ```json
 {
   "alerts": [
@@ -237,6 +252,7 @@ graph LR
 - Maintains position tracking
 
 **VWAP Calculation**:
+
 ```
 New Entry Price = (Old Notional + New Notional) / Total Quantity
 Old Notional = Quantity × Entry Price
@@ -248,6 +264,7 @@ New Notional = Additional Quantity × Current Price
 **Same Side**: Adds to position with VWAP
 
 **Opposite Side**:
+
 - If new < existing: Partial close existing
 - If new = existing: Close existing
 - If new > existing: Close existing, open new with remainder
@@ -255,12 +272,14 @@ New Notional = Additional Quantity × Current Price
 ### 4. Closing Position
 
 **Full Close**:
+
 - Calculates realized P&L
 - Releases margin
 - Updates account balance
 - Marks position as closed
 
 **Partial Close**:
+
 - Proportional P&L calculation
 - Proportional margin release
 - Position remains open with reduced quantity
@@ -270,6 +289,7 @@ New Notional = Additional Quantity × Current Price
 ### Margin Service
 
 Position service delegates margin calculations:
+
 ```python
 # Open position with margin check
 position = await margin_service.open_position(
@@ -283,6 +303,7 @@ pnl = await margin_service.close_position(position, close_price, db)
 ### P&L Service
 
 Calculates position P&L:
+
 ```python
 pnl, pct_return = await pnl_service.calculate_position_pnl(
     position, current_price
@@ -292,6 +313,7 @@ pnl, pct_return = await pnl_service.calculate_position_pnl(
 ### Pricing Service
 
 Updates position with current prices:
+
 ```python
 await position_service.update_position_prices(account_id, db)
 ```
@@ -435,6 +457,7 @@ pytest tests/test_position_service.py -v
 ```
 
 Test coverage:
+
 - ✅ Open position in net mode
 - ✅ Add to existing position (VWAP)
 - ✅ Net opposite positions
@@ -471,6 +494,7 @@ hedged_service = get_position_service(PositionMode.HEDGED)
 ### Position Updates
 
 Batch position price updates:
+
 ```python
 # Update all positions at once
 await position_service.update_position_prices(account_id, db)
@@ -479,12 +503,14 @@ await position_service.update_position_prices(account_id, db)
 ### Database Queries
 
 Optimized queries with indexes on:
+
 - `account_id` + `instrument_id` + `closed_at`
 - `account_id` + `side` + `closed_at`
 
 ### Caching
 
 Consider caching:
+
 - Position summaries (5-10 second TTL)
 - Performance metrics (1-minute TTL)
 - Portfolio history (longer TTL)
@@ -494,6 +520,7 @@ Consider caching:
 ### Portfolio Snapshots
 
 Save periodic snapshots for historical analysis:
+
 ```python
 class PortfolioSnapshot(Base):
     timestamp = Column(DateTime, primary_key=True)
@@ -520,10 +547,11 @@ class PortfolioSnapshot(Base):
 ### Real-time Updates
 
 WebSocket push for portfolio changes:
+
 ```javascript
 ws.onmessage = (event) => {
   const data = JSON.parse(event.data);
-  if (data.type === 'portfolio_update') {
+  if (data.type === "portfolio_update") {
     updatePortfolioDashboard(data.summary);
   }
 };
@@ -549,7 +577,7 @@ CREATE TABLE positions (
     swap_accumulated FLOAT DEFAULT 0.0,
     opened_at TIMESTAMP DEFAULT NOW(),
     closed_at TIMESTAMP,
-    
+
     INDEX idx_account_instrument (account_id, instrument_id, closed_at),
     INDEX idx_account_side (account_id, side, closed_at)
 );
@@ -558,6 +586,7 @@ CREATE TABLE positions (
 ## Error Handling
 
 Position service handles:
+
 - Insufficient margin
 - Invalid quantities
 - Closed positions
@@ -565,6 +594,7 @@ Position service handles:
 - Mode restrictions (hedging in net mode)
 
 Example:
+
 ```python
 try:
     position = await service.add_to_position(...)
@@ -578,6 +608,7 @@ except ValueError as e:
 ## Logging
 
 Position operations are logged:
+
 ```python
 logger.info(f"Opened position {position.id}: {side} {quantity} @ {price}")
 logger.info(f"Increased position {position.id}: +{quantity} @ {price}, VWAP: {new_entry}")
@@ -589,6 +620,7 @@ logger.info(f"Reversed position: closed {old_side}, opened {new_side}")
 ## Conclusion
 
 Complete portfolio management system with:
+
 - ✅ Net and hedged position modes
 - ✅ Position lifecycle operations
 - ✅ Dashboard REST API

@@ -9,6 +9,7 @@ Complete implementation of trading fees, commissions, swap/funding rates, and pr
 ### 1. Fee Schedule Models (`backend/app/models/fee_schedule.py`)
 
 **FeeSchedule Model**
+
 - Base fee schedule defining maker/taker fees
 - Fields:
   - `name`: Schedule name (e.g., "Standard", "VIP")
@@ -22,6 +23,7 @@ Complete implementation of trading fees, commissions, swap/funding rates, and pr
   - `is_active`: Active status
 
 **FeeVolumeTier Model**
+
 - Volume-based discount tiers
 - Fields:
   - `min_volume`: Minimum 30-day volume to qualify
@@ -30,16 +32,19 @@ Complete implementation of trading fees, commissions, swap/funding rates, and pr
   - `tier_name`: Bronze, Silver, Gold, VIP, etc.
 
 **InstrumentFeeOverride Model**
+
 - Per-instrument fee customization
 - Allows higher fees for volatile assets (crypto, commodities)
 - Overrides base schedule for specific instruments
 
 **AccountFeeSchedule Model**
+
 - Links accounts to fee schedules
 - Tracks 30-day rolling volume for tier calculation
 - Supports institutional pricing arrangements
 
 **SwapRate Model**
+
 - Overnight swap/rollover rates for FX and CFDs
 - Fields:
   - `long_swap_rate`: Swap in basis points for long positions
@@ -48,6 +53,7 @@ Complete implementation of trading fees, commissions, swap/funding rates, and pr
   - `effective_date`: When rate takes effect
 
 **FundingRate Model**
+
 - Funding rates for perpetual futures
 - Fields:
   - `rate`: Funding rate (e.g., 0.0001 = 0.01%)
@@ -56,6 +62,7 @@ Complete implementation of trading fees, commissions, swap/funding rates, and pr
   - `next_funding_time`: Next funding calculation
 
 **Commission Model**
+
 - Records fee breakdown per trade
 - Fields:
   - `maker_fee`: Maker portion
@@ -69,19 +76,22 @@ Complete implementation of trading fees, commissions, swap/funding rates, and pr
 ### 2. Fee Calculation Service (`backend/app/services/fee_service.py`)
 
 **Fee Hierarchy:**
+
 1. Instrument-specific override (highest priority)
 2. Volume tier discount
 3. Base schedule fee (fallback)
 
 **Fee Types:**
+
 - **PERCENTAGE**: `fee_value * notional`
-  - Example: 0.001 * $100,000 = $100 (0.1%)
+  - Example: 0.001 \* $100,000 = $100 (0.1%)
 - **FLAT**: Fixed amount per trade
   - Example: $5 per trade regardless of size
 - **PER_LOT**: `fee_value * quantity`
-  - Example: $0.50 per lot * 100 lots = $50
+  - Example: $0.50 per lot \* 100 lots = $50
 
 **Key Methods:**
+
 - `calculate_trade_fee()`: Computes fee based on account, instrument, volume
 - `record_commission()`: Creates Commission record for audit
 - `deduct_fee_from_account()`: Subtracts fee from balance, updates equity
@@ -89,6 +99,7 @@ Complete implementation of trading fees, commissions, swap/funding rates, and pr
 - `get_fee_breakdown()`: Returns fee statistics for period
 
 **Example Calculation:**
+
 ```python
 # Standard account: 0.1% maker, 0.2% taker
 # VIP tier (>$1M volume): 0.05% maker, 0.1% taker
@@ -108,17 +119,20 @@ else:
 ### 3. PnL Calculation Service (`backend/app/services/pnl_service.py`)
 
 **P&L Types:**
+
 - **Realized P&L**: Locked-in profit/loss from closed positions
 - **Unrealized P&L**: Mark-to-market profit/loss from open positions
 - **Total P&L**: Realized + Unrealized
 
 **Position Modes:**
+
 - **Net Mode**: Single position per instrument (default)
 - **Hedged Mode**: Separate long/short positions allowed
 
 **Key Calculations:**
 
 **Position P&L:**
+
 ```python
 # Long position
 pnl = (current_price - entry_price) * quantity - swap_fees
@@ -131,17 +145,20 @@ return_pct = (pnl / (entry_price * quantity)) * 100
 ```
 
 **VWAP (Volume Weighted Average Price):**
+
 ```python
 vwap = sum(trade.price * trade.quantity) / sum(trade.quantity)
 ```
 
 **Win Rate:**
+
 ```python
 win_rate = (winning_trades / total_trades) * 100
 profit_factor = average_win / average_loss
 ```
 
 **Key Methods:**
+
 - `calculate_position_pnl()`: Unrealized P&L and percent return
 - `calculate_realized_pnl()`: P&L for closed position
 - `calculate_vwap()`: Average entry price across multiple fills
@@ -153,18 +170,21 @@ profit_factor = average_win / average_loss
 ### 4. Swap Fee Service (`backend/app/services/swap_service.py`)
 
 **Swap Fees (FX/CFD):**
+
 - Applied daily at rollover time (00:00 UTC)
 - Triple swap on Wednesdays (covers weekend)
 - Different rates for long vs short positions
 - Calculated in basis points per day
 
 **Funding Rates (Perpetual Futures):**
+
 - Exchanged every 8 hours between longs and shorts
 - Positive rate: longs pay shorts
 - Negative rate: shorts pay longs
 - Based on spot-perpetual price difference
 
 **Swap Calculation:**
+
 ```python
 # Single day swap
 rate_decimal = swap_rate_bps / 10000
@@ -179,6 +199,7 @@ triple_swap = $25 * 3 = $75
 ```
 
 **Funding Calculation:**
+
 ```python
 notional = quantity * current_price
 payment = notional * funding_rate
@@ -188,6 +209,7 @@ payment = notional * funding_rate
 ```
 
 **Key Methods:**
+
 - `apply_daily_swap()`: Apply overnight fees to all open positions
 - `apply_funding_rate()`: Apply perpetual funding (8-hour intervals)
 - `calculate_swap_fee()`: Compute swap for a position
@@ -436,10 +458,10 @@ async def _execute_trade(self, buy_order, sell_order, price, quantity, db):
     trade = Trade(...)
     db.add(trade)
     await db.flush()
-    
+
     # Calculate fees
     fee_service = get_fee_service()
-    
+
     # Buyer fee (determine if maker/taker)
     is_buyer_maker = buy_order.created_at < sell_order.created_at
     buyer_fee, buyer_details = await fee_service.calculate_trade_fee(
@@ -450,7 +472,7 @@ async def _execute_trade(self, buy_order, sell_order, price, quantity, db):
         is_maker=is_buyer_maker,
         db=db
     )
-    
+
     # Seller fee
     seller_fee, seller_details = await fee_service.calculate_trade_fee(
         account_id=seller_account.id,
@@ -460,7 +482,7 @@ async def _execute_trade(self, buy_order, sell_order, price, quantity, db):
         is_maker=not is_buyer_maker,
         db=db
     )
-    
+
     # Record commissions
     await fee_service.record_commission(
         trade.id, buyer_account.id, buyer_fee, buyer_details, db
@@ -468,11 +490,11 @@ async def _execute_trade(self, buy_order, sell_order, price, quantity, db):
     await fee_service.record_commission(
         trade.id, seller_account.id, seller_fee, seller_details, db
     )
-    
+
     # Deduct fees
     await fee_service.deduct_fee_from_account(buyer_account, buyer_fee, db)
     await fee_service.deduct_fee_from_account(seller_account, seller_fee, db)
-    
+
     # Update or create positions
     margin_service = get_margin_service()
     await margin_service.open_position(...)  # Updates P&L
@@ -506,7 +528,7 @@ async def startup_tasks():
             else:
                 # Check every minute
                 await asyncio.sleep(60)
-    
+
     asyncio.create_task(apply_daily_swaps())
 ```
 
@@ -531,6 +553,7 @@ asyncio.create_task(update_rolling_volumes())
 ## Configuration
 
 **Default Fee Rates:**
+
 ```python
 # Standard schedule
 MAKER_FEE = 0.001  # 0.1%
@@ -546,6 +569,7 @@ CRYPTO_TAKER_FEE = 0.008  # 0.8%
 ```
 
 **Swap Rates (example):**
+
 ```python
 # FX pairs (basis points per day)
 EURUSD_LONG_SWAP = 2.0   # +2 bps
@@ -563,6 +587,7 @@ BTCUSD_FUNDING = 0.0001  # 0.01% every 8 hours
 Comprehensive test suite in `backend/tests/test_fees_and_pnl.py`:
 
 **Test Cases:**
+
 1. `test_percentage_fee_calculation`: Validates % -based fees
 2. `test_volume_tier_discount`: Tests tier-based discounts
 3. `test_instrument_fee_override`: Verifies per-instrument overrides
@@ -573,6 +598,7 @@ Comprehensive test suite in `backend/tests/test_fees_and_pnl.py`:
 8. `test_win_rate_calculation`: Win/loss statistics
 
 **Run tests:**
+
 ```bash
 cd backend
 pytest tests/test_fees_and_pnl.py -v
@@ -596,6 +622,7 @@ pytest tests/test_fees_and_pnl.py -v
 ## Summary
 
 The Fees & PnL system provides:
+
 - ✅ Configurable fee schedules (maker/taker, percentage/flat/per-lot)
 - ✅ Volume-based discount tiers
 - ✅ Per-instrument fee overrides

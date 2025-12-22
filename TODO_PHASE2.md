@@ -40,8 +40,8 @@
 
 ## Clearing & Settlement
 
-- [ ] Trade confirmation and netting pipeline; T+N settlement support for equities.
-- [ ] Custody balance updates, reconciliation hooks; broker/LP payout flows.
+- [x] Trade confirmation and netting pipeline; T+N settlement support for equities.
+- [x] Custody balance updates, reconciliation hooks; broker/LP payout flows.
 
 ## Admin, Broker, Compliance
 
