@@ -11,6 +11,7 @@ import logging
 
 from app.db.session import get_db
 from app.services.auth_service import auth_service, InvalidTokenException
+from app.services.cache_service import cache_service
 from app.models.user import User, UserRole
 
 logger = logging.getLogger(__name__)
@@ -73,6 +74,20 @@ async def get_current_user(
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="Account is locked"
+            )
+
+        # Enforce single active session
+        active_session = await cache_service.get(f"session:{user_id}")
+        token_session_id = payload.get("session_id")
+        if not active_session or not token_session_id:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Session expired"
+            )
+        if active_session.get("session_id") != token_session_id:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="You have been logged out from another device"
             )
 
         return payload

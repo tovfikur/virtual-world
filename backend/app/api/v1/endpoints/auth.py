@@ -8,6 +8,7 @@ from fastapi.responses import JSONResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 import logging
+import secrets
 from datetime import datetime
 
 from app.db.session import get_db
@@ -18,6 +19,7 @@ from app.services.cache_service import cache_service
 from app.services.land_allocation_service import land_allocation_service
 from app.config import settings, CACHE_TTLS
 from app.dependencies import get_current_user
+from app.services.websocket_service import connection_manager
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/auth", tags=["authentication"])
@@ -140,11 +142,31 @@ async def login(
     user.reset_login_attempts()
     await db.commit()
 
-    # Generate tokens
+    # Check for existing session to enforce single-device rule
+    previous_session = await cache_service.get(f"session:{user.user_id}")
+    previous_session_terminated = False
+
+    if previous_session and connection_manager.has_active_connections(str(user.user_id)):
+        forced = await connection_manager.force_logout_user(
+            str(user.user_id),
+            reason="Another device signed in with this account"
+        )
+        if forced:
+            previous_session_terminated = True
+        else:
+            logger.warning(f"Could not terminate existing session for user {user.username}")
+            raise HTTPException(
+                status_code=status.HTTP_423_LOCKED,
+                detail="Another device is already using this account. Please log out there first."
+            )
+
+    # Generate tokens with session binding
+    session_id = secrets.token_urlsafe(32)
     access_token = auth_service.create_access_token(
         user_id=str(user.user_id),
         email=user.email,
-        role=user.role.value
+        role=user.role.value,
+        additional_claims={"session_id": session_id}
     )
     refresh_token = auth_service.create_refresh_token()
 
@@ -159,6 +181,7 @@ async def login(
     await cache_service.set(
         f"session:{user.user_id}",
         {
+            "session_id": session_id,
             "user_id": str(user.user_id),
             "email": user.email,
             "role": user.role.value,
@@ -174,7 +197,8 @@ async def login(
         access_token=access_token,
         token_type="Bearer",
         expires_in=settings.jwt_access_token_expire_minutes * 60,
-        user=UserResponse.model_validate(user)
+        user=UserResponse.model_validate(user),
+        previous_session_terminated=previous_session_terminated
     )
 
     # Set refresh token as HTTP-only cookie
@@ -250,11 +274,19 @@ async def refresh_token(
     # Invalidate old refresh token (token rotation)
     await cache_service.delete(f"refresh_token:{user.user_id}")
 
-    # Generate new tokens
+    session_data = await cache_service.get(f"session:{user.user_id}")
+    if not session_data or not session_data.get("session_id"):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Active session not found"
+        )
+
+    # Generate new tokens bound to existing session
     new_access_token = auth_service.create_access_token(
         user_id=str(user.user_id),
         email=user.email,
-        role=user.role.value
+        role=user.role.value,
+        additional_claims={"session_id": session_data["session_id"]}
     )
     new_refresh_token = auth_service.create_refresh_token()
 

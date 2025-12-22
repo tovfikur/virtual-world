@@ -76,7 +76,7 @@ async def init_db() -> None:
         async with engine.begin() as conn:
             # Import all models to ensure they're registered
             from app.models import (
-                user, land, listing, bid,
+                user, land, listing, bid, instrument, order, trade,
                 transaction, chat, audit_log, admin_config
             )
 

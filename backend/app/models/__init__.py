@@ -6,9 +6,16 @@ Exports all ORM models
 from app.models.user import User, UserRole
 from app.models.land import Land, Biome
 from app.models.listing import Listing, ListingType, ListingStatus
+from app.models.listing_land import ListingLand
 from app.models.bid import Bid, BidStatus
 from app.models.transaction import Transaction, TransactionStatus
 from app.models.chat import ChatSession, Message
+from app.models.land_chat_access import LandChatAccess
+from app.models.trading import TradingCompany, TradingTransaction
+from app.models.instrument import Instrument, AssetClass, InstrumentStatus
+from app.models.order import Order, OrderSide, OrderStatus, OrderType
+from app.models.trade import Trade
+from app.models.market_status import MarketStatus, MarketState
 from app.models.audit_log import AuditLog, AuditEventCategory
 from app.models.admin_config import AdminConfig
 
@@ -23,6 +30,7 @@ __all__ = [
     "Listing",
     "ListingType",
     "ListingStatus",
+    "ListingLand",
     # Bid
     "Bid",
     "BidStatus",
@@ -32,9 +40,23 @@ __all__ = [
     # Chat
     "ChatSession",
     "Message",
+    "LandChatAccess",
     # Audit
     "AuditLog",
     "AuditEventCategory",
     # Config
     "AdminConfig",
+    # Trading (exchange)
+    "Instrument",
+    "AssetClass",
+    "InstrumentStatus",
+    "Order",
+    "OrderSide",
+    "OrderStatus",
+    "OrderType",
+    "Trade",
+    "MarketStatus",
+    "MarketState",
+    "TradingCompany",
+    "TradingTransaction",
 ]

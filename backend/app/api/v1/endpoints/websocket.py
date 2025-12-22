@@ -19,10 +19,15 @@ from app.models.chat import ChatSession
 from app.services.websocket_service import connection_manager
 from app.services.chat_service import chat_service
 from app.services.auth_service import auth_service
+from app.services.cache_service import cache_service
 from sqlalchemy import and_
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/ws", tags=["websocket"])
+
+# Live video/audio state tracking (per room)
+# {room_id: {user_id: {"media_type": "audio"|"video", "username": str}}}
+live_rooms: dict = {}
 
 
 async def get_user_from_token(token: str, db: AsyncSession) -> Optional[User]:
@@ -39,11 +44,22 @@ async def get_user_from_token(token: str, db: AsyncSession) -> Optional[User]:
     try:
         payload = auth_service.verify_token(token)
         user_id = uuid.UUID(payload.get("sub"))
+        session_id = payload.get("session_id")
 
         result = await db.execute(
             select(User).where(User.user_id == user_id)
         )
-        return result.scalar_one_or_none()
+        user = result.scalar_one_or_none()
+
+        if not user:
+            return None
+
+        session_data = await cache_service.get(f"session:{user_id}")
+        if not session_data or session_data.get("session_id") != session_id:
+            logger.warning(f"WebSocket token rejected for user {user_id}: invalid session")
+            return None
+
+        return user
     except Exception as e:
         logger.error(f"Token verification failed: {e}")
         return None
@@ -90,7 +106,7 @@ async def websocket_endpoint(
     user_id = str(user.user_id)
 
     # Connect user
-    await connection_manager.connect(websocket, user_id)
+    await connection_manager.connect(websocket, user_id, user.username)
 
     # Send welcome message
     await websocket.send_json({
@@ -126,6 +142,25 @@ async def websocket_endpoint(
                 elif message_type == "typing":
                     await handle_typing(websocket, user_id, message, db)
 
+                # Live audio/video go-live controls
+                elif message_type == "live_start":
+                    await handle_live_start(websocket, user_id, user.username, message)
+
+                elif message_type == "live_stop":
+                    await handle_live_stop(user_id, message)
+
+                elif message_type == "live_offer":
+                    await handle_live_signal(user_id, message, signal_type="live_offer")
+
+                elif message_type == "live_answer":
+                    await handle_live_signal(user_id, message, signal_type="live_answer")
+
+                elif message_type == "live_ice":
+                    await handle_live_signal(user_id, message, signal_type="live_ice")
+
+                elif message_type == "live_status":
+                    await handle_live_status(websocket, message)
+
                 elif message_type == "ping":
                     # Heartbeat
                     await websocket.send_json({
@@ -154,6 +189,7 @@ async def websocket_endpoint(
     except WebSocketDisconnect:
         logger.info(f"User {user_id} disconnected")
     finally:
+        await cleanup_user_live_sessions(user_id)
         await connection_manager.disconnect(websocket)
 
 
@@ -224,6 +260,9 @@ async def handle_leave_room(websocket: WebSocket, user_id: str, message: dict, d
         "timestamp": datetime.utcnow().isoformat()
     })
 
+    # Remove from any active live session in this room
+    await cleanup_user_live_sessions(user_id, room_id=room_id)
+
 
 async def handle_send_message(websocket: WebSocket, user_id: str, message: dict, db: AsyncSession):
     """Handle send_message."""
@@ -283,14 +322,21 @@ async def handle_send_message(websocket: WebSocket, user_id: str, message: dict,
                         is_leave_message = True
 
             # ALWAYS save message to database for UUID-based rooms
-            db_message = await chat_service.send_message(
-                db=db,
-                session_id=room_uuid,
-                sender_id=user_uuid,
-                content=content,
-                encrypt=False,  # Don't encrypt for now to debug
-                is_leave_message=is_leave_message
-            )
+            try:
+                db_message = await chat_service.send_message(
+                    db=db,
+                    session_id=room_uuid,
+                    sender_id=user_uuid,
+                    content=content,
+                    encrypt=False,  # Don't encrypt for now to debug
+                    is_leave_message=is_leave_message
+                )
+            except PermissionError as perm_err:
+                await websocket.send_json({"type": "error", "message": str(perm_err)})
+                return
+            except ValueError as val_err:
+                await websocket.send_json({"type": "error", "message": str(val_err)})
+                return
             logger.info(f"✓ Saved message to UUID room {room_id}, msg_id={db_message.message_id}")
 
         except (ValueError, TypeError):
@@ -339,14 +385,21 @@ async def handle_send_message(websocket: WebSocket, user_id: str, message: dict,
 
                             # ALWAYS save message to database (regardless of who's online)
                             logger.info(f"Saving message: content='{content}', encrypt=False, is_leave_message={is_leave_message}")
-                            db_message = await chat_service.send_message(
-                                db=db,
-                                session_id=chat_session.session_id,
-                                sender_id=user_uuid,
-                                content=content,
-                                encrypt=False,  # Don't encrypt for now to debug
-                                is_leave_message=is_leave_message
-                            )
+                            try:
+                                db_message = await chat_service.send_message(
+                                    db=db,
+                                    session_id=chat_session.session_id,
+                                    sender_id=user_uuid,
+                                    content=content,
+                                    encrypt=False,  # Don't encrypt for now to debug
+                                    is_leave_message=is_leave_message
+                                )
+                            except PermissionError as perm_err:
+                                await websocket.send_json({"type": "error", "message": str(perm_err)})
+                                return
+                            except ValueError as val_err:
+                                await websocket.send_json({"type": "error", "message": str(val_err)})
+                                return
                             logger.info(f"✓✓✓ MESSAGE SAVED! msg_id={db_message.message_id}, session_id={chat_session.session_id}, land_id={land.land_id}")
                             logger.info(f"=== Message save complete for land ({land_x}, {land_y}) ===")
                         else:
@@ -422,6 +475,19 @@ async def handle_update_location(websocket: WebSocket, user_id: str, message: di
         "timestamp": datetime.utcnow().isoformat()
     })
 
+    presence = connection_manager.get_user_presence(user_id) or {}
+    await connection_manager.broadcast_all(
+        {
+            "type": "player_location",
+            "user_id": user_id,
+            "username": presence.get("username"),
+            "x": x,
+            "y": y,
+            "timestamp": datetime.utcnow().isoformat()
+        },
+        exclude_user=user_id
+    )
+
 
 async def handle_typing(websocket: WebSocket, user_id: str, message: dict, db: AsyncSession):
     """Handle typing indicator."""
@@ -443,6 +509,177 @@ async def handle_typing(websocket: WebSocket, user_id: str, message: dict, db: A
         room_id,
         exclude_user=user_id
     )
+
+
+def _get_live_peers(room_id: str, exclude_user: Optional[str] = None) -> list:
+    """Return metadata for active live participants in a room."""
+    room = live_rooms.get(room_id, {})
+    peers = []
+    for uid, meta in room.items():
+        if exclude_user and uid == exclude_user:
+            continue
+        peers.append(
+            {
+                "user_id": uid,
+                "username": meta.get("username"),
+                "media_type": meta.get("media_type", "video"),
+            }
+        )
+    return peers
+
+
+async def handle_live_start(websocket: WebSocket, user_id: str, username: str, message: dict):
+    """Register a user as live (audio or video) inside a room."""
+    room_id = message.get("room_id")
+    media_type = message.get("media_type", "video")
+
+    if not room_id:
+        logger.warning(f"live_start missing room_id user={user_id}")
+        print(f"[live] start failed missing room user={user_id}")
+        await websocket.send_json({"type": "error", "message": "room_id required for live_start"})
+        return
+
+    # Require membership in the room before broadcasting
+    if user_id not in connection_manager.rooms.get(room_id, set()):
+        logger.warning(f"live_start rejected (not in room) user={user_id} room={room_id}")
+        print(f"[live] start rejected not in room user={user_id} room={room_id}")
+        await websocket.send_json({"type": "error", "message": "Join the room before going live"})
+        return
+
+    room = live_rooms.setdefault(room_id, {})
+    room[user_id] = {"media_type": media_type, "username": username}
+    logger.info(f"live_start user={user_id} room={room_id} media={media_type}")
+    print(f"[live] start user={user_id} room={room_id} media={media_type}")
+
+    # Send back current peers so the client can start offers
+    await websocket.send_json(
+        {
+            "type": "live_peers",
+            "room_id": room_id,
+            "peers": _get_live_peers(room_id, exclude_user=user_id),
+        }
+    )
+
+    # Notify others that this user went live
+    await connection_manager.broadcast_to_room(
+        {
+            "type": "live_peer_joined",
+            "room_id": room_id,
+            "user_id": user_id,
+            "username": username,
+            "media_type": media_type,
+            "timestamp": datetime.utcnow().isoformat(),
+        },
+        room_id,
+        exclude_user=user_id,
+    )
+
+
+async def handle_live_stop(user_id: str, message: dict):
+    """Stop broadcasting for a user."""
+    room_id = message.get("room_id")
+    if not room_id:
+        return
+
+    room = live_rooms.get(room_id)
+    if not room or user_id not in room:
+        return
+
+    logger.info(f"live_stop user={user_id} room={room_id}")
+    print(f"[live] stop user={user_id} room={room_id}")
+
+    # Remove broadcaster
+    room.pop(user_id, None)
+    if not room:
+        live_rooms.pop(room_id, None)
+
+    await connection_manager.broadcast_to_room(
+        {
+            "type": "live_peer_left",
+            "room_id": room_id,
+            "user_id": user_id,
+            "timestamp": datetime.utcnow().isoformat(),
+        },
+        room_id,
+        exclude_user=user_id,
+    )
+
+
+async def handle_live_signal(user_id: str, message: dict, signal_type: str):
+    """Forward WebRTC signaling messages between peers inside the same room."""
+    room_id = message.get("room_id")
+    target_user_id = message.get("target_user_id")
+    payload = message.get("payload")
+
+    if not room_id or not target_user_id or not payload:
+        logger.info(f"{signal_type} missing fields user={user_id} room={room_id} target={target_user_id}")
+        print(f"[live] {signal_type} missing fields user={user_id} room={room_id} target={target_user_id}")
+        return
+
+    # Ensure both users are in the same chat room
+    room_members = connection_manager.rooms.get(room_id, set())
+    if user_id not in room_members or target_user_id not in room_members:
+        logger.info(f"{signal_type} dropped user not in room user={user_id} target={target_user_id} room={room_id}")
+        print(f"[live] {signal_type} dropped not in room user={user_id} target={target_user_id} room={room_id}")
+        return
+
+    await connection_manager.send_personal_message(
+        {
+            "type": signal_type,
+            "room_id": room_id,
+            "from_user_id": user_id,
+            "payload": payload,
+            "timestamp": datetime.utcnow().isoformat(),
+        },
+        target_user_id,
+    )
+    logger.info(f"{signal_type} forwarded room={room_id} from={user_id} to={target_user_id}")
+    print(f"[live] {signal_type} forwarded room={room_id} from={user_id} to={target_user_id}")
+
+
+async def handle_live_status(websocket: WebSocket, message: dict):
+    """Return current live participants for a room (observer mode)."""
+    room_id = message.get("room_id")
+    if not room_id:
+        logger.info("live_status missing room_id")
+        print("[live] live_status missing room_id")
+        await websocket.send_json({"type": "error", "message": "room_id required for live_status"})
+        return
+
+    logger.info(f"live_status request room={room_id}")
+    print(f"[live] live_status room={room_id}")
+    await websocket.send_json(
+        {
+            "type": "live_peers",
+            "room_id": room_id,
+            "peers": _get_live_peers(room_id),
+        }
+    )
+
+
+async def cleanup_user_live_sessions(user_id: str, room_id: Optional[str] = None) -> None:
+    """Remove a user from any live rooms and notify remaining peers."""
+    target_rooms = [room_id] if room_id else list(live_rooms.keys())
+
+    for rid in target_rooms:
+        room = live_rooms.get(rid)
+        if not room or user_id not in room:
+            continue
+
+        room.pop(user_id, None)
+        if not room:
+            live_rooms.pop(rid, None)
+
+        await connection_manager.broadcast_to_room(
+            {
+                "type": "live_peer_left",
+                "room_id": rid,
+                "user_id": user_id,
+                "timestamp": datetime.utcnow().isoformat(),
+            },
+            rid,
+            exclude_user=user_id,
+        )
 
 
 @router.get("/stats")

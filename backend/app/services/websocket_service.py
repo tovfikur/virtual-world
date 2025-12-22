@@ -41,7 +41,7 @@ class ConnectionManager:
 
         logger.info("WebSocket ConnectionManager initialized")
 
-    async def connect(self, websocket: WebSocket, user_id: str) -> None:
+    async def connect(self, websocket: WebSocket, user_id: str, username: Optional[str] = None) -> None:
         """
         Accept and register a new WebSocket connection.
 
@@ -60,10 +60,13 @@ class ConnectionManager:
         self.websocket_to_user[websocket] = user_id
 
         # Update presence
+        previous_presence = self.presence.get(user_id, {})
         self.presence[user_id] = {
             "status": "online",
             "last_seen": datetime.utcnow().isoformat(),
-            "connected_at": datetime.utcnow().isoformat()
+            "connected_at": datetime.utcnow().isoformat(),
+            "username": username or previous_presence.get("username"),
+            "location": previous_presence.get("location"),
         }
 
         logger.info(f"User {user_id} connected (total connections: {len(self.active_connections[user_id])})")
@@ -173,6 +176,37 @@ class ConnectionManager:
                     sent_count += 1
                 except Exception as e:
                     logger.error(f"Failed to broadcast to user {user_id}: {e}")
+
+        return sent_count
+
+    async def broadcast_all(self, message: dict, exclude_user: Optional[str] = None) -> int:
+        """
+        Broadcast a message to every connected user.
+
+        Args:
+            message: Message data dictionary
+            exclude_user: Optional user ID to skip
+
+        Returns:
+            int: Number of websocket sends attempted
+        """
+        if not self.active_connections:
+            return 0
+
+        message_json = json.dumps(message)
+        sent_count = 0
+
+        for user_id, sockets in self.active_connections.items():
+            if exclude_user and user_id == exclude_user:
+                continue
+
+            for websocket in list(sockets):
+                try:
+                    await websocket.send_text(message_json)
+                    sent_count += 1
+                except Exception as exc:
+                    logger.error(f"Failed to broadcast message to {user_id}: {exc}")
+                    await self.disconnect(websocket)
 
         return sent_count
 
@@ -327,6 +361,43 @@ class ConnectionManager:
             user_id for user_id, data in self.presence.items()
             if data.get("status") == "online"
         ]
+
+    def has_active_connections(self, user_id: str) -> bool:
+        """
+        Check if a user currently has active WebSocket connections.
+        """
+        return bool(self.active_connections.get(user_id))
+
+    async def force_logout_user(self, user_id: str, reason: str = "session_terminated") -> bool:
+        """
+        Send a session invalidation event to all active connections for a user and disconnect them.
+
+        Args:
+            user_id: Target user ID
+            reason: Human-readable reason for the logout
+        """
+        sockets = list(self.active_connections.get(user_id, []))
+        if not sockets:
+            return False
+
+        message = json.dumps({
+            "type": "session_invalidated",
+            "reason": reason,
+            "timestamp": datetime.utcnow().isoformat()
+        })
+
+        for websocket in sockets:
+            try:
+                await websocket.send_text(message)
+            except Exception as exc:
+                logger.error(f"Failed to notify user {user_id} about session invalidation: {exc}")
+            finally:
+                try:
+                    await self.disconnect(websocket)
+                except Exception as disconnect_error:
+                    logger.error(f"Failed to disconnect websocket for user {user_id}: {disconnect_error}")
+
+        return True
 
     def get_stats(self) -> dict:
         """

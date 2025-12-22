@@ -8,6 +8,7 @@ import { landsAPI, marketplaceAPI } from "../services/api";
 import useAuthStore from "../stores/authStore";
 import useWorldStore from "../stores/worldStore";
 import toast from "react-hot-toast";
+import { validateConnectivity } from "../utils/parcelValidation";
 
 function MultiLandActionsPanel() {
   const { user } = useAuthStore();
@@ -214,87 +215,106 @@ function MultiLandActionsPanel() {
       return;
     }
 
+    // Validate connectivity - all lands must be edge-connected
+    const connectivityCheck = validateConnectivity(myLands);
+    if (!connectivityCheck.valid) {
+      toast.error(connectivityCheck.error, { duration: 5000 });
+      return;
+    }
+
     setProcessing(true);
-    setProgress({ current: 0, total: selectedLands.length });
-    let successCount = 0;
-    let failCount = 0;
-    const errors = [];
+    setProgress({ current: 1, total: 2 });
 
-    for (let i = 0; i < selectedLands.length; i++) {
-      const land = selectedLands[i];
-      setProgress({ current: i + 1, total: selectedLands.length });
-      try {
-        // If land doesn't have land_id, we need to fetch it first
-        let landId = land.land_id;
+    try {
+      // Step 1: Fetch land_ids for all selected lands
+      const landIds = [];
+      const errors = [];
 
-        if (!landId) {
-          // Try to get land details by coordinates
-          try {
+      for (const land of myLands) {
+        try {
+          let landId = land.land_id;
+
+          if (!landId) {
+            // Try to get land details by coordinates
             const response = await landsAPI.getLandByCoords(land.x, land.y);
             landId = response.data.land_id;
 
             // Check if current user owns it
             if (response.data.owner_id !== user?.user_id) {
               errors.push(`(${land.x}, ${land.y}) - Not owned by you`);
-              failCount++;
               continue;
             }
-          } catch (fetchError) {
-            errors.push(`(${land.x}, ${land.y}) - Not claimed yet`);
-            failCount++;
-            continue;
           }
+
+          landIds.push(landId);
+        } catch (fetchError) {
+          errors.push(`(${land.x}, ${land.y}) - Not claimed yet`);
         }
-
-        const listingData = {
-          land_id: landId,
-          listing_type: listingType,
-        };
-
-        // Set appropriate price fields based on listing type
-        if (listingType === "fixed_price") {
-          listingData.buy_now_price_bdt = parseInt(price);
-        } else if (listingType === "auction") {
-          listingData.starting_price_bdt = parseInt(price);
-          listingData.duration_hours = parseInt(duration);
-        } else if (listingType === "auction_with_buynow") {
-          listingData.starting_price_bdt = parseInt(price);
-          listingData.buy_now_price_bdt = parseInt(buyNowPrice);
-          listingData.duration_hours = parseInt(duration);
-        }
-
-        await marketplaceAPI.createListing(listingData);
-        successCount++;
-      } catch (error) {
-        console.error(`Failed to list land at (${land.x}, ${land.y}):`, error);
-        const errorMsg = error.response?.data?.detail || error.message;
-        errors.push(`(${land.x}, ${land.y}) - ${errorMsg}`);
-        failCount++;
       }
-    }
 
-    setProcessing(false);
-    setProgress({ current: 0, total: 0 });
+      if (errors.length > 0) {
+        setProcessing(false);
+        setProgress({ current: 0, total: 0 });
+        toast.error(`Some lands could not be verified:\n${errors.join("\n")}`, {
+          duration: 6000,
+        });
+        return;
+      }
 
-    if (successCount > 0) {
-      toast.success(`Created ${successCount} listing(s)`);
-    }
-    if (failCount > 0) {
-      const errorSummary = errors.slice(0, 3).join("\n");
-      const moreErrors =
-        errors.length > 3 ? `\n...and ${errors.length - 3} more` : "";
-      toast.error(
-        `Failed to list ${failCount} land(s):\n${errorSummary}${moreErrors}`,
-        { duration: 6000 }
+      if (landIds.length === 0) {
+        setProcessing(false);
+        setProgress({ current: 0, total: 0 });
+        toast.error("No valid land IDs found");
+        return;
+      }
+
+      setProgress({ current: 2, total: 2 });
+
+      // Step 2: Create single parcel listing with all lands
+      const listingData = {
+        land_ids: landIds,
+        listing_type: listingType,
+      };
+
+      // Set appropriate price fields based on listing type
+      if (listingType === "fixed_price") {
+        listingData.buy_now_price_bdt = parseInt(price);
+      } else if (listingType === "auction") {
+        listingData.starting_price_bdt = parseInt(price);
+        listingData.duration_hours = parseInt(duration);
+      } else if (listingType === "auction_with_buynow") {
+        listingData.starting_price_bdt = parseInt(price);
+        listingData.buy_now_price_bdt = parseInt(buyNowPrice);
+        listingData.duration_hours = parseInt(duration);
+      }
+
+      await marketplaceAPI.createListing(listingData);
+
+      setProcessing(false);
+      setProgress({ current: 0, total: 0 });
+
+      toast.success(
+        `✅ Parcel listing created with ${landIds.length} land${
+          landIds.length > 1 ? "s" : ""
+        }!`
       );
-      console.error("Listing errors:", errors);
-    }
 
-    setShowListingForm(false);
-    setPrice("");
-    setBuyNowPrice("");
-    setDuration("24");
-    clearSelectedLands();
+      setShowListingForm(false);
+      setPrice("");
+      setBuyNowPrice("");
+      setDuration("24");
+      clearSelectedLands();
+    } catch (error) {
+      console.error("Failed to create parcel listing:", error);
+      const errorMsg = error.response?.data?.detail || error.message;
+
+      setProcessing(false);
+      setProgress({ current: 0, total: 0 });
+
+      toast.error(`Failed to create parcel listing: ${errorMsg}`, {
+        duration: 6000,
+      });
+    }
   };
 
   return (
@@ -440,8 +460,13 @@ function MultiLandActionsPanel() {
       {showListingForm && (
         <div className="bg-gray-700 rounded-lg p-4 space-y-3">
           <h4 className="text-white font-semibold mb-2">
-            Bulk Create Listings ({ownedLands.length})
+            Create Parcel Listing ({ownedLands.length} land{ownedLands.length !== 1 ? 's' : ''})
           </h4>
+          <div className="bg-blue-900 bg-opacity-50 border border-blue-500 rounded p-2 mb-3">
+            <p className="text-blue-200 text-xs">
+              ℹ️ <strong>Parcel System:</strong> All selected lands must be edge-connected (touching sides, not diagonals). They will be sold as one unit.
+            </p>
+          </div>
           <form onSubmit={handleBulkListing} className="space-y-3">
             <select
               value={listingType}

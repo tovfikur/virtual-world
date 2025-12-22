@@ -133,4 +133,39 @@ test.describe('VirtualWorld Frontend Tests', () => {
     console.log(`   Total console errors: ${consoleErrors.length}`);
     console.log(`   Total warnings: ${consoleWarnings.length}`);
   });
+
+  test('Admin dashboard loads after login', async ({ page }) => {
+    console.log('\ndY¦ Testing admin dashboard page...\n');
+
+    await page.goto('http://localhost/login', {
+      waitUntil: 'networkidle',
+      timeout: 30000
+    });
+
+    await page.fill('input[type="email"]', 'demo@example.com');
+    await page.fill('input[type="password"]', 'DemoPassword123!');
+    await Promise.all([
+      page.waitForURL('**/world', { timeout: 15000 }),
+      page.click('button[type="submit"]')
+    ]);
+
+    await page.goto('http://localhost/admin', {
+      waitUntil: 'networkidle',
+      timeout: 30000
+    });
+
+    const dashboardHeader = page.getByRole('heading', { name: /Admin Dashboard/i });
+    await expect(dashboardHeader).toBeVisible({ timeout: 10000 });
+
+    const quickStats = page.getByText('System Health', { exact: false });
+    await expect(quickStats).toBeVisible({ timeout: 10000 });
+
+    if (consoleErrors.length > 0) {
+      console.log('ƒ?O Console errors while loading admin:');
+      consoleErrors.forEach(err => console.log(`   - ${err}`));
+    }
+
+    expect(consoleErrors.length, 'Admin page should load without console errors').toBe(0);
+    console.log('\nƒo. Admin dashboard rendered successfully');
+  });
 });

@@ -145,32 +145,59 @@ function MarketplacePage() {
         ) : (
           <>
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-6">
-              {listings.map((listing) => (
-                <div
-                  key={listing.listing_id}
-                  className="bg-gray-800 rounded-lg border border-gray-700 overflow-hidden hover:border-blue-500 transition-colors"
-                >
-                  {/* Biome Badge */}
-                  <div className={`h-24 ${getBiomeColor(listing.land_biome)} flex items-center justify-center`}>
-                    <span className="text-white font-bold text-xl capitalize">
-                      {listing.land_biome}
-                    </span>
-                  </div>
+              {listings.map((listing) => {
+                // Handle both parcel (new) and single land (legacy) data
+                const landCount = listing.land_count || listing.lands?.length || 1;
+                const primaryBiome = listing.biomes?.[0] || listing.land_biome || 'unknown';
+                const isParcel = landCount > 1;
+                const bbox = listing.bounding_box;
 
-                  <div className="p-4">
-                    <div className="flex justify-between items-start mb-3">
-                      <div>
-                        <p className="text-gray-400 text-sm">Coordinates</p>
-                        <p className="font-semibold">({listing.land_x}, {listing.land_y})</p>
-                      </div>
-                      <span className={`px-2 py-1 text-xs rounded ${
-                        listing.listing_type === 'auction' ? 'bg-purple-600' :
-                        listing.listing_type === 'fixed_price' ? 'bg-green-600' :
-                        'bg-blue-600'
-                      }`}>
-                        {listing.listing_type.replace('_', ' ')}
+                return (
+                  <div
+                    key={listing.listing_id}
+                    className="bg-gray-800 rounded-lg border border-gray-700 overflow-hidden hover:border-blue-500 transition-colors"
+                  >
+                    {/* Biome Badge with Land Count */}
+                    <div className={`h-24 ${getBiomeColor(primaryBiome)} flex flex-col items-center justify-center relative`}>
+                      <span className="text-white font-bold text-xl capitalize">
+                        {primaryBiome}
                       </span>
+                      {isParcel && (
+                        <span className="absolute top-2 right-2 bg-black bg-opacity-50 text-white text-xs font-bold px-2 py-1 rounded">
+                          {landCount} Lands
+                        </span>
+                      )}
+                      {listing.biomes && listing.biomes.length > 1 && (
+                        <span className="text-white text-xs mt-1 opacity-80">
+                          +{listing.biomes.length - 1} more biome{listing.biomes.length > 2 ? 's' : ''}
+                        </span>
+                      )}
                     </div>
+
+                    <div className="p-4">
+                      <div className="flex justify-between items-start mb-3">
+                        <div>
+                          <p className="text-gray-400 text-sm">
+                            {isParcel ? 'Parcel Area' : 'Coordinates'}
+                          </p>
+                          {isParcel && bbox ? (
+                            <p className="font-semibold text-sm">
+                              ({bbox.min_x}, {bbox.min_y}) to ({bbox.max_x}, {bbox.max_y})
+                            </p>
+                          ) : (
+                            <p className="font-semibold">
+                              ({listing.land_x || listing.lands?.[0]?.x}, {listing.land_y || listing.lands?.[0]?.y})
+                            </p>
+                          )}
+                        </div>
+                        <span className={`px-2 py-1 text-xs rounded ${
+                          listing.listing_type === 'auction' ? 'bg-purple-600' :
+                          listing.listing_type === 'fixed_price' ? 'bg-green-600' :
+                          'bg-blue-600'
+                        }`}>
+                          {listing.listing_type.replace('_', ' ')}
+                        </span>
+                      </div>
 
                     <div className="mb-3">
                       <p className="text-gray-400 text-sm">Current Price</p>
@@ -205,7 +232,8 @@ function MarketplacePage() {
                     )}
                   </div>
                 </div>
-              ))}
+                );
+              })}
             </div>
 
             {/* Pagination */}

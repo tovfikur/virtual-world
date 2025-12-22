@@ -1,8 +1,11 @@
 // @ts-check
+const path = require('path');
+const os = require('os');
 const { defineConfig, devices } = require('@playwright/test');
 
 module.exports = defineConfig({
   testDir: './tests',
+  outputDir: path.join(os.tmpdir(), 'virtualworld-playwright-output'),
   fullyParallel: false,
   forbidOnly: !!process.env.CI,
   retries: 0,

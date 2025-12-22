@@ -126,6 +126,7 @@ class TokenResponse(BaseModel):
     token_type: str = "Bearer"
     expires_in: int
     user: UserResponse
+    previous_session_terminated: bool = False
 
     class Config:
         json_schema_extra = {
@@ -133,6 +134,7 @@ class TokenResponse(BaseModel):
                 "access_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
                 "token_type": "Bearer",
                 "expires_in": 3600,
+                "previous_session_terminated": True,
                 "user": {
                     "user_id": "550e8400-e29b-41d4-a716-446655440000",
                     "username": "john_doe",

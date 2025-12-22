@@ -6,11 +6,12 @@
  * 3. Fenced land restrictions
  */
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { wsService } from '../services/websocket';
-import { landsAPI, chatAPI } from '../services/api';
+import { landsAPI, chatAPI, wsAPI, usersAPI } from '../services/api';
 import useAuthStore from '../stores/authStore';
 import toast from 'react-hot-toast';
+import LivePanel from './LivePanel';
 
 function ChatBox({ onClose, land, mode = 'proximity' }) {
   const { user } = useAuthStore();
@@ -22,56 +23,208 @@ function ChatBox({ onClose, land, mode = 'proximity' }) {
   const [chatMode, setChatMode] = useState(mode); // 'proximity', 'message', 'restricted'
   const [landOwner, setLandOwner] = useState(null);
   const [roomMembers, setRoomMembers] = useState([]);
+  const [coLocatedUsers, setCoLocatedUsers] = useState([]);
+  const [memberNames, setMemberNames] = useState({});
+  const [restrictionReason, setRestrictionReason] = useState(null);
+  const [accessEntries, setAccessEntries] = useState([]);
+  const [accessRestricted, setAccessRestricted] = useState(false);
+  const [showAccessPanel, setShowAccessPanel] = useState(false);
+  const [accessSearchTerm, setAccessSearchTerm] = useState('');
+  const [accessSearchResults, setAccessSearchResults] = useState([]);
+  const [accessLoading, setAccessLoading] = useState(false);
+  const [accessSaving, setAccessSaving] = useState(false);
+  const [applyToAllFenced, setApplyToAllFenced] = useState(false);
+  const [currentSessionId, setCurrentSessionId] = useState(null);
   const messagesEndRef = useRef(null);
   const typingTimeoutRef = useRef(null);
+  const memberNamesRef = useRef({});
+  const markReadPendingRef = useRef(false);
+  const isOwnLand = land?.owner_id === user?.user_id;
+
+  const rememberMemberNames = useCallback((updates) => {
+    if (!updates || Object.keys(updates).length === 0) return;
+    memberNamesRef.current = { ...memberNamesRef.current, ...updates };
+    setMemberNames(memberNamesRef.current);
+  }, []);
+
+  const resolveMemberNames = useCallback(
+    async (userIds) => {
+      const uniqueIds = Array.from(
+        new Set(userIds.filter((id) => id && !memberNamesRef.current[id]))
+      );
+      if (uniqueIds.length === 0) {
+        return;
+      }
+      try {
+        const onlineResponse = await wsAPI.getOnlineUsers();
+        const collected = {};
+        onlineResponse.data?.users?.forEach((onlineUser) => {
+          if (uniqueIds.includes(onlineUser.user_id)) {
+            collected[onlineUser.user_id] =
+              onlineUser.username || onlineUser.email || "Visitor";
+          }
+        });
+
+        const unresolved = uniqueIds.filter((id) => !collected[id]);
+        if (unresolved.length > 0) {
+          const fetched = await Promise.all(
+            unresolved.map(async (id) => {
+              try {
+                const response = await usersAPI.getUser(id);
+                const username =
+                  response.data?.username ||
+                  response.data?.email ||
+                  response.data?.user_id?.slice(0, 6) ||
+                  "Visitor";
+                return { id, username };
+              } catch (error) {
+                console.error(`Failed to load user ${id}`, error);
+                return { id, username: "Visitor" };
+              }
+            })
+          );
+          fetched.forEach(({ id, username }) => {
+            collected[id] = username;
+          });
+        }
+
+        if (Object.keys(collected).length > 0) {
+          rememberMemberNames(collected);
+        }
+      } catch (error) {
+        console.error("Failed to resolve member names", error);
+      }
+    },
+    [rememberMemberNames]
+  );
+
+  const loadAccessEntries = useCallback(async () => {
+    if (!land?.land_id || !isOwnLand || !land?.fenced) {
+      setAccessEntries([]);
+      setAccessRestricted(false);
+      return;
+    }
+    try {
+      const response = await landsAPI.getChatAccessList(land.land_id);
+      const data = response.data || {};
+      setAccessEntries(data.entries || []);
+      setAccessRestricted(Boolean(data.restricted));
+    } catch (error) {
+      console.error('Failed to load chat access list', error);
+    }
+  }, [land?.land_id, land?.fenced, isOwnLand]);
+
+  const otherMemberNames = useMemo(() => {
+    const seen = new Set();
+    const participantIds = [
+      ...roomMembers,
+      ...coLocatedUsers.map((p) => p.user_id),
+    ];
+    return participantIds
+      .filter((id) => id && id !== user?.user_id)
+      .map((id) => memberNamesRef.current[id] || memberNames[id] || 'Visitor')
+      .filter((name) => {
+        if (seen.has(name)) {
+          return false;
+        }
+        seen.add(name);
+        return true;
+      });
+  }, [roomMembers, memberNames, user?.user_id]);
+
+  const presenceTitle = useMemo(() => {
+    if (chatMode === 'restricted') return null;
+    if (otherMemberNames.length === 0) return null;
+    if (otherMemberNames.length === 1) {
+      const baseName = otherMemberNames[0];
+      return messages.length > 0 ? baseName : `${baseName} is here`;
+    }
+    if (otherMemberNames.length === 2) {
+      return `${otherMemberNames[0]} & ${otherMemberNames[1]} are here`;
+    }
+    return `${otherMemberNames.length} people are chatting here`;
+  }, [chatMode, otherMemberNames, messages.length]);
+
+  const presenceSubtitle = useMemo(() => {
+    if (!presenceTitle) return null;
+    if (otherMemberNames.length > 2) {
+      return `${otherMemberNames.length} visitors are active on this land`;
+    }
+    if (otherMemberNames.length === 2) {
+      return 'Group chat in progress';
+    }
+    return 'Real-time chat is available right now';
+  }, [otherMemberNames.length, presenceTitle]);
+
+  useEffect(() => {
+    loadAccessEntries();
+  }, [loadAccessEntries]);
+
+  useEffect(() => {
+    if (!land?.fenced) {
+      setShowAccessPanel(false);
+    }
+  }, [land?.fenced]);
+
+  const markMessagesAsRead = useCallback(
+    async (explicitSessionId = null) => {
+      if (!isOwnLand) {
+        return;
+      }
+      const sessionIdToUse = explicitSessionId || currentSessionId;
+      if (!sessionIdToUse || markReadPendingRef.current) {
+        return;
+      }
+      markReadPendingRef.current = true;
+      try {
+        await chatAPI.markSessionAsRead(sessionIdToUse);
+        window.dispatchEvent(new CustomEvent('unreadMessagesUpdated'));
+      } catch (error) {
+        console.error('Failed to mark messages as read:', error);
+      } finally {
+        markReadPendingRef.current = false;
+      }
+    },
+    [currentSessionId, isOwnLand]
+  );
 
   // Initialize chat based on land data
   useEffect(() => {
     const initializeChat = async () => {
+      setRestrictionReason(null);
+      setCanChat(true);
+
       if (!land) {
         setCurrentRoom('global');
         setChatMode('proximity');
+        setLandOwner(null);
         return;
       }
 
-      // Check land ownership and fencing
-      const isOwnLand = land.owner_id === user?.user_id;
-      const isFenced = land.fenced;
+      // Check land ownership
+      const ownsLand = land.owner_id === user?.user_id;
+      const isFenced = Boolean(land.fenced);
       const hasOwner = Boolean(land.owner_id);
+      const ownerLabel = land.owner_username || 'Owner';
+      if (hasOwner) {
+        setLandOwner(ownerLabel);
+      } else {
+        setLandOwner(null);
+      }
 
       // Determine chat mode
-      if (isFenced && !isOwnLand) {
-        // Fenced land - restricted access
-        setCanChat(false);
+      if (isFenced && !ownsLand) {
         setChatMode('restricted');
-        setLandOwner(land.owner_username || 'Owner');
-        toast.error('This land is fenced. Only the owner can receive messages here.');
-      } else if (hasOwner && !isOwnLand) {
+        setCanChat(false);
+        setRestrictionReason('This fenced land only allows invited guests.');
+      } else if (hasOwner && !ownsLand) {
         // Someone else's land - leave message mode
         setChatMode('message');
-        setLandOwner(land.owner_username || 'Owner');
         setCanChat(true);
       } else {
         // Own land or unclaimed - proximity chat mode
         setChatMode('proximity');
         setCanChat(true);
-
-        // If owner is opening their own land, mark messages as read
-        if (isOwnLand && land.land_id) {
-          try {
-            // Try to get the land details to find the chat session
-            const response = await landsAPI.getLandByCoords(land.x, land.y);
-            const landData = response.data;
-
-            if (landData.land_id) {
-              await chatAPI.markSessionAsRead(landData.land_id);
-              // Trigger a refresh of unread counts
-              window.dispatchEvent(new CustomEvent('unreadMessagesUpdated'));
-            }
-          } catch (error) {
-            console.error('Failed to mark messages as read:', error);
-          }
-        }
       }
 
       // Set room name based on coordinates
@@ -84,32 +237,56 @@ function ChatBox({ onClose, land, mode = 'proximity' }) {
 
   // Load message history from database
   useEffect(() => {
+    let cancelled = false;
+
     const loadMessageHistory = async () => {
+      let ownsLand = land?.owner_id === user?.user_id;
+      let isFencedVisitor = Boolean(land?.fenced) && !ownsLand;
+      let hasOwner = Boolean(land?.owner_id);
+
       if (!land) {
-        console.log('No land selected, skipping history load');
+        setRestrictionReason(null);
+        setCanChat(true);
+        setMessages([]);
+        setChatMode('proximity');
+        setCurrentSessionId(null);
         return;
       }
 
-      console.log(`Loading message history for land (${land.x}, ${land.y})`);
-
       try {
-        // Try to get land details first to get the land_id
         const landResponse = await landsAPI.getLandByCoords(land.x, land.y);
-        const landData = landResponse.data;
+        if (cancelled) {
+          return;
+        }
+        const landData = landResponse.data || {};
+        const resolvedLandId = landData.land_id || land.land_id;
+        const resolvedOwnerId =
+          landData.owner_id !== undefined ? landData.owner_id : land?.owner_id;
+        ownsLand = resolvedOwnerId
+          ? resolvedOwnerId === user?.user_id
+          : ownsLand;
+        hasOwner = Boolean(resolvedOwnerId);
+        const resolvedFenced =
+          landData.fenced !== undefined ? landData.fenced : land?.fenced;
+        isFencedVisitor = Boolean(resolvedFenced) && !ownsLand;
 
-        console.log('Land data:', landData);
+        if (!resolvedLandId) {
+          setMessages([]);
+          setRestrictionReason(null);
+          setCanChat(true);
+          setChatMode(hasOwner && !ownsLand ? 'message' : 'proximity');
+          setCurrentSessionId(null);
+          return;
+        }
 
-        if (landData.land_id) {
-          console.log(`Land has ID: ${landData.land_id}, fetching messages...`);
-
-          // Load message history for this land's chat session
-          const messagesResponse = await chatAPI.getLandMessages(landData.land_id, 50);
-          const history = messagesResponse.data.messages || [];
-
-          console.log(`✓ Received ${history.length} messages from API:`, history);
-
-          // Set the message history
-          const formattedMessages = history.map(msg => ({
+        try {
+          const messagesResponse = await chatAPI.getLandMessages(resolvedLandId, 50);
+          if (cancelled) {
+            return;
+          }
+          const history = messagesResponse.data?.messages || [];
+          const sessionId = messagesResponse.data?.session_id || null;
+          const formattedMessages = history.map((msg) => ({
             id: msg.message_id,
             sender: msg.sender_username,
             sender_id: msg.sender_id,
@@ -117,34 +294,134 @@ function ChatBox({ onClose, land, mode = 'proximity' }) {
             timestamp: new Date(msg.created_at),
             isHistory: true,
             is_leave_message: msg.is_leave_message,
-            read_by_owner: msg.read_by_owner
+            read_by_owner: msg.read_by_owner,
           }));
 
           setMessages(formattedMessages);
-          console.log(`✓ Set ${formattedMessages.length} messages in state`);
-        } else {
-          // Land not owned yet - no history
-          console.log('Land not owned, no history available');
+          setCurrentSessionId(sessionId);
+          if (sessionId) {
+            await markMessagesAsRead(sessionId);
+          }
+          setRestrictionReason(null);
+          setCanChat(true);
+          setChatMode(hasOwner && !ownsLand ? 'message' : 'proximity');
+        } catch (historyError) {
+          if (cancelled) {
+            return;
+          }
+          if (historyError.response?.status === 403) {
+            setMessages([]);
+            setChatMode('restricted');
+            setCanChat(false);
+            setRestrictionReason(
+              historyError.response?.data?.detail ||
+                'Only invited guests can read or leave messages on this fenced square.'
+            );
+            return;
+          }
+          if (historyError.response?.status === 404) {
+            setMessages([]);
+            if (!isFencedVisitor) {
+              setRestrictionReason(null);
+              setCanChat(true);
+              setChatMode(hasOwner && !ownsLand ? 'message' : 'proximity');
+            } else {
+              setChatMode('restricted');
+              setCanChat(false);
+              setRestrictionReason('This fenced land only allows invited guests.');
+            }
+            return;
+          }
+          console.error('Failed to load message history:', historyError);
           setMessages([]);
+          setCurrentSessionId(null);
         }
       } catch (error) {
-        // If land doesn't have a session yet, that's okay - start fresh
-        if (error.response?.status === 404) {
-          console.log('No message history for this land yet (404)');
-          setMessages([]);
-        } else {
-          console.error('Failed to load message history:', error);
-          setMessages([]);
+        if (cancelled) {
+          return;
         }
+        if (error.response?.status === 404) {
+          setMessages([]);
+          setRestrictionReason(null);
+          setCanChat(true);
+          setChatMode('proximity');
+          setCurrentSessionId(null);
+          return;
+        }
+        console.error('Failed to load land details for chat history:', error);
+        setMessages([]);
+        setCurrentSessionId(null);
       }
     };
 
     loadMessageHistory();
-  }, [land]);
+
+    return () => {
+      cancelled = true;
+    };
+  }, [land, user?.user_id, markMessagesAsRead]);
+
+  useEffect(() => {
+    if (!land) {
+      setCoLocatedUsers([]);
+      return;
+    }
+
+    let cancelled = false;
+
+    const loadOnlinePresence = async () => {
+      try {
+        const response = await wsAPI.getOnlineUsers();
+        if (cancelled) return;
+        const users = response.data?.users || [];
+        const occupants = users.filter((onlineUser) => {
+          const location = onlineUser.presence?.location;
+          if (!location) return false;
+          return (
+            Math.floor(location.x) === land.x &&
+            Math.floor(location.y) === land.y
+          );
+        });
+        setCoLocatedUsers(occupants);
+
+        const names = {};
+        occupants.forEach((occ) => {
+          if (occ.user_id) {
+            names[occ.user_id] =
+              occ.username ||
+              occ.presence?.display_name ||
+              occ.presence?.username ||
+              occ.presence?.name ||
+              'Visitor';
+          }
+        });
+        if (Object.keys(names).length > 0) {
+          rememberMemberNames(names);
+        }
+      } catch (error) {
+        if (!cancelled) {
+          console.error('Failed to load online users for presence', error);
+        }
+      }
+    };
+
+    loadOnlinePresence();
+    const interval = setInterval(loadOnlinePresence, 5000);
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+    };
+  }, [land?.x, land?.y, rememberMemberNames]);
+
+  useEffect(() => {
+    if (roomMembers.length > 0) {
+      resolveMemberNames(roomMembers);
+    }
+  }, [roomMembers, resolveMemberNames]);
 
   // WebSocket connection and message handling
   useEffect(() => {
-    if (!currentRoom) return;
+    if (!currentRoom || chatMode === 'restricted' || !canChat) return;
 
     // Join room
     wsService.joinRoom(currentRoom);
@@ -167,6 +444,10 @@ function ChatBox({ onClose, land, mode = 'proximity' }) {
           read_by_owner: false  // New messages are unread
         }];
       });
+
+      if (msg.is_leave_message && isOwnLand) {
+        markMessagesAsRead();
+      }
     });
 
     // Listen for typing indicators
@@ -196,19 +477,26 @@ function ChatBox({ onClose, land, mode = 'proximity' }) {
     // Listen for room join confirmation and member updates
     const unsubscribeJoined = wsService.on('joined_room', (msg) => {
       if (msg.room_id === currentRoom) {
-        setRoomMembers(msg.members || []);
+        const members = Array.from(new Set(msg.members || []));
+        setRoomMembers(members);
+        resolveMemberNames(members);
       }
     });
 
     // Listen for user joined
     const unsubscribeUserJoined = wsService.on('user_joined', (msg) => {
       if (msg.room_id === currentRoom) {
+        let added = false;
         setRoomMembers((prev) => {
           if (!prev.includes(msg.user_id)) {
+            added = true;
             return [...prev, msg.user_id];
           }
           return prev;
         });
+        if (added) {
+          resolveMemberNames([msg.user_id]);
+        }
       }
     });
 
@@ -240,7 +528,7 @@ function ChatBox({ onClose, land, mode = 'proximity' }) {
       unsubscribeMessagesCleaned();
       wsService.leaveRoom(currentRoom);
     };
-  }, [currentRoom, user]);
+  }, [currentRoom, user, resolveMemberNames, chatMode, canChat, isOwnLand, markMessagesAsRead]);
 
   useEffect(() => {
     // Auto-scroll to bottom
@@ -250,6 +538,10 @@ function ChatBox({ onClose, land, mode = 'proximity' }) {
   const handleSendMessage = (e) => {
     e.preventDefault();
     if (!inputValue.trim()) return;
+    if (!canChat || chatMode === 'restricted') {
+      toast.error('You do not have permission to send messages here.');
+      return;
+    }
 
     wsService.sendMessage(currentRoom, inputValue);
     setInputValue('');
@@ -262,6 +554,7 @@ function ChatBox({ onClose, land, mode = 'proximity' }) {
   };
 
   const handleInputChange = (e) => {
+    if (chatMode === 'restricted' || !canChat) return;
     setInputValue(e.target.value);
 
     // Send typing indicator
@@ -278,22 +571,91 @@ function ChatBox({ onClose, land, mode = 'proximity' }) {
     }, 2000);
   };
 
+  const handleAccessSearch = useCallback(async () => {
+    if (!land?.land_id) return;
+    const term = accessSearchTerm.trim();
+    if (!term) {
+      setAccessSearchResults([]);
+      return;
+    }
+    setAccessLoading(true);
+    try {
+      const response = await landsAPI.searchChatAccess(land.land_id, term);
+      setAccessSearchResults(response.data || []);
+    } catch (error) {
+      console.error('Failed to search users for chat access', error);
+      toast.error('Failed to search users');
+    } finally {
+      setAccessLoading(false);
+    }
+  }, [accessSearchTerm, land?.land_id]);
+
+  const handleGrantAccess = useCallback(
+    async (username) => {
+      if (!land?.land_id) return;
+      setAccessSaving(true);
+      try {
+        await landsAPI.addChatAccess(land.land_id, {
+          username,
+          can_read: true,
+          can_write: true,
+          apply_to_all_fenced: applyToAllFenced,
+        });
+        toast.success(`Granted chat access to ${username}`);
+        await loadAccessEntries();
+        setAccessSearchResults((prev) =>
+          prev.map((entry) =>
+            entry.username === username ? { ...entry, has_access: true } : entry
+          )
+        );
+      } catch (error) {
+        console.error('Failed to grant chat access', error);
+        toast.error(error.response?.data?.detail || 'Failed to grant access');
+      } finally {
+        setAccessSaving(false);
+      }
+    },
+    [land?.land_id, loadAccessEntries, applyToAllFenced]
+  );
+
+  const handleRevokeAccess = useCallback(
+    async (username) => {
+      if (!land?.land_id) return;
+      setAccessSaving(true);
+      try {
+        await landsAPI.removeChatAccess(land.land_id, { username });
+        toast.success(`Removed chat access for ${username}`);
+        await loadAccessEntries();
+        setAccessSearchResults((prev) =>
+          prev.map((entry) =>
+            entry.username === username ? { ...entry, has_access: false } : entry
+          )
+        );
+      } catch (error) {
+        console.error('Failed to remove chat access', error);
+        toast.error(error.response?.data?.detail || 'Failed to remove access');
+      } finally {
+        setAccessSaving(false);
+      }
+    },
+    [land?.land_id, loadAccessEntries]
+  );
+
   const getChatTitle = () => {
     if (chatMode === 'restricted') {
-      return `🔒 Fenced Land - Access Denied`;
+      return 'FENCED';
     }
     if (chatMode === 'message') {
-      return `📬 Leave Message for ${landOwner}`;
+      return `Leave Message for ${landOwner || 'Owner'}`;
     }
     if (land) {
-      return `💬 Land Chat (${land.x}, ${land.y})`;
+      return `Land Chat (${land.x}, ${land.y})`;
     }
-    return `💬 Global Chat`;
+    return 'Global Chat';
   };
-
   const getChatSubtitle = () => {
     if (chatMode === 'restricted') {
-      return `Only ${landOwner} can receive messages here`;
+      return restrictionReason || `Only ${landOwner || 'the owner'} can receive messages here`;
     }
     if (chatMode === 'message') {
       return `Your message will be saved for the owner`;
@@ -303,6 +665,12 @@ function ChatBox({ onClose, land, mode = 'proximity' }) {
     }
     return `Chat with nearby players`;
   };
+
+  const chatHeaderTitle = presenceTitle || getChatTitle();
+  const chatHeaderSubtitle =
+    presenceTitle && presenceSubtitle
+      ? presenceSubtitle
+      : getChatSubtitle();
 
   const handleCleanMessages = async () => {
     if (!land || !land.land_id) {
@@ -336,12 +704,12 @@ function ChatBox({ onClose, land, mode = 'proximity' }) {
       {/* Header */}
       <div className={`flex items-center justify-between px-3 md:px-4 py-2 md:py-3 border-b ${chatMode === 'restricted' ? 'bg-red-900/30 border-red-700' : chatMode === 'message' ? 'bg-blue-900/30 border-blue-700' : 'border-gray-700'}`}>
         <div className="flex-1">
-          <h3 className="text-white font-semibold text-sm md:text-base">{getChatTitle()}</h3>
+          <h3 className="text-white font-semibold text-sm md:text-base">{chatHeaderTitle}</h3>
           <div className="flex items-center gap-2">
-            <p className="text-[10px] md:text-xs text-gray-400">{getChatSubtitle()}</p>
+            <p className="text-[10px] md:text-xs text-gray-400">{chatHeaderSubtitle}</p>
             {roomMembers.length > 0 && chatMode === 'proximity' && (
               <span className="inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] bg-green-600/30 text-green-300 border border-green-600/50">
-                👥 {roomMembers.length} here
+                {roomMembers.length} here
               </span>
             )}
           </div>
@@ -370,8 +738,113 @@ function ChatBox({ onClose, land, mode = 'proximity' }) {
         </div>
       </div>
 
+      {currentRoom && land && chatMode !== 'restricted' && (
+        <div className="px-3 md:px-4 py-2 border-b border-gray-700 bg-gray-900/30">
+          <LivePanel roomId={currentRoom} land={land} user={user} />
+        </div>
+      )}
+
       {/* Messages */}
       <div className="flex-1 overflow-y-auto p-3 md:p-4 space-y-2 md:space-y-3">
+        {isOwnLand && land?.land_id && land?.fenced && (
+          <div className="bg-gray-900/40 border border-gray-700 rounded-lg p-3 mb-2">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-[10px] uppercase text-gray-500 tracking-wide">Chat Access</p>
+                <p className="text-sm text-white">
+                  {accessRestricted
+                    ? `${accessEntries.length} invited ${accessEntries.length === 1 ? 'guest' : 'guests'}`
+                    : 'Open to everyone'}
+                </p>
+              </div>
+              <button
+                onClick={() => setShowAccessPanel((prev) => !prev)}
+                className="text-xs px-2 py-1 rounded border border-gray-600 text-gray-200 hover:bg-gray-700 transition-colors"
+              >
+                {showAccessPanel ? 'Hide' : 'Manage'}
+              </button>
+            </div>
+            {showAccessPanel && (
+              <div className="mt-3 space-y-3">
+                <div className="flex space-x-2">
+                  <input
+                    type="text"
+                    value={accessSearchTerm}
+                    onChange={(e) => setAccessSearchTerm(e.target.value)}
+                    placeholder="Search username"
+                    className="flex-1 px-2 py-1.5 text-sm rounded border border-gray-600 bg-gray-900 text-gray-100 focus:outline-none focus:border-blue-500"
+                  />
+                  <button
+                    type="button"
+                    onClick={handleAccessSearch}
+                    className="px-3 py-1.5 rounded bg-blue-600 hover:bg-blue-700 text-white text-sm disabled:opacity-50"
+                    disabled={accessLoading}
+                  >
+                    {accessLoading ? 'Searching...' : 'Search'}
+                  </button>
+                </div>
+                <label className="flex items-center space-x-2 text-xs text-gray-300">
+                  <input
+                    type="checkbox"
+                    className="rounded border-gray-600 bg-gray-900 text-blue-500 focus:ring-blue-500"
+                    checked={applyToAllFenced}
+                    onChange={(e) => setApplyToAllFenced(e.target.checked)}
+                  />
+                  <span>Apply to all of my fenced squares</span>
+                </label>
+                {accessSearchResults.length > 0 && (
+                  <div className="bg-gray-900/60 border border-gray-700 rounded-lg max-h-32 overflow-y-auto">
+                    {accessSearchResults.map((result) => (
+                      <div
+                        key={result.user_id}
+                        className="flex items-center justify-between px-2 py-1 text-sm text-gray-200 border-b border-gray-800 last:border-b-0"
+                      >
+                        <span>{result.username}</span>
+                        <button
+                          type="button"
+                          disabled={result.has_access || accessSaving}
+                          onClick={() => handleGrantAccess(result.username)}
+                          className={`px-2 py-0.5 rounded text-xs ${
+                            result.has_access
+                              ? 'bg-green-700/40 text-green-200 cursor-default'
+                              : 'bg-green-600 hover:bg-green-700 text-white'
+                          }`}
+                        >
+                          {result.has_access ? 'Added' : 'Grant access'}
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                <div>
+                  <p className="text-xs text-gray-400 mb-1">People who can view & leave messages:</p>
+                  {accessEntries.length === 0 ? (
+                    <p className="text-xs text-gray-500">No invited guests yet — chat is open to everyone.</p>
+                  ) : (
+                    <ul className="space-y-1">
+                      {accessEntries.map((entry) => (
+                        <li
+                          key={entry.access_id}
+                          className="flex items-center justify-between text-sm text-gray-100 bg-gray-900/60 border border-gray-800 rounded px-2 py-1"
+                        >
+                          <span>{entry.username}</span>
+                          <button
+                            type="button"
+                            className="text-xs text-red-300 hover:text-red-200"
+                            disabled={accessSaving}
+                            onClick={() => handleRevokeAccess(entry.username)}
+                          >
+                            Remove
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
         {chatMode === 'restricted' ? (
           <div className="text-center text-red-400 mt-8">
             <div className="w-16 h-16 mx-auto mb-4 bg-red-900/50 rounded-full flex items-center justify-center">
@@ -379,9 +852,9 @@ function ChatBox({ onClose, land, mode = 'proximity' }) {
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
               </svg>
             </div>
-            <p className="text-lg font-semibold mb-2">This land is fenced</p>
-            <p className="text-sm text-gray-400">Only {landOwner} can receive messages on this land</p>
-            <p className="text-xs text-gray-500 mt-3">The owner has restricted access to this property</p>
+            <p className="text-lg font-semibold mb-2">Chat access restricted</p>
+            <p className="text-sm text-gray-300">{restrictionReason || `Only ${landOwner || 'the owner'} can receive messages here`}</p>
+            <p className="text-xs text-gray-500 mt-3">The owner has limited who can read or leave messages on this square.</p>
           </div>
         ) : messages.length === 0 ? (
           <div className="text-center text-gray-500 mt-8">
@@ -477,8 +950,8 @@ function ChatBox({ onClose, land, mode = 'proximity' }) {
           </div>
         ) : (
           <div className="text-center py-3 bg-red-900/20 rounded-lg border border-red-700">
-            <p className="text-red-400 text-sm font-semibold">🔒 Chat Disabled</p>
-            <p className="text-xs text-gray-400 mt-1">This fenced land is private</p>
+            <p className="text-red-400 text-sm font-semibold">Chat Disabled</p>
+            <p className="text-xs text-gray-400 mt-1">Chat Disabled</p>
           </div>
         )}
       </form>

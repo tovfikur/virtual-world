@@ -163,20 +163,25 @@ class Land(BaseModel):
         "Transaction",
         back_populates="land"
     )
-    listings = relationship(
-        "Listing",
+    listing_lands = relationship(
+        "ListingLand",
         back_populates="land"
     )
     chat_sessions = relationship(
         "ChatSession",
         back_populates="land"
     )
+    chat_access = relationship(
+        "LandChatAccess",
+        back_populates="land",
+        cascade="all, delete-orphan"
+    )
 
     @validates("x", "y")
     def validate_coordinates(self, key: str, value: int) -> int:
-        """Validate coordinates are non-negative."""
-        if value < 0:
-            raise ValueError(f"{key} must be non-negative")
+        """Validate coordinates are within reasonable bounds."""
+        # World supports infinite grid including negative coordinates
+        # Just ensure it's a valid integer (no additional bounds checking)
         return value
 
     @validates("biome")

@@ -15,6 +15,8 @@ import RegisterPage from './pages/RegisterPage';
 import WorldPage from './pages/WorldPage';
 import MarketplacePage from './pages/MarketplacePage';
 import ProfilePage from './pages/ProfilePage';
+import TradingPage from './pages/TradingPage';
+import OrdersPage from './pages/OrdersPage';
 
 // Admin Pages
 import AdminDashboardPage from './pages/AdminDashboardPage';
@@ -33,7 +35,7 @@ import ProtectedRoute from './components/ProtectedRoute';
 import LoadingScreen from './components/LoadingScreen';
 
 function App() {
-  const { isAuthenticated, isLoading, loadUser } = useAuthStore();
+  const { isAuthenticated, isLoading, loadUser, logout } = useAuthStore();
 
   // Load user on mount
   useEffect(() => {
@@ -96,6 +98,20 @@ function App() {
     };
   }, [isAuthenticated]);
 
+  useEffect(() => {
+    if (!isAuthenticated) return;
+
+    const unsubscribe = wsService.on('session_invalidated', (message) => {
+      const reason = message?.reason || 'You have been logged out from another device.';
+      toast.error(reason);
+      logout();
+    });
+
+    return () => {
+      if (unsubscribe) unsubscribe();
+    };
+  }, [isAuthenticated, logout]);
+
   if (isLoading) {
     return <LoadingScreen />;
   }
@@ -143,6 +159,22 @@ function App() {
           element={
             <ProtectedRoute>
               <MarketplacePage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/trading"
+          element={
+            <ProtectedRoute>
+              <TradingPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/exchange"
+          element={
+            <ProtectedRoute>
+              <OrdersPage />
             </ProtectedRoute>
           }
         />

@@ -10,6 +10,7 @@ __pycache__/
 *.lock
 *.tmp
 *.pyc
+tmp_script.py
 /.claude/
 /.vscode/
 .env

@@ -19,6 +19,10 @@ from app.models.user import User
 from app.models.land import Land
 from app.models.admin_config import AdminConfig
 from app.models.transaction import Transaction
+from app.models.instrument import Instrument
+from app.models.order import Order
+from app.models.trade import Trade
+from app.models.market_status import MarketStatus
 
 
 async def create_tables():

@@ -12,20 +12,26 @@ class WebSocketService {
     this.maxReconnectAttempts = 5;
     this.reconnectDelay = 1000;
     this.heartbeatInterval = null;
+    this.shouldReconnect = true;
+    this.lastToken = null;
   }
 
   connect(token) {
+    console.log("[ws] connect called");
     const envWsUrl = import.meta.env.VITE_WS_URL;
     const defaultWsUrl = `${window.location.protocol === 'https:' ? 'wss://' : 'ws://'}${window.location.host}`;
     const wsUrl = envWsUrl && envWsUrl.trim() !== '' ? envWsUrl : defaultWsUrl;
     const url = `${wsUrl.replace(/\/?$/, '')}/api/v1/ws/connect?token=${token}`;
+
+    this.lastToken = token;
+    this.shouldReconnect = true;
 
     return new Promise((resolve, reject) => {
       try {
         this.ws = new WebSocket(url);
 
         this.ws.onopen = () => {
-          console.log('WebSocket connected');
+          console.log('[ws] connected');
           this.isConnected = true;
           this.reconnectAttempts = 0;
           this.startHeartbeat();
@@ -35,22 +41,27 @@ class WebSocketService {
         this.ws.onmessage = (event) => {
           try {
             const message = JSON.parse(event.data);
+            console.log("[ws] recv", message);
             this.handleMessage(message);
           } catch (error) {
-            console.error('Failed to parse WebSocket message:', error);
+            console.error('[ws] Failed to parse WebSocket message:', error);
           }
         };
 
         this.ws.onerror = (error) => {
-          console.error('WebSocket error:', error);
+          console.error('[ws] error:', error);
           reject(error);
         };
 
         this.ws.onclose = () => {
-          console.log('WebSocket disconnected');
+          console.log('[ws] disconnected');
           this.isConnected = false;
           this.stopHeartbeat();
-          this.attemptReconnect(token);
+          if (this.shouldReconnect && this.lastToken) {
+            this.attemptReconnect(this.lastToken);
+          } else {
+            this.reconnectAttempts = 0;
+          }
         };
       } catch (error) {
         console.error('Failed to create WebSocket:', error);
@@ -61,7 +72,11 @@ class WebSocketService {
 
   disconnect() {
     this.stopHeartbeat();
+    this.shouldReconnect = false;
+    this.reconnectAttempts = 0;
+    this.lastToken = null;
     if (this.ws) {
+      console.log("[ws] disconnect invoked");
       this.ws.close();
       this.ws = null;
     }
@@ -76,10 +91,11 @@ class WebSocketService {
 
     try {
       const message = JSON.stringify({ type, ...data });
+      console.log("[ws] send", { type, data });
       this.ws.send(message);
       return true;
     } catch (error) {
-      console.error('Failed to send WebSocket message:', error);
+      console.error('[ws] Failed to send WebSocket message:', error);
       return false;
     }
   }

@@ -4,6 +4,7 @@
  */
 
 import axios from 'axios';
+import { marketAPI } from './market';
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || `${window.location.origin}/api/v1`;
 
@@ -149,6 +150,18 @@ export const landsAPI = {
 
   getLandHeatmap: (landId, radius = 10) =>
     api.get(`/lands/${landId}/heatmap`, { params: { radius } }),
+
+  getChatAccessList: (landId) =>
+    api.get(`/lands/${landId}/chat/access`),
+
+  addChatAccess: (landId, data) =>
+    api.post(`/lands/${landId}/chat/access`, data),
+
+  removeChatAccess: (landId, data) =>
+    api.delete(`/lands/${landId}/chat/access`, { data }),
+
+  searchChatAccess: (landId, username) =>
+    api.get(`/lands/${landId}/chat/access/search`, { params: { username } }),
 };
 
 // ============================================
@@ -261,6 +274,32 @@ export const wsAPI = {
 
   getActiveCalls: () =>
     api.get('/webrtc/active-calls'),
+};
+
+// ============================================
+// Trading (batch exchange)
+// ============================================
+
+export const tradingAPI = {
+  listCompanies: () => api.get('/trading/companies'),
+  createCompany: (data) => api.post('/trading/companies', data),
+  createTransaction: (data) => api.post('/trading/transactions', data),
+  runBatch: () => api.post('/trading/run-batch'),
+  deleteCompany: (companyId) => api.delete(`/trading/companies/${companyId}`),
+};
+
+// ============================================
+// Exchange orders & trades
+// ============================================
+
+export const ordersAPI = {
+  placeOrder: (data) => api.post('/orders', data),
+  listOrders: (params) => api.get('/orders', { params }),
+  cancelOrder: (orderId) => api.delete(`/orders/${orderId}`),
+};
+
+export const tradesAPI = {
+  listTrades: (params) => api.get('/trades', { params }),
 };
 
 // ============================================

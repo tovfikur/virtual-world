@@ -4,14 +4,17 @@ World generation and chunk retrieval
 """
 
 from fastapi import APIRouter, HTTPException, status, Query, Body, Path, Depends
-from typing import List, Tuple, Dict
+from typing import List, Tuple, Dict, Optional, Set
 import logging
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, and_
+import uuid
 
 from app.services.world_service import world_service
 from app.db.session import get_db
 from app.models.land import Land
+from app.models.land_chat_access import LandChatAccess
+from app.dependencies import get_optional_user
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/chunks", tags=["chunks"])
@@ -19,7 +22,8 @@ router = APIRouter(prefix="/chunks", tags=["chunks"])
 
 async def enrich_chunk_with_ownership(
     chunk_data: Dict,
-    db: AsyncSession
+    db: AsyncSession,
+    user_uuid: Optional[uuid.UUID] = None,
 ) -> Dict:
     """
     Enrich chunk data with ownership and fencing information.
@@ -57,28 +61,56 @@ async def enrich_chunk_with_ownership(
     )
 
     owned_lands = result.all()
+    owned_land_ids: List[uuid.UUID] = []
 
     # Create a lookup map for owned lands with all ownership data
     ownership_lookup = {
         (row.x, row.y): {
             "land_id": str(row.land_id),
             "owner_id": str(row.owner_id),
-            "fenced": row.fenced
+            "fenced": row.fenced,
         }
         for row in owned_lands
     }
+    owned_land_ids = [row.land_id for row in owned_lands]
+
+    guest_access_ids: Set[str] = set()
+    if user_uuid and owned_land_ids:
+        access_result = await db.execute(
+            select(LandChatAccess.land_id)
+            .where(
+                LandChatAccess.land_id.in_(owned_land_ids),
+                LandChatAccess.user_id == user_uuid,
+                LandChatAccess.can_read.is_(True),
+            )
+        )
+        guest_access_ids = {str(land_id) for land_id in access_result.scalars().all()}
+
+    user_id_str = str(user_uuid) if user_uuid else None
 
     # Enrich land data with ownership and fencing information
     for land in lands:
         coord_key = (land["x"], land["y"])
         if coord_key in ownership_lookup:
             # Land is owned - add ownership data
-            land["land_id"] = ownership_lookup[coord_key]["land_id"]
-            land["owner_id"] = ownership_lookup[coord_key]["owner_id"]
-            land["fenced"] = ownership_lookup[coord_key]["fenced"]
+            ownership_entry = ownership_lookup[coord_key]
+            land["land_id"] = ownership_entry["land_id"]
+            land["owner_id"] = ownership_entry["owner_id"]
+            land["fenced"] = ownership_entry["fenced"]
+
+            if land["fenced"]:
+                has_guest_access = ownership_entry["land_id"] in guest_access_ids
+                is_owner = (
+                    user_id_str is not None
+                    and ownership_entry["owner_id"] == user_id_str
+                )
+                land["guest_access"] = has_guest_access or is_owner
+            else:
+                land["guest_access"] = False
         else:
             # Land is not owned
             land["fenced"] = False
+            land["guest_access"] = False
 
     return chunk_data
 
@@ -88,7 +120,8 @@ async def get_chunk(
     chunk_x: int,
     chunk_y: int,
     chunk_size: int = Query(32, ge=8, le=64, description="Chunk size (8-64)"),
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
+    current_user: Optional[dict] = Depends(get_optional_user),
 ):
     """
     Get a generated chunk at specified coordinates.
@@ -108,7 +141,13 @@ async def get_chunk(
     try:
         chunk_data = await world_service.generate_chunk(chunk_x, chunk_y, chunk_size)
         # Enrich with ownership/fencing data
-        chunk_data = await enrich_chunk_with_ownership(chunk_data, db)
+        user_uuid = None
+        if current_user:
+            try:
+                user_uuid = uuid.UUID(current_user["sub"])
+            except (ValueError, KeyError, TypeError):
+                user_uuid = None
+        chunk_data = await enrich_chunk_with_ownership(chunk_data, db, user_uuid)
         return chunk_data
     except Exception as e:
         logger.error(f"Failed to generate chunk {chunk_x},{chunk_y}: {e}")
@@ -126,7 +165,8 @@ async def get_chunks_batch(
         example=[[0, 0], [0, 1], [1, 0], [1, 1]]
     ),
     chunk_size: int = Query(32, ge=8, le=64),
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
+    current_user: Optional[dict] = Depends(get_optional_user),
 ):
     """
     Get multiple chunks in a single request.
@@ -158,11 +198,21 @@ async def get_chunks_batch(
         # Convert list of lists to list of tuples
         chunk_tuples = [tuple(c) for c in chunks]
         chunks_data = await world_service.generate_chunks_batch(chunk_tuples, chunk_size)
+        user_uuid = None
+        if current_user:
+            try:
+                user_uuid = uuid.UUID(current_user["sub"])
+            except (ValueError, KeyError, TypeError):
+                user_uuid = None
 
         # Enrich all chunks with ownership/fencing data
         enriched_chunks = []
         for chunk_data in chunks_data:
-            enriched_chunk = await enrich_chunk_with_ownership(chunk_data, db)
+            enriched_chunk = await enrich_chunk_with_ownership(
+                chunk_data,
+                db,
+                user_uuid,
+            )
             enriched_chunks.append(enriched_chunk)
 
         return {

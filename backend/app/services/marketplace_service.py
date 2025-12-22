@@ -11,11 +11,13 @@ import uuid
 import logging
 
 from app.models.listing import Listing, ListingType, ListingStatus
+from app.models.listing_land import ListingLand
 from app.models.bid import Bid, BidStatus
 from app.models.land import Land
 from app.models.user import User
 from app.models.transaction import Transaction, TransactionType, TransactionStatus
 from app.services.cache_service import cache_service
+from app.services.parcel_service import parcel_service
 from app.config import CACHE_TTLS
 
 logger = logging.getLogger(__name__)
@@ -27,7 +29,7 @@ class MarketplaceService:
     @staticmethod
     async def create_listing(
         db: AsyncSession,
-        land_id: uuid.UUID,
+        land_ids: List[uuid.UUID],
         seller_id: uuid.UUID,
         listing_type: ListingType,
         starting_price_bdt: Optional[int] = None,
@@ -37,16 +39,16 @@ class MarketplaceService:
         auto_extend_minutes: int = 5
     ) -> Listing:
         """
-        Create a new marketplace listing.
+        Create a new marketplace listing for a parcel.
 
         Args:
             db: Database session
-            land_id: Land to list
+            land_ids: List of land UUIDs in parcel (must be connected)
             seller_id: Seller user ID
             listing_type: Type of listing
-            starting_price_bdt: Starting price for auction
+            starting_price_bdt: Starting price for auction (for entire parcel)
             reserve_price_bdt: Reserve price for auction
-            buy_now_price_bdt: Buy now price
+            buy_now_price_bdt: Buy now price (for entire parcel)
             duration_hours: Auction duration
             auto_extend_minutes: Auto-extend on late bids
 
@@ -56,29 +58,34 @@ class MarketplaceService:
         Raises:
             ValueError: If validation fails
         """
-        # Verify land exists and is owned by seller
+        # Fetch all lands
         result = await db.execute(
-            select(Land).where(Land.land_id == land_id)
+            select(Land).where(Land.land_id.in_(land_ids))
         )
-        land = result.scalar_one_or_none()
+        lands = result.scalars().all()
 
-        if not land:
-            raise ValueError("Land not found")
+        if len(lands) != len(land_ids):
+            raise ValueError(f"Some lands not found (expected {len(land_ids)}, found {len(lands)})")
 
-        if land.owner_id != seller_id:
-            raise ValueError("You can only list your own land")
+        # Verify all lands are owned by seller
+        for land in lands:
+            if land.owner_id != seller_id:
+                raise ValueError(f"You can only list your own lands (land at {land.x},{land.y} not owned)")
 
-        # Check if land is already listed
-        existing_listing = await db.execute(
-            select(Listing).where(
-                and_(
-                    Listing.land_id == land_id,
-                    Listing.status == ListingStatus.ACTIVE
-                )
+        # Check if any land is already listed
+        for land in lands:
+            existing = await db.execute(
+                select(ListingLand).where(
+                    ListingLand.land_id == land.land_id
+                ).join(Listing).where(Listing.status == ListingStatus.ACTIVE)
             )
-        )
-        if existing_listing.scalar_one_or_none():
-            raise ValueError("Land is already listed")
+            if existing.scalar_one_or_none():
+                raise ValueError(f"Land at ({land.x},{land.y}) is already in an active listing")
+
+        # Validate connectivity (lands must be edge-connected)
+        land_coords = [(land.x, land.y) for land in lands]
+        if not parcel_service.validate_connectivity(land_coords):
+            raise ValueError("Lands must be connected (edge-adjacent, no diagonal-only connections)")
 
         # Calculate end time for auctions
         ends_at = None
@@ -87,7 +94,6 @@ class MarketplaceService:
 
         # Create listing
         listing = Listing(
-            land_id=land_id,
             seller_id=seller_id,
             type=listing_type,
             price_bdt=starting_price_bdt or buy_now_price_bdt,
@@ -99,18 +105,28 @@ class MarketplaceService:
         )
 
         db.add(listing)
+        await db.flush()  # Get listing_id
+
+        # Create ListingLand records for each land in parcel
+        for land in lands:
+            listing_land = ListingLand(
+                listing_id=listing.listing_id,
+                land_id=land.land_id
+            )
+            db.add(listing_land)
+
+            # Mark land as for sale
+            land.for_sale = True
+
         await db.commit()
         await db.refresh(listing)
 
-        # Mark land as for sale
-        land.for_sale = True
-        await db.commit()
-
         # Invalidate caches
-        await cache_service.delete(f"land:{land_id}")
+        for land in lands:
+            await cache_service.delete(f"land:{land.land_id}")
         await cache_service.delete(f"active_listings")
 
-        logger.info(f"Listing created: {listing.listing_id} for land {land_id}")
+        logger.info(f"Parcel listing created: {listing.listing_id} with {len(lands)} lands")
 
         return listing
 
@@ -265,26 +281,32 @@ class MarketplaceService:
         )
         seller = result.scalar_one_or_none()
 
-        # Get land
+        # Get all lands in the parcel
         result = await db.execute(
-            select(Land).where(Land.land_id == listing.land_id)
+            select(Land).join(ListingLand).where(
+                ListingLand.listing_id == listing_id
+            )
         )
-        land = result.scalar_one_or_none()
+        lands = result.scalars().all()
+
+        if not lands:
+            raise ValueError("No lands found in listing")
 
         # Execute transaction
         buyer.balance_bdt -= listing.buy_now_price_bdt
         seller.balance_bdt += listing.buy_now_price_bdt
 
-        # Transfer land ownership
-        land.owner_id = buyer_id
-        land.for_sale = False
-        land.fenced = False
-        land.passcode_hash = None
+        # Transfer all lands in parcel to buyer
+        for land in lands:
+            land.owner_id = buyer_id
+            land.for_sale = False
+            land.fenced = False
+            land.passcode_hash = None
 
-        # Create transaction record
+        # Create transaction record (with land_count for parcel)
         transaction = Transaction(
             listing_id=listing_id,
-            land_id=listing.land_id,
+            land_id=lands[0].land_id if lands else None,  # Primary land for legacy compat
             buyer_id=buyer_id,
             seller_id=listing.seller_id,
             amount_bdt=listing.buy_now_price_bdt,
@@ -302,13 +324,14 @@ class MarketplaceService:
 
         # Invalidate caches
         await cache_service.delete(f"listing:{listing_id}")
-        await cache_service.delete(f"land:{listing.land_id}")
+        for land in lands:
+            await cache_service.delete(f"land:{land.land_id}")
         await cache_service.delete(f"user:{buyer_id}")
         await cache_service.delete(f"user:{seller.user_id}")
 
         logger.info(
             f"Buy now completed: listing {listing_id}, "
-            f"buyer {buyer_id}, amount {listing.buy_now_price_bdt} BDT"
+            f"buyer {buyer_id}, {len(lands)} lands, amount {listing.buy_now_price_bdt} BDT"
         )
 
         return transaction
@@ -353,13 +376,16 @@ class MarketplaceService:
             await db.commit()
 
             # Return land to not for sale
+            # Get all lands in parcel
             result = await db.execute(
-                select(Land).where(Land.land_id == listing.land_id)
+                select(Land).join(ListingLand).where(
+                    ListingLand.listing_id == listing_id
+                )
             )
-            land = result.scalar_one_or_none()
-            if land:
+            lands = result.scalars().all()
+            for land in lands:
                 land.for_sale = False
-                await db.commit()
+            await db.commit()
 
             logger.info(f"Auction expired (reserve not met): {listing_id}")
             return None
@@ -369,13 +395,16 @@ class MarketplaceService:
             listing.status = ListingStatus.EXPIRED
             await db.commit()
 
+            # Get all lands in parcel
             result = await db.execute(
-                select(Land).where(Land.land_id == listing.land_id)
+                select(Land).join(ListingLand).where(
+                    ListingLand.listing_id == listing_id
+                )
             )
-            land = result.scalar_one_or_none()
-            if land:
+            lands = result.scalars().all()
+            for land in lands:
                 land.for_sale = False
-                await db.commit()
+            await db.commit()
 
             logger.info(f"Auction expired (no bids): {listing_id}")
             return None
@@ -391,10 +420,13 @@ class MarketplaceService:
         )
         seller = result.scalar_one_or_none()
 
+        # Get all lands in parcel
         result = await db.execute(
-            select(Land).where(Land.land_id == listing.land_id)
+            select(Land).join(ListingLand).where(
+                ListingLand.listing_id == listing_id
+            )
         )
-        land = result.scalar_one_or_none()
+        lands = result.scalars().all()
 
         # Execute sale
         final_price = listing.current_price_bdt
@@ -410,16 +442,17 @@ class MarketplaceService:
         buyer.balance_bdt -= final_price
         seller.balance_bdt += final_price
 
-        # Transfer land
-        land.owner_id = buyer.user_id
-        land.for_sale = False
-        land.fenced = False
-        land.passcode_hash = None
+        # Transfer all lands in parcel
+        for land in lands:
+            land.owner_id = buyer.user_id
+            land.for_sale = False
+            land.fenced = False
+            land.passcode_hash = None
 
         # Create transaction
         transaction = Transaction(
             listing_id=listing_id,
-            land_id=listing.land_id,
+            land_id=lands[0].land_id if lands else None,  # Primary land for legacy compat
             buyer_id=buyer.user_id,
             seller_id=seller.user_id,
             amount_bdt=final_price,
@@ -437,7 +470,8 @@ class MarketplaceService:
 
         # Invalidate caches
         await cache_service.delete(f"listing:{listing_id}")
-        await cache_service.delete(f"land:{listing.land_id}")
+        for land in lands:
+            await cache_service.delete(f"land:{land.land_id}")
 
         logger.info(
             f"Auction finalized: listing {listing_id}, "
@@ -486,21 +520,24 @@ class MarketplaceService:
 
         listing.status = ListingStatus.CANCELLED
 
-        # Mark land as not for sale
+        # Mark all lands in parcel as not for sale
         result = await db.execute(
-            select(Land).where(Land.land_id == listing.land_id)
+            select(Land).join(ListingLand).where(
+                ListingLand.listing_id == listing_id
+            )
         )
-        land = result.scalar_one_or_none()
-        if land:
+        lands = result.scalars().all()
+        for land in lands:
             land.for_sale = False
 
         await db.commit()
         await db.refresh(listing)
 
         await cache_service.delete(f"listing:{listing_id}")
-        await cache_service.delete(f"land:{listing.land_id}")
+        for land in lands:
+            await cache_service.delete(f"land:{land.land_id}")
 
-        logger.info(f"Listing cancelled: {listing_id}")
+        logger.info(f"Parcel listing cancelled: {listing_id} with {len(lands)} lands")
 
         return listing
 

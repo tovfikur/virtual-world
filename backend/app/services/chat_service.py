@@ -16,6 +16,7 @@ from app.models.chat import ChatSession
 from app.models.chat import Message
 from app.models.user import User
 from app.models.land import Land
+from app.models.land_chat_access import LandChatAccess
 from app.config import settings
 from app.services.cache_service import cache_service
 
@@ -73,6 +74,57 @@ class ChatService:
         except Exception as e:
             logger.error(f"Decryption failed: {e}")
             raise ValueError("Message decryption failed")
+
+    async def enforce_land_chat_access(
+        self,
+        db: AsyncSession,
+        land: Land,
+        user_id: Optional[uuid.UUID],
+        require_write: bool = False,
+    ) -> None:
+        """
+        Ensure a user has permission to read/write messages on a land.
+
+        Raises PermissionError when access is restricted.
+        """
+        if not land:
+            raise ValueError("Land not found")
+
+        if not user_id:
+            raise PermissionError("Authentication required for land chat")
+
+        if land.owner_id == user_id:
+            return
+
+        result = await db.execute(
+            select(func.count(LandChatAccess.access_id)).where(
+                LandChatAccess.land_id == land.land_id
+            )
+        )
+        restriction_count = result.scalar() or 0
+        requires_explicit_access = land.fenced or restriction_count > 0
+
+        if not requires_explicit_access:
+            return
+
+        result = await db.execute(
+            select(LandChatAccess).where(
+                LandChatAccess.land_id == land.land_id,
+                LandChatAccess.user_id == user_id,
+            )
+        )
+        access_entry = result.scalar_one_or_none()
+
+        if not access_entry:
+            raise PermissionError(
+                "Chat access is restricted on this land. Please ask the owner to invite you."
+            )
+
+        if require_write and not access_entry.can_write:
+            raise PermissionError("You do not have permission to leave messages on this land.")
+
+        if not require_write and not access_entry.can_read:
+            raise PermissionError("You do not have permission to view messages on this land.")
 
     async def get_or_create_land_chat(
         self,
@@ -189,6 +241,7 @@ class ChatService:
 
         Raises:
             ValueError: If chat session not found, sender not found, or fenced land restriction
+            PermissionError: If sender lacks chat access permissions
         """
         # Verify chat session exists
         result = await db.execute(
@@ -216,9 +269,12 @@ class ChatService:
             land = result.scalar_one_or_none()
 
             if land:
-                # If land is fenced and sender is not the owner, deny message
-                if land.fenced and land.owner_id != sender_id:
-                    raise ValueError(f"This land is fenced. Only the owner can receive messages here.")
+                await self.enforce_land_chat_access(
+                    db=db,
+                    land=land,
+                    user_id=sender_id,
+                    require_write=True,
+                )
 
         # Encrypt content if requested
         if encrypt:
@@ -299,69 +355,138 @@ class ChatService:
     async def get_unread_messages_by_land(
         self,
         db: AsyncSession,
-        owner_id: uuid.UUID
+        user_id: uuid.UUID
     ) -> Dict[str, Dict[str, int]]:
         """
-        Get count of unread and read leave messages for each land owned by user.
+        Build message indicator metadata for lands relevant to the user.
+
+        The response now exposes:
+        - unread/read/received counts for lands the user owns
+        - mine_* counts for lands where the user left messages
+        - others_total for lands (owned or visited) where other people left messages
 
         Args:
             db: Database session
-            owner_id: Land owner user ID
+            user_id: Current user ID
 
         Returns:
-            Dict mapping land_id to {"unread": count, "read": count}
+            Dict mapping land_id to aggregated counts used by the frontend
         """
-        # Get all lands owned by user
-        result = await db.execute(
-            select(Land).where(Land.owner_id == owner_id)
-        )
+        def ensure_entry(target: Dict[str, Dict[str, int]], key: str) -> Dict[str, int]:
+            """Ensure the result dictionary has a baseline entry."""
+            entry = target.get(key)
+            if not entry:
+                entry = {"unread": 0, "read": 0, "received": 0}
+                target[key] = entry
+            return entry
+
+        # Lands owned by the user
+        result = await db.execute(select(Land).where(Land.owner_id == user_id))
         lands = result.scalars().all()
+        owned_land_ids = {land.land_id for land in lands}
 
-        if not lands:
-            return {}
+        message_counts: Dict[str, Dict[str, int]] = {}
 
-        # Get chat sessions for those lands
-        land_ids = [land.land_id for land in lands]
+        if owned_land_ids:
+            # Fetch chat sessions for owned lands
+            result = await db.execute(
+                select(ChatSession).where(ChatSession.land_id.in_(owned_land_ids))
+            )
+            sessions = result.scalars().all()
+
+            for session in sessions:
+                if not session.land_id:
+                    continue
+
+                # Count unread messages (leave messages from visitors)
+                unread_result = await db.execute(
+                    select(func.count(Message.message_id)).where(
+                        and_(
+                            Message.session_id == session.session_id,
+                            Message.is_leave_message == "True",
+                            Message.read_by_owner == "False",
+                            Message.deleted_at.is_(None)
+                        )
+                    )
+                )
+                unread_count = unread_result.scalar() or 0
+
+                # Count read messages
+                read_result = await db.execute(
+                    select(func.count(Message.message_id)).where(
+                        and_(
+                            Message.session_id == session.session_id,
+                            Message.is_leave_message == "True",
+                            Message.read_by_owner == "True",
+                            Message.deleted_at.is_(None)
+                        )
+                    )
+                )
+                read_count = read_result.scalar() or 0
+
+                if unread_count > 0 or read_count > 0:
+                    entry = ensure_entry(message_counts, str(session.land_id))
+                    entry["unread"] = unread_count
+                    entry["read"] = read_count
+                    entry["received"] = unread_count + read_count
+
+        # Messages the user has left on other lands (or their own)
         result = await db.execute(
-            select(ChatSession).where(ChatSession.land_id.in_(land_ids))
+            select(Message, ChatSession.land_id).join(
+                ChatSession, Message.session_id == ChatSession.session_id
+            ).where(
+                and_(
+                    Message.sender_id == user_id,
+                    Message.is_leave_message == "True",
+                    Message.deleted_at.is_(None)
+                )
+            )
         )
-        sessions = result.scalars().all()
+        my_messages = result.all()
+        participant_land_ids: Set[uuid.UUID] = set()
 
-        # Count unread and read messages per session
-        message_counts = {}
-        for session in sessions:
-            # Count unread messages
+        for message, land_id in my_messages:
+            if not land_id:
+                continue
+            participant_land_ids.add(land_id)
+            entry = ensure_entry(message_counts, str(land_id))
+            entry["mine_total"] = entry.get("mine_total", 0) + 1
+            if message.read_by_owner == "True":
+                entry["mine_read"] = entry.get("mine_read", 0) + 1
+            else:
+                entry["mine_unread"] = entry.get("mine_unread", 0) + 1
+
+        tracked_land_ids = owned_land_ids.union(participant_land_ids)
+
+        if tracked_land_ids:
+            # Count messages from other visitors for these lands so clients can
+            # distinguish their own leave messages from everyone else's.
             result = await db.execute(
-                select(func.count(Message.message_id)).where(
+                select(
+                    ChatSession.land_id,
+                    func.count(Message.message_id)
+                )
+                .join(Message, Message.session_id == ChatSession.session_id)
+                .where(
                     and_(
-                        Message.session_id == session.session_id,
+                        ChatSession.land_id.in_(tracked_land_ids),
                         Message.is_leave_message == "True",
-                        Message.read_by_owner == "False",
-                        Message.deleted_at.is_(None)
+                        Message.deleted_at.is_(None),
+                        Message.sender_id != user_id
                     )
                 )
+                .group_by(ChatSession.land_id)
             )
-            unread_count = result.scalar() or 0
 
-            # Count read messages
-            result = await db.execute(
-                select(func.count(Message.message_id)).where(
-                    and_(
-                        Message.session_id == session.session_id,
-                        Message.is_leave_message == "True",
-                        Message.read_by_owner == "True",
-                        Message.deleted_at.is_(None)
-                    )
-                )
-            )
-            read_count = result.scalar() or 0
-
-            # Only include lands with messages
-            if unread_count > 0 or read_count > 0:
-                message_counts[str(session.land_id)] = {
-                    "unread": unread_count,
-                    "read": read_count
-                }
+            for land_id, count in result.all():
+                if not land_id:
+                    continue
+                entry = ensure_entry(message_counts, str(land_id))
+                entry["others_total"] = count
+                # If this entry only exists because of participation (non-owner),
+                # seed the received count so owners can still show yellow stage.
+                if entry.get("received", 0) == 0:
+                    entry["received"] = count
 
         return message_counts
 

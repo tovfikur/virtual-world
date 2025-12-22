@@ -10,11 +10,14 @@ from fastapi.responses import JSONResponse
 from fastapi.exceptions import RequestValidationError
 import logging
 import time
-from contextlib import asynccontextmanager
+from contextlib import asynccontextmanager, suppress
 
 from app.config import settings
 from app.db.session import init_db, close_db
 from app.services.cache_service import cache_service
+from app.services.trading_service import trading_service
+from app.db.session import AsyncSessionLocal
+import asyncio
 
 # Setup logging (only if not already configured)
 if not logging.getLogger().handlers:
@@ -57,12 +60,31 @@ async def lifespan(app: FastAPI):
         logger.error(f"Redis connection failed: {e}")
         raise
 
+    # Start background trading batch runner (0.5s)
+    async def trading_batch_runner():
+        while True:
+            try:
+                await asyncio.sleep(0.5)
+                async with AsyncSessionLocal() as session:
+                    await trading_service.run_batch(session)
+            except asyncio.CancelledError:
+                break
+            except Exception as e:
+                logger.error(f"Trading batch runner error: {e}")
+
+    app.state.trading_batch_task = asyncio.create_task(trading_batch_runner())
+
     logger.info("Application startup complete")
 
     yield
 
     # Shutdown
     logger.info("Shutting down application...")
+    task = getattr(app.state, "trading_batch_task", None)
+    if task:
+        task.cancel()
+        with contextlib.suppress(Exception):
+            await task
     await close_db()
     await cache_service.disconnect()
     logger.info("Application shutdown complete")

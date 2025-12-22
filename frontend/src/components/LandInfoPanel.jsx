@@ -32,7 +32,10 @@ function LandInfoPanel({ land }) {
         price_base_bdt: data.price_base_bdt ?? data.base_price_bdt ?? land.base_price_bdt,
       });
     } catch (error) {
-      console.error('Failed to load land details from API', error);
+      const status = error.response?.status;
+      if (status !== 404) {
+        console.error('Failed to load land details from API', error);
+      }
 
       // Fallback: try searching lands by owner (if logged in)
       if (user) {
@@ -58,7 +61,9 @@ function LandInfoPanel({ land }) {
             return;
           }
         } catch (searchError) {
-          console.error('Secondary land search failed', searchError);
+          if (searchError.response?.status !== 404) {
+            console.error('Secondary land search failed', searchError);
+          }
         }
       }
 
