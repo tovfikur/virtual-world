@@ -21,6 +21,7 @@ from app.api.v1.endpoints import (
     orders,
     trades,
     market,
+    marketdata,
 )
 
 # Create main API router
@@ -40,6 +41,7 @@ api_router.include_router(instruments.router)
 api_router.include_router(orders.router)
 api_router.include_router(trades.router)
 api_router.include_router(market.router)
+api_router.include_router(marketdata.router)
 
 # Include WebSocket routers
 api_router.include_router(websocket.router)

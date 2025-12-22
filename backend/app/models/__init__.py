@@ -16,6 +16,7 @@ from app.models.instrument import Instrument, AssetClass, InstrumentStatus
 from app.models.order import Order, OrderSide, OrderStatus, OrderType
 from app.models.trade import Trade
 from app.models.market_status import MarketStatus, MarketState
+from app.models.price_history import PriceHistory, CorporateAction, QuoteLevel, TimeframeEnum, CorporateActionType
 from app.models.audit_log import AuditLog, AuditEventCategory
 from app.models.admin_config import AdminConfig
 
@@ -57,6 +58,11 @@ __all__ = [
     "Trade",
     "MarketStatus",
     "MarketState",
+    "PriceHistory",
+    "CorporateAction",
+    "QuoteLevel",
+    "TimeframeEnum",
+    "CorporateActionType",
     "TradingCompany",
     "TradingTransaction",
 ]

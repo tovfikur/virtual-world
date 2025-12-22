@@ -12,9 +12,9 @@
 - [x] Add market status controls (open/close/halt per instrument and market-wide).
 
 ## Pricing & Market Data
-- [ ] Add pricing engine to aggregate LP quotes (for FX/CFDs), apply spread/markup, normalize ticks, publish feed (WS).
-- [ ] Publish market data channels: top-of-book, depth, trades, candles; support 1s through monthly aggregation.
-- [ ] Price history storage with corporate-action-aware adjustments (splits/dividends).
+- [x] Add pricing engine to aggregate LP quotes (for FX/CFDs), apply spread/markup, normalize ticks, publish feed (WS).
+- [x] Publish market data channels: top-of-book, depth, trades, candles; support 1s through monthly aggregation.
+- [x] Price history storage with corporate-action-aware adjustments (splits/dividends).
 
 ## Risk, Margin & Exposure
 - [ ] Introduce accounts/margin model (used/free margin, equity, leverage limits).

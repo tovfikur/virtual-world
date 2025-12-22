@@ -5,7 +5,8 @@ Instrument model for multi-asset trading (equities/forex/commodities/indices/cry
 from enum import Enum
 from uuid import uuid4
 
-from sqlalchemy import Column, String, Enum as SQLEnum, Numeric, Boolean
+from sqlalchemy import Column, String, Enum as SQLEnum, Numeric, Boolean, ForeignKey
+from sqlalchemy.orm import relationship
 from sqlalchemy.dialects.postgresql import UUID
 
 from app.db.base import BaseModel
@@ -54,6 +55,11 @@ class Instrument(BaseModel):
 
     session_open_utc = Column(String(8), nullable=True)  # HH:MM:SS optional
     session_close_utc = Column(String(8), nullable=True)  # HH:MM:SS optional
+    
+    # Relationships for market data
+    price_histories = relationship("PriceHistory", back_populates="instrument", cascade="all, delete-orphan")
+    corporate_actions = relationship("CorporateAction", back_populates="instrument", cascade="all, delete-orphan")
+    quote_levels = relationship("QuoteLevel", back_populates="instrument", cascade="all, delete-orphan")
 
     def __repr__(self) -> str:
         return f"<Instrument {self.symbol} ({self.asset_class})>"

@@ -77,7 +77,7 @@ async def init_db() -> None:
             # Import all models to ensure they're registered
             from app.models import (
                 user, land, listing, bid, instrument, order, trade,
-                transaction, chat, audit_log, admin_config
+                transaction, chat, audit_log, admin_config, price_history
             )
 
             await conn.run_sync(Base.metadata.create_all)
