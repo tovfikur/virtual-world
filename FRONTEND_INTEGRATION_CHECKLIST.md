@@ -11,6 +11,7 @@
 ## 📋 FRONTEND API ENDPOINTS AVAILABLE
 
 ### Authentication (✅ Ready)
+
 ```
 POST   /api/v1/auth/register          - User registration
 POST   /api/v1/auth/login             - User login
@@ -20,6 +21,7 @@ GET    /api/v1/auth/me                - Current user info
 ```
 
 ### Instruments (✅ Ready)
+
 ```
 GET    /api/v1/instruments            - List all instruments
 GET    /api/v1/instruments/{id}       - Get instrument details
@@ -27,6 +29,7 @@ GET    /api/v1/instruments/{id}/stats - Instrument statistics
 ```
 
 ### Orders (✅ Ready)
+
 ```
 POST   /api/v1/orders                 - Create order
 GET    /api/v1/orders                 - List user orders
@@ -37,6 +40,7 @@ POST   /api/v1/orders/{id}/amend      - Amend order
 ```
 
 ### Trades (✅ Ready)
+
 ```
 GET    /api/v1/trades                 - List user trades
 GET    /api/v1/trades/{id}            - Get trade details
@@ -44,6 +48,7 @@ GET    /api/v1/trades/statistics      - Trade statistics
 ```
 
 ### Market Data (✅ Ready)
+
 ```
 GET    /api/v1/market/quotes          - Current quotes
 GET    /api/v1/market/depth           - Order book depth
@@ -53,6 +58,7 @@ WebSocket /ws/market                   - Live market updates
 ```
 
 ### Portfolio (✅ Ready)
+
 ```
 GET    /api/v1/portfolio/summary      - Portfolio overview
 GET    /api/v1/portfolio/positions    - Current positions
@@ -63,6 +69,7 @@ GET    /api/v1/portfolio/performance  - P&L statistics
 ```
 
 ### Settlement (✅ Ready)
+
 ```
 GET    /api/v1/settlement/summary           - Settlement overview
 GET    /api/v1/settlement/settlements       - Settlement records
@@ -72,6 +79,7 @@ GET    /api/v1/settlement/statistics        - Settlement metrics
 ```
 
 ### Monitoring & Health (✅ Ready)
+
 ```
 GET    /health                        - System health check
 GET    /api/v1/monitoring/health      - Detailed health
@@ -80,6 +88,7 @@ GET    /api/v1/monitoring/dashboard   - Monitoring dashboard
 ```
 
 ### Admin (✅ Ready - for admins only)
+
 ```
 GET    /api/v1/admin/instruments      - Manage instruments
 POST   /api/v1/admin/instruments      - Create instrument
@@ -94,44 +103,56 @@ GET    /api/v1/admin/surveillance     - Surveillance alerts
 ## 🔌 WEBSOCKET CONNECTIONS AVAILABLE
 
 ### Real-Time Market Data
+
 ```javascript
 // Subscribe to live quotes
-ws.send(JSON.stringify({
-  type: 'subscribe',
-  channel: 'quotes',
-  instruments: ['AAPL', 'GOOGL']
-}));
+ws.send(
+  JSON.stringify({
+    type: "subscribe",
+    channel: "quotes",
+    instruments: ["AAPL", "GOOGL"],
+  })
+);
 
 // Subscribe to depth updates
-ws.send(JSON.stringify({
-  type: 'subscribe',
-  channel: 'depth',
-  instruments: ['AAPL']
-}));
+ws.send(
+  JSON.stringify({
+    type: "subscribe",
+    channel: "depth",
+    instruments: ["AAPL"],
+  })
+);
 
 // Subscribe to trades
-ws.send(JSON.stringify({
-  type: 'subscribe',
-  channel: 'trades',
-  instruments: ['AAPL']
-}));
+ws.send(
+  JSON.stringify({
+    type: "subscribe",
+    channel: "trades",
+    instruments: ["AAPL"],
+  })
+);
 
 // Subscribe to candles
-ws.send(JSON.stringify({
-  type: 'subscribe',
-  channel: 'candles',
-  instrument: 'AAPL',
-  timeframe: '1m'
-}));
+ws.send(
+  JSON.stringify({
+    type: "subscribe",
+    channel: "candles",
+    instrument: "AAPL",
+    timeframe: "1m",
+  })
+);
 ```
 
 ### Real-Time Notifications
+
 ```javascript
 // Notifications for order updates, trades, alerts
-ws.send(JSON.stringify({
-  type: 'subscribe',
-  channel: 'notifications'
-}));
+ws.send(
+  JSON.stringify({
+    type: "subscribe",
+    channel: "notifications",
+  })
+);
 ```
 
 ---
@@ -139,7 +160,9 @@ ws.send(JSON.stringify({
 ## 🎨 FRONTEND COMPONENTS REQUIRED
 
 ### Trading Terminal
+
 - [ ] **Order Entry Panel**
+
   - Symbol selection (autocomplete)
   - Side selector (BUY/SELL)
   - Quantity input
@@ -150,6 +173,7 @@ ws.send(JSON.stringify({
   - Cancel button for pending orders
 
 - [ ] **Order Book Display**
+
   - Bid side (red)
   - Ask side (green)
   - Spread display
@@ -157,6 +181,7 @@ ws.send(JSON.stringify({
   - Auto-refresh on updates
 
 - [ ] **Price Chart**
+
   - TradingView Lightweight Charts OR
   - Simple candlestick chart
   - Multiple timeframes (1m, 5m, 15m, 1h, 1d)
@@ -169,7 +194,9 @@ ws.send(JSON.stringify({
   - Real-time updates
 
 ### Portfolio/Positions
+
 - [ ] **Portfolio Summary**
+
   - Account balance
   - Equity
   - Used/free margin
@@ -177,6 +204,7 @@ ws.send(JSON.stringify({
   - Buying power
 
 - [ ] **Positions List**
+
   - Symbol
   - Quantity
   - Entry price
@@ -186,6 +214,7 @@ ws.send(JSON.stringify({
   - Close button
 
 - [ ] **Orders List**
+
   - Symbol, side, size
   - Limit price (if applicable)
   - Order status
@@ -201,7 +230,9 @@ ws.send(JSON.stringify({
   - Duration
 
 ### Risk & Alerts
+
 - [ ] **Risk Indicators**
+
   - Margin call warning (>80% margin usage)
   - Liquidation risk (>95%)
   - Exposure alerts
@@ -217,35 +248,45 @@ ws.send(JSON.stringify({
 ## 🔧 FRONTEND SERVICES CONFIGURATION
 
 ### API Service (`src/services/api.js`)
+
 ✅ **Status**: Configured and ready
+
 - Base URL: Uses `VITE_API_URL` or auto-detected
 - Auth interceptor: Adds Bearer token
 - Error handling: 401 refresh token flow
 - Timeout: 30 seconds
 
 ### WebSocket Service (`src/services/websocket.js`)
+
 ✅ **Status**: Ready for real-time connections
+
 - Automatic reconnection
 - Message queuing while disconnected
 - Subscribe/unsubscribe management
 - Heartbeat monitoring
 
 ### Market Data Service (`src/services/market.js`)
+
 ✅ **Status**: Ready
+
 - Quote aggregation
 - Depth caching
 - Candle building
 - Trade feed management
 
 ### Orders Service (`src/services/orders.js`)
+
 ✅ **Status**: Ready
+
 - Order creation with validation
 - Order amendments
 - Cancellation
 - Status tracking
 
 ### Instruments Service (`src/services/instruments.js`)
+
 ✅ **Status**: Ready
+
 - Instrument listing
 - Symbol search
 - Specifications (tick, lot, leverage)
@@ -291,7 +332,9 @@ VITE_LOG_LEVEL=warn
 ## 🧪 FRONTEND TEST SCENARIOS
 
 ### Order Flow
+
 - [ ] **Create Market Order**
+
   1. Select instrument (AAPL)
   2. Select BUY
   3. Enter quantity (100)
@@ -303,6 +346,7 @@ VITE_LOG_LEVEL=warn
   9. Verify P&L calculation
 
 - [ ] **Create Limit Order**
+
   1. Select instrument
   2. Select SELL
   3. Enter quantity
@@ -321,7 +365,9 @@ VITE_LOG_LEVEL=warn
   5. Verify changes reflected
 
 ### Portfolio
+
 - [ ] **Monitor Positions**
+
   1. Create multiple positions
   2. Verify all shown correctly
   3. Check P&L calculations
@@ -338,13 +384,14 @@ VITE_LOG_LEVEL=warn
 ## 📡 API RESPONSE VALIDATION
 
 ### Order Response
+
 ```json
 {
   "id": "order_123",
   "symbol": "AAPL",
   "side": "BUY",
   "quantity": 100,
-  "price": 150.50,
+  "price": 150.5,
   "status": "OPEN",
   "type": "LIMIT",
   "filled": 50,
@@ -355,28 +402,30 @@ VITE_LOG_LEVEL=warn
 ```
 
 ### Portfolio Response
+
 ```json
 {
-  "balance": 10000.00,
-  "equity": 10500.00,
-  "cash": 9500.00,
-  "used_margin": 500.00,
-  "free_margin": 9500.00,
+  "balance": 10000.0,
+  "equity": 10500.0,
+  "cash": 9500.0,
+  "used_margin": 500.0,
+  "free_margin": 9500.0,
   "margin_level": 95.2,
-  "buying_power": 9500.00,
+  "buying_power": 9500.0,
   "positions": 1,
   "open_orders": 2
 }
 ```
 
 ### WebSocket Update Format
+
 ```json
 {
   "type": "quote",
   "instrument": "AAPL",
   "bid": 150.25,
   "ask": 150.35,
-  "last": 150.30,
+  "last": 150.3,
   "bid_size": 1000,
   "ask_size": 800,
   "timestamp": "2025-12-22T10:30:15Z"
@@ -388,17 +437,20 @@ VITE_LOG_LEVEL=warn
 ## 🔒 SECURITY CHECKLIST
 
 - [ ] **Authentication**
+
   - Login stores JWT token in localStorage
   - Token included in all requests
   - Token refresh before expiry
   - Logout clears tokens
 
 - [ ] **CORS**
+
   - Requests include proper headers
   - Credentials handling configured
   - No mixed HTTP/HTTPS
 
 - [ ] **Rate Limiting**
+
   - Frontend respects rate limit headers
   - Displays 429 errors to user
   - Implements backoff strategy
@@ -415,6 +467,7 @@ VITE_LOG_LEVEL=warn
 ## 🚀 DEPLOYMENT CHECKLIST
 
 ### Development
+
 - [ ] `.env` configured with local API URL
 - [ ] Backend running on localhost:8000
 - [ ] Frontend running on localhost:5173 (Vite)
@@ -422,6 +475,7 @@ VITE_LOG_LEVEL=warn
 - [ ] All test scenarios pass
 
 ### Production
+
 - [ ] `.env.production` configured with production URLs
 - [ ] HTTPS enforced
 - [ ] API domain configured
@@ -433,35 +487,38 @@ VITE_LOG_LEVEL=warn
 
 ## 📊 BACKEND READINESS VERIFICATION
 
-| Component | Status | URL/File |
-|-----------|--------|----------|
-| **Trading API** | ✅ Ready | `/api/v1/orders` |
-| **Market Data API** | ✅ Ready | `/api/v1/market/*` |
-| **Portfolio API** | ✅ Ready | `/api/v1/portfolio/*` |
-| **Settlement API** | ✅ Ready | `/api/v1/settlement/*` |
-| **Monitoring API** | ✅ Ready | `/api/v1/monitoring/*` |
-| **WebSocket** | ✅ Ready | `ws://localhost:8000/ws` |
-| **OpenAPI Docs** | ✅ Ready | `/docs` (Swagger UI) |
-| **Health Check** | ✅ Ready | `/health` |
-| **Auth Endpoints** | ✅ Ready | `/api/v1/auth/*` |
-| **Admin API** | ✅ Ready | `/api/v1/admin/*` |
+| Component           | Status   | URL/File                 |
+| ------------------- | -------- | ------------------------ |
+| **Trading API**     | ✅ Ready | `/api/v1/orders`         |
+| **Market Data API** | ✅ Ready | `/api/v1/market/*`       |
+| **Portfolio API**   | ✅ Ready | `/api/v1/portfolio/*`    |
+| **Settlement API**  | ✅ Ready | `/api/v1/settlement/*`   |
+| **Monitoring API**  | ✅ Ready | `/api/v1/monitoring/*`   |
+| **WebSocket**       | ✅ Ready | `ws://localhost:8000/ws` |
+| **OpenAPI Docs**    | ✅ Ready | `/docs` (Swagger UI)     |
+| **Health Check**    | ✅ Ready | `/health`                |
+| **Auth Endpoints**  | ✅ Ready | `/api/v1/auth/*`         |
+| **Admin API**       | ✅ Ready | `/api/v1/admin/*`        |
 
 ---
 
 ## 🎯 QUICK INTEGRATION STEPS
 
 ### 1. Verify Backend is Running
+
 ```bash
 cd backend
 python -m uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 ```
 
 ### 2. Check API Health
+
 ```bash
 curl http://localhost:8000/health
 ```
 
 ### 3. Configure Frontend
+
 ```bash
 cd frontend
 cp .env.example .env
@@ -469,12 +526,14 @@ cp .env.example .env
 ```
 
 ### 4. Start Frontend Dev Server
+
 ```bash
 npm install
 npm run dev
 ```
 
 ### 5. Test Connection
+
 ```bash
 # Open browser to http://localhost:5173
 # Check browser console for any CORS errors
@@ -487,7 +546,7 @@ npm run dev
 
 **Frontend Status**: 🟢 READY FOR PHASE 3  
 **Backend Status**: 🟢 READY FOR PHASE 3  
-**Integration**: 🟢 TESTED & VERIFIED  
+**Integration**: 🟢 TESTED & VERIFIED
 
 All endpoints are available and properly documented via OpenAPI at `/docs`.
 
@@ -498,23 +557,27 @@ WebSocket connections working for real-time market data and notifications.
 ## 📞 TROUBLESHOOTING
 
 ### CORS Error
+
 - Check backend CORS config includes frontend origin
 - Verify credentials handling in API service
 - Check that Authorization header is included
 
 ### 401 Unauthorized
+
 - Verify token is being stored in localStorage
 - Check token is not expired
 - Try logging in again
 - Check token refresh endpoint
 
 ### WebSocket Connection Failed
+
 - Verify WS URL is correct (ws:// not http://)
 - Check backend is running
 - Verify no firewall blocking port
 - Check browser console for specific error
 
 ### Rate Limit Error (429)
+
 - Wait for Retry-After seconds
 - Reduce request frequency
 - Check current rate limit from headers

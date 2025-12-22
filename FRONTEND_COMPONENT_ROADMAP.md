@@ -1,6 +1,7 @@
 # Frontend Component Roadmap
 
 ## Overview
+
 This document outlines the React components that need to be built to consume all Phase 2 backend APIs. The frontend has all the services in place; this describes what UI components are needed.
 
 ---
@@ -32,6 +33,7 @@ App
 ## Phase 3.1: Core Trading Interface
 
 ### 1. Order Entry Form Component
+
 **Purpose**: Create buy/sell orders  
 **Consumes**: `POST /orders`  
 **Data**: symbol, side, quantity, price, type (MARKET/LIMIT), time_in_force
@@ -39,17 +41,21 @@ App
 ```jsx
 // Components/OrderEntryForm.jsx
 export function OrderEntryForm() {
-  const [symbol, setSymbol] = useState('AAPL');
-  const [side, setSide] = useState('BUY');
+  const [symbol, setSymbol] = useState("AAPL");
+  const [side, setSide] = useState("BUY");
   const [quantity, setQuantity] = useState(100);
   const [price, setPrice] = useState(0);
-  const [type, setType] = useState('MARKET');
+  const [type, setType] = useState("MARKET");
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     const order = await ordersService.createOrder({
-      symbol, side, quantity, price, type,
-      time_in_force: 'GTC'
+      symbol,
+      side,
+      quantity,
+      price,
+      type,
+      time_in_force: "GTC",
     });
     // Show success notification
   };
@@ -64,6 +70,7 @@ export function OrderEntryForm() {
 ```
 
 **Features**:
+
 - ✓ Symbol autocomplete (uses instruments API)
 - ✓ Side selector (BUY/SELL)
 - ✓ Quantity input
@@ -76,6 +83,7 @@ export function OrderEntryForm() {
 ---
 
 ### 2. Order Book Component
+
 **Purpose**: Display real-time order book  
 **Consumes**: `GET /market/depth`, WebSocket `depth` channel  
 **Data**: bids, asks, symbol
@@ -94,8 +102,8 @@ export function OrderBook({ symbol }) {
     loadDepth();
 
     // Subscribe to real-time updates
-    websocketService.subscribe('depth', { instrument: symbol });
-    websocketService.on('depth_update', (update) => {
+    websocketService.subscribe("depth", { instrument: symbol });
+    websocketService.on("depth_update", (update) => {
       if (update.symbol === symbol) {
         setDepth(update);
       }
@@ -111,9 +119,7 @@ export function OrderBook({ symbol }) {
           </div>
         ))}
       </div>
-      <div className="mid-price">
-        {depth?.mid_price}
-      </div>
+      <div className="mid-price">{depth?.mid_price}</div>
       <div className="asks">
         {depth?.asks.map(([price, size]) => (
           <div key={price} className="ask">
@@ -127,6 +133,7 @@ export function OrderBook({ symbol }) {
 ```
 
 **Features**:
+
 - ✓ Display bids (red, descending)
 - ✓ Display asks (green, ascending)
 - ✓ Mid price indicator
@@ -138,6 +145,7 @@ export function OrderBook({ symbol }) {
 ---
 
 ### 3. Recent Trades Component
+
 **Purpose**: Show recent market trades  
 **Consumes**: `GET /market/trades`, WebSocket `trades` channel  
 **Data**: symbol, price, size, side, timestamp
@@ -154,10 +162,10 @@ export function RecentTrades({ symbol, limit = 50 }) {
     };
     loadTrades();
 
-    websocketService.subscribe('trades', { instrument: symbol });
-    websocketService.on('trade', (trade) => {
+    websocketService.subscribe("trades", { instrument: symbol });
+    websocketService.on("trade", (trade) => {
       if (trade.symbol === symbol) {
-        setTrades(prev => [trade, ...prev].slice(0, limit));
+        setTrades((prev) => [trade, ...prev].slice(0, limit));
       }
     });
   }, [symbol]);
@@ -173,7 +181,7 @@ export function RecentTrades({ symbol, limit = 50 }) {
         </tr>
       </thead>
       <tbody>
-        {trades.map(trade => (
+        {trades.map((trade) => (
           <tr key={trade.id} className={trade.side.toLowerCase()}>
             <td>{new Date(trade.timestamp).toLocaleTimeString()}</td>
             <td>${trade.price}</td>
@@ -188,6 +196,7 @@ export function RecentTrades({ symbol, limit = 50 }) {
 ```
 
 **Features**:
+
 - ✓ Display last 50 trades
 - ✓ Color code by side (BUY/SELL)
 - ✓ Real-time updates
@@ -197,15 +206,16 @@ export function RecentTrades({ symbol, limit = 50 }) {
 ---
 
 ### 4. Price Chart Component
+
 **Purpose**: Display price candles  
 **Consumes**: `GET /market/candles`, WebSocket `candles` channel  
 **Data**: symbol, timeframe, OHLCV
 
 ```jsx
 // Components/PriceChart.jsx
-import { LineChart, BarChart } from 'recharts';
+import { LineChart, BarChart } from "recharts";
 
-export function PriceChart({ symbol, timeframe = '1m' }) {
+export function PriceChart({ symbol, timeframe = "1m" }) {
   const [candles, setCandles] = useState([]);
 
   useEffect(() => {
@@ -215,13 +225,13 @@ export function PriceChart({ symbol, timeframe = '1m' }) {
     };
     loadCandles();
 
-    websocketService.subscribe('candles', { 
-      instrument: symbol, 
-      timeframe 
+    websocketService.subscribe("candles", {
+      instrument: symbol,
+      timeframe,
     });
-    websocketService.on('candle', (candle) => {
+    websocketService.on("candle", (candle) => {
       if (candle.symbol === symbol && candle.timeframe === timeframe) {
-        setCandles(prev => {
+        setCandles((prev) => {
           const updated = [...prev];
           updated[updated.length - 1] = candle; // Update last candle
           return updated;
@@ -230,13 +240,13 @@ export function PriceChart({ symbol, timeframe = '1m' }) {
     });
   }, [symbol, timeframe]);
 
-  const chartData = candles.map(c => ({
+  const chartData = candles.map((c) => ({
     time: new Date(c.time).toLocaleTimeString(),
     open: c.open,
     high: c.high,
     low: c.low,
     close: c.close,
-    volume: c.volume
+    volume: c.volume,
   }));
 
   return (
@@ -262,6 +272,7 @@ export function PriceChart({ symbol, timeframe = '1m' }) {
 ```
 
 **Features**:
+
 - ✓ Line chart for price (OHLC)
 - ✓ Bar chart for volume
 - ✓ Multiple timeframes (1m, 5m, 15m, 1h, 1d)
@@ -274,6 +285,7 @@ export function PriceChart({ symbol, timeframe = '1m' }) {
 ## Phase 3.2: Portfolio Management
 
 ### 5. Portfolio Summary Component
+
 **Purpose**: Display account overview  
 **Consumes**: `GET /portfolio/summary`  
 **Data**: balance, equity, P&L, margin_level
@@ -285,7 +297,7 @@ export function PortfolioSummary() {
 
   useEffect(() => {
     const loadPortfolio = async () => {
-      const data = await api.get('/portfolio/summary');
+      const data = await api.get("/portfolio/summary");
       setPortfolio(data);
     };
     loadPortfolio();
@@ -305,22 +317,24 @@ export function PortfolioSummary() {
         <label>Account Balance</label>
         <value>${portfolio.balance.toFixed(2)}</value>
       </div>
-      
+
       <div className="card">
         <label>Total Equity</label>
         <value>${portfolio.equity.toFixed(2)}</value>
       </div>
-      
-      <div className={`card ${pnl >= 0 ? 'profit' : 'loss'}`}>
+
+      <div className={`card ${pnl >= 0 ? "profit" : "loss"}`}>
         <label>P&L</label>
-        <value>${pnl.toFixed(2)} ({pnlPercent.toFixed(2)}%)</value>
+        <value>
+          ${pnl.toFixed(2)} ({pnlPercent.toFixed(2)}%)
+        </value>
       </div>
-      
-      <div className={`card ${portfolio.margin_level > 80 ? 'warning' : ''}`}>
+
+      <div className={`card ${portfolio.margin_level > 80 ? "warning" : ""}`}>
         <label>Margin Used</label>
         <value>{portfolio.margin_level.toFixed(1)}%</value>
       </div>
-      
+
       <div className="card">
         <label>Margin Available</label>
         <value>${portfolio.available_margin.toFixed(2)}</value>
@@ -331,6 +345,7 @@ export function PortfolioSummary() {
 ```
 
 **Features**:
+
 - ✓ Display balance, equity, P&L
 - ✓ Color code P&L (green/red)
 - ✓ Display margin metrics
@@ -340,6 +355,7 @@ export function PortfolioSummary() {
 ---
 
 ### 6. Positions Table Component
+
 **Purpose**: List current positions  
 **Consumes**: `GET /portfolio/positions`  
 **Data**: symbol, quantity, price, P&L
@@ -351,7 +367,7 @@ export function PositionsTable() {
 
   useEffect(() => {
     const loadPositions = async () => {
-      const data = await api.get('/portfolio/positions');
+      const data = await api.get("/portfolio/positions");
       setPositions(data);
     };
     loadPositions();
@@ -374,12 +390,13 @@ export function PositionsTable() {
         </tr>
       </thead>
       <tbody>
-        {positions.map(pos => {
+        {positions.map((pos) => {
           const pnl = (pos.current_price - pos.entry_price) * pos.quantity;
-          const pnlPercent = ((pos.current_price - pos.entry_price) / pos.entry_price) * 100;
-          
+          const pnlPercent =
+            ((pos.current_price - pos.entry_price) / pos.entry_price) * 100;
+
           return (
-            <tr key={pos.symbol} className={pnl >= 0 ? 'profit' : 'loss'}>
+            <tr key={pos.symbol} className={pnl >= 0 ? "profit" : "loss"}>
               <td>{pos.symbol}</td>
               <td>{pos.quantity}</td>
               <td>${pos.entry_price}</td>
@@ -399,6 +416,7 @@ export function PositionsTable() {
 ```
 
 **Features**:
+
 - ✓ List all positions
 - ✓ Show entry and current prices
 - ✓ Calculate P&L and percentage
@@ -411,6 +429,7 @@ export function PositionsTable() {
 ## Phase 3.3: Order Management
 
 ### 7. Orders List Component
+
 **Purpose**: Show all orders (open, filled, cancelled)  
 **Consumes**: `GET /orders`, WebSocket `orders` channel  
 **Data**: id, symbol, side, quantity, status, filled
@@ -419,7 +438,7 @@ export function PositionsTable() {
 // Components/OrdersList.jsx
 export function OrdersList() {
   const [orders, setOrders] = useState([]);
-  const [filter, setFilter] = useState('OPEN');
+  const [filter, setFilter] = useState("OPEN");
 
   useEffect(() => {
     const loadOrders = async () => {
@@ -428,11 +447,11 @@ export function OrdersList() {
     };
     loadOrders();
 
-    websocketService.subscribe('orders');
-    websocketService.on('order_update', (update) => {
-      setOrders(prev => {
+    websocketService.subscribe("orders");
+    websocketService.on("order_update", (update) => {
+      setOrders((prev) => {
         const updated = [...prev];
-        const idx = updated.findIndex(o => o.id === update.id);
+        const idx = updated.findIndex((o) => o.id === update.id);
         if (idx >= 0) {
           updated[idx] = update;
         } else {
@@ -443,14 +462,14 @@ export function OrdersList() {
     });
   }, []);
 
-  const filtered = orders.filter(o => o.status === filter);
+  const filtered = orders.filter((o) => o.status === filter);
 
   return (
     <div>
       <div className="filters">
-        <button onClick={() => setFilter('OPEN')}>Open</button>
-        <button onClick={() => setFilter('FILLED')}>Filled</button>
-        <button onClick={() => setFilter('CANCELLED')}>Cancelled</button>
+        <button onClick={() => setFilter("OPEN")}>Open</button>
+        <button onClick={() => setFilter("FILLED")}>Filled</button>
+        <button onClick={() => setFilter("CANCELLED")}>Cancelled</button>
       </div>
 
       <table>
@@ -467,19 +486,23 @@ export function OrdersList() {
           </tr>
         </thead>
         <tbody>
-          {filtered.map(order => (
+          {filtered.map((order) => (
             <tr key={order.id}>
               <td>{order.id}</td>
               <td>{order.symbol}</td>
               <td className={order.side.toLowerCase()}>{order.side}</td>
               <td>{order.quantity}</td>
               <td>${order.price}</td>
-              <td>{order.filled} / {order.quantity}</td>
+              <td>
+                {order.filled} / {order.quantity}
+              </td>
               <td>{order.status}</td>
               <td>
-                {order.status === 'OPEN' && (
+                {order.status === "OPEN" && (
                   <>
-                    <button onClick={() => cancelOrder(order.id)}>Cancel</button>
+                    <button onClick={() => cancelOrder(order.id)}>
+                      Cancel
+                    </button>
                     <button onClick={() => amendOrder(order.id)}>Amend</button>
                   </>
                 )}
@@ -494,6 +517,7 @@ export function OrdersList() {
 ```
 
 **Features**:
+
 - ✓ List orders with filters
 - ✓ Real-time status updates
 - ✓ Cancel order action
@@ -503,6 +527,7 @@ export function OrdersList() {
 ---
 
 ### 8. Order Amendment Modal
+
 **Purpose**: Modify open orders  
 **Consumes**: `PATCH /orders/{id}`  
 **Data**: quantity, price
@@ -516,7 +541,7 @@ export function AmendOrderModal({ order, onClose }) {
   const handleSubmit = async () => {
     const amended = await ordersService.amendOrder(order.id, {
       quantity,
-      price
+      price,
     });
     onClose();
   };
@@ -524,16 +549,16 @@ export function AmendOrderModal({ order, onClose }) {
   return (
     <modal>
       <h2>Amend Order {order.id}</h2>
-      <input 
-        type="number" 
-        value={quantity} 
-        onChange={e => setQuantity(e.target.value)} 
+      <input
+        type="number"
+        value={quantity}
+        onChange={(e) => setQuantity(e.target.value)}
         label="New Quantity"
       />
-      <input 
-        type="number" 
-        value={price} 
-        onChange={e => setPrice(e.target.value)} 
+      <input
+        type="number"
+        value={price}
+        onChange={(e) => setPrice(e.target.value)}
         label="New Price"
       />
       <button onClick={handleSubmit}>Amend</button>
@@ -544,6 +569,7 @@ export function AmendOrderModal({ order, onClose }) {
 ```
 
 **Features**:
+
 - ✓ Modify quantity
 - ✓ Modify price
 - ✓ Validation
@@ -555,6 +581,7 @@ export function AmendOrderModal({ order, onClose }) {
 ## Phase 3.4: Market Data
 
 ### 9. Instruments Search Component
+
 **Purpose**: Find instruments  
 **Consumes**: `GET /instruments`  
 **Data**: symbol, name, specs
@@ -562,7 +589,7 @@ export function AmendOrderModal({ order, onClose }) {
 ```jsx
 // Components/InstrumentsSearch.jsx
 export function InstrumentsSearch({ onSelect }) {
-  const [search, setSearch] = useState('');
+  const [search, setSearch] = useState("");
   const [results, setResults] = useState([]);
 
   const handleSearch = async (query) => {
@@ -575,16 +602,16 @@ export function InstrumentsSearch({ onSelect }) {
 
   return (
     <div className="search">
-      <input 
-        type="text" 
+      <input
+        type="text"
         placeholder="Search instruments..."
         value={search}
-        onChange={e => handleSearch(e.target.value)}
+        onChange={(e) => handleSearch(e.target.value)}
       />
       <div className="results">
-        {results.map(instr => (
-          <div 
-            key={instr.symbol} 
+        {results.map((instr) => (
+          <div
+            key={instr.symbol}
             onClick={() => onSelect(instr.symbol)}
             className="result"
           >
@@ -599,6 +626,7 @@ export function InstrumentsSearch({ onSelect }) {
 ```
 
 **Features**:
+
 - ✓ Search by symbol/name
 - ✓ Autocomplete suggestions
 - ✓ Show instrument details
@@ -607,6 +635,7 @@ export function InstrumentsSearch({ onSelect }) {
 ---
 
 ### 10. Market Quotes Component
+
 **Purpose**: Display market data  
 **Consumes**: `GET /market/quotes`, WebSocket `quotes` channel  
 **Data**: symbol, bid, ask, last, volume
@@ -619,25 +648,27 @@ export function MarketQuotes({ symbols }) {
   useEffect(() => {
     const loadQuotes = async () => {
       const data = await marketService.getQuotes(symbols);
-      setQuotes(data.reduce((acc, q) => {
-        acc[q.symbol] = q;
-        return acc;
-      }, {}));
+      setQuotes(
+        data.reduce((acc, q) => {
+          acc[q.symbol] = q;
+          return acc;
+        }, {})
+      );
     };
     loadQuotes();
 
-    websocketService.subscribe('quotes', { instruments: symbols });
-    websocketService.on('quote', (quote) => {
-      setQuotes(prev => ({
+    websocketService.subscribe("quotes", { instruments: symbols });
+    websocketService.on("quote", (quote) => {
+      setQuotes((prev) => ({
         ...prev,
-        [quote.symbol]: quote
+        [quote.symbol]: quote,
       }));
     });
   }, [symbols]);
 
   return (
     <div className="quotes">
-      {symbols.map(symbol => {
+      {symbols.map((symbol) => {
         const quote = quotes[symbol];
         if (!quote) return null;
 
@@ -658,6 +689,7 @@ export function MarketQuotes({ symbols }) {
 ```
 
 **Features**:
+
 - ✓ Display bid, ask, last
 - ✓ Show volume
 - ✓ Calculate spread
@@ -669,6 +701,7 @@ export function MarketQuotes({ symbols }) {
 ## Phase 3.5: Settlement & Admin
 
 ### 11. Settlement Positions Component
+
 **Purpose**: View settled positions  
 **Consumes**: `GET /settlement/summary`, `GET /settlement/positions`  
 **Data**: symbol, quantity, value, status
@@ -680,7 +713,7 @@ export function SettlementPositions() {
 
   useEffect(() => {
     const loadPositions = async () => {
-      const data = await api.get('/settlement/positions');
+      const data = await api.get("/settlement/positions");
       setPositions(data);
     };
     loadPositions();
@@ -701,7 +734,7 @@ export function SettlementPositions() {
         </tr>
       </thead>
       <tbody>
-        {positions.map(pos => (
+        {positions.map((pos) => (
           <tr key={pos.symbol}>
             <td>{pos.symbol}</td>
             <td>{pos.quantity}</td>
@@ -717,6 +750,7 @@ export function SettlementPositions() {
 ```
 
 **Features**:
+
 - ✓ Show settled positions
 - ✓ Display settlement values
 - ✓ Show settlement status
@@ -725,6 +759,7 @@ export function SettlementPositions() {
 ---
 
 ### 12. Admin Controls Component (if applicable)
+
 **Purpose**: Administrative functions  
 **Consumes**: `GET/POST /admin/*`  
 **Data**: system settings, risk controls, surveillance
@@ -736,14 +771,14 @@ export function AdminControls() {
 
   useEffect(() => {
     const loadSettings = async () => {
-      const data = await api.get('/admin/settings');
+      const data = await api.get("/admin/settings");
       setSettings(data);
     };
     loadSettings();
   }, []);
 
   const handleUpdateRisk = async (newLimits) => {
-    await api.post('/admin/risk-controls', newLimits);
+    await api.post("/admin/risk-controls", newLimits);
   };
 
   return (
@@ -759,6 +794,7 @@ export function AdminControls() {
 ```
 
 **Features**:
+
 - ✓ View system settings
 - ✓ Update risk controls
 - ✓ Monitor surveillance
@@ -805,35 +841,41 @@ App
 ## Implementation Checklist
 
 ### Phase 3.1: Trading (Priority: High)
+
 - [ ] OrderEntryForm component
-- [ ] OrderBook component  
+- [ ] OrderBook component
 - [ ] RecentTrades component
 - [ ] PriceChart component
 - [ ] TradingPage integration
 
 ### Phase 3.2: Portfolio (Priority: High)
+
 - [ ] PortfolioSummary component
 - [ ] PositionsTable component
 - [ ] DashboardPage integration
 - [ ] Auto-refresh mechanism
 
 ### Phase 3.3: Orders (Priority: Medium)
+
 - [ ] OrdersList component
 - [ ] AmendOrderModal component
 - [ ] Order cancellation flow
 - [ ] PortfolioPage integration
 
 ### Phase 3.4: Market Data (Priority: Medium)
+
 - [ ] InstrumentsSearch component
 - [ ] MarketQuotes component
 - [ ] MarketPage integration
 - [ ] Symbol selection/watchlist
 
 ### Phase 3.5: Settlement (Priority: Low)
+
 - [ ] SettlementPositions component
 - [ ] SettlementPage integration
 
 ### Phase 3.6: Admin (Priority: Low)
+
 - [ ] AdminControls component
 - [ ] Settings page
 - [ ] Risk controls UI
@@ -843,6 +885,7 @@ App
 ## Backend API Readiness Verification
 
 ✅ All endpoints ready for frontend consumption:
+
 - ✅ Authentication (register, login, refresh, logout, me)
 - ✅ Instruments (list, get, stats)
 - ✅ Orders (create, list, get, update, cancel, amend)

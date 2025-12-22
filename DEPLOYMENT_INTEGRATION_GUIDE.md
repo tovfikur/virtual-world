@@ -69,18 +69,18 @@ METRICS_RETENTION_SECONDS = 3600
 async def lifespan(app: FastAPI):
     # Startup
     print("Starting Virtual World Exchange API...")
-    
+
     # Initialize services
     notification_service = get_notification_service()
     metrics_service = get_metrics_service()
     rate_limiter = get_rate_limiter()
-    
+
     print(f"✅ NotificationService initialized")
     print(f"✅ MetricsService initialized (retention: {metrics_service.retention_seconds}s)")
     print(f"✅ RateLimiter initialized (default: 10 req/s per user)")
-    
+
     yield
-    
+
     # Shutdown
     print("Shutting down...")
     notification_service.clear_dead_letters()
@@ -163,7 +163,7 @@ print("✅ Monitoring API registered at /api/v1/monitoring")
 def custom_openapi():
     if app.openapi_schema:
         return app.openapi_schema
-    
+
     openapi_schema = generate_openapi_docs(app)
     app.openapi_schema = openapi_schema
     return app.openapi_schema
@@ -181,7 +181,7 @@ async def health_check():
     """System health check endpoint."""
     metrics_service = get_metrics_service()
     health = metrics_service.get_health_check()
-    
+
     status_code = 200 if health["status"] == "healthy" else 503
     return JSONResponse(content=health, status_code=status_code)
 ```
@@ -195,7 +195,7 @@ async def startup():
     notification_service = get_notification_service()
     metrics_service = get_metrics_service()
     rate_limiter = get_rate_limiter()
-    
+
     print("✅ Services initialized")
 
 @app.on_event("shutdown")
@@ -204,11 +204,11 @@ async def shutdown():
     notification_service = get_notification_service()
     metrics_service = get_metrics_service()
     rate_limiter = get_rate_limiter()
-    
+
     notification_service.clear_dead_letters()
     metrics_service.cleanup_old_measurements()
     rate_limiter.cleanup()
-    
+
     print("✅ Cleanup complete")
 ```
 
@@ -274,17 +274,17 @@ ALLOWED_HOSTS = [
 async def lifespan(app: FastAPI):
     # Startup
     logger.info("🚀 Starting Virtual World Exchange API...")
-    
+
     notification_service = get_notification_service()
     metrics_service = get_metrics_service()
     rate_limiter = get_rate_limiter()
-    
+
     logger.info("✅ NotificationService initialized")
     logger.info(f"✅ MetricsService initialized (retention: {metrics_service.retention_seconds}s)")
     logger.info("✅ RateLimiter initialized (10 req/s default)")
-    
+
     yield
-    
+
     # Shutdown
     logger.info("🛑 Shutting down...")
     notification_service.clear_dead_letters()
@@ -400,6 +400,7 @@ curl http://localhost:8000/health
 ```
 
 Expected response:
+
 ```json
 {
   "status": "healthy",
@@ -500,7 +501,7 @@ pytest backend/tests/test_phase2_section8.py::TestNotificationService::test_subs
 
 1. Check if middleware is registered before routes
 2. Verify `skip_paths` configuration
-3. Check X-RateLimit-* headers in response
+3. Check X-RateLimit-\* headers in response
 
 ### Metrics Not Updating
 

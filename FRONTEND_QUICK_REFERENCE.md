@@ -3,16 +3,19 @@
 ## 🚀 Quick Start (5 minutes)
 
 ### 1. Start Backend
+
 ```bash
 cd backend && python -m uvicorn app.main:app --reload
 ```
 
 ### 2. Start Frontend
+
 ```bash
 cd frontend && npm install && npm run dev
 ```
 
 ### 3. Open in Browser
+
 ```
 Frontend: http://localhost:5173
 API Docs: http://localhost:8000/docs
@@ -24,29 +27,29 @@ API Docs: http://localhost:8000/docs
 
 ```javascript
 // API Calls
-import { api } from '@/services/api.js';
-await api.get('/orders');
-await api.post('/orders', orderData);
+import { api } from "@/services/api.js";
+await api.get("/orders");
+await api.post("/orders", orderData);
 
 // Orders
-import { ordersService } from '@/services/orders.js';
+import { ordersService } from "@/services/orders.js";
 const order = await ordersService.createOrder(data);
 
 // Market Data
-import { marketService } from '@/services/market.js';
-const quotes = await marketService.getQuotes(['AAPL', 'GOOGL']);
-const depth = await marketService.getDepth('AAPL');
-const candles = await marketService.getCandles('AAPL', '1m', 100);
+import { marketService } from "@/services/market.js";
+const quotes = await marketService.getQuotes(["AAPL", "GOOGL"]);
+const depth = await marketService.getDepth("AAPL");
+const candles = await marketService.getCandles("AAPL", "1m", 100);
 
 // Instruments
-import { instrumentsService } from '@/services/instruments.js';
-const instruments = await instrumentsService.search('AAPL');
+import { instrumentsService } from "@/services/instruments.js";
+const instruments = await instrumentsService.search("AAPL");
 
 // WebSocket
-import { websocketService } from '@/services/websocket.js';
+import { websocketService } from "@/services/websocket.js";
 websocketService.connect(token);
-websocketService.subscribe('quotes', { instruments: ['AAPL'] });
-websocketService.on('quote', (quote) => console.log(quote));
+websocketService.subscribe("quotes", { instruments: ["AAPL"] });
+websocketService.on("quote", (quote) => console.log(quote));
 ```
 
 ---
@@ -55,48 +58,50 @@ websocketService.on('quote', (quote) => console.log(quote));
 
 ```javascript
 // Login
-const { access_token, refresh_token } = await api.post('/auth/login', {
-  email, password
+const { access_token, refresh_token } = await api.post("/auth/login", {
+  email,
+  password,
 });
-localStorage.setItem('access_token', access_token);
-localStorage.setItem('refresh_token', refresh_token);
+localStorage.setItem("access_token", access_token);
+localStorage.setItem("refresh_token", refresh_token);
 
 // Auto-refresh on 401 (handled by api.js)
 // Just use api.get/post normally
 
 // Current User
-const user = await api.get('/auth/me');
+const user = await api.get("/auth/me");
 
 // Logout
-await api.post('/auth/logout');
-localStorage.removeItem('access_token');
+await api.post("/auth/logout");
+localStorage.removeItem("access_token");
 ```
 
 ---
 
 ## 📊 API Endpoints Cheat Sheet
 
-| Method | Endpoint | Purpose |
-|--------|----------|---------|
-| POST | `/auth/login` | Login |
-| GET | `/orders` | List orders |
-| POST | `/orders` | Create order |
-| PATCH | `/orders/{id}` | Update order |
-| DELETE | `/orders/{id}` | Cancel order |
-| GET | `/trades` | List trades |
-| GET | `/market/quotes` | Get quotes |
-| GET | `/market/depth` | Get order book |
-| GET | `/market/candles` | Get candles |
-| GET | `/market/trades` | Get trades |
-| GET | `/portfolio/summary` | Account info |
-| GET | `/portfolio/positions` | Current positions |
-| GET | `/settlement/summary` | Settlement info |
+| Method | Endpoint               | Purpose           |
+| ------ | ---------------------- | ----------------- |
+| POST   | `/auth/login`          | Login             |
+| GET    | `/orders`              | List orders       |
+| POST   | `/orders`              | Create order      |
+| PATCH  | `/orders/{id}`         | Update order      |
+| DELETE | `/orders/{id}`         | Cancel order      |
+| GET    | `/trades`              | List trades       |
+| GET    | `/market/quotes`       | Get quotes        |
+| GET    | `/market/depth`        | Get order book    |
+| GET    | `/market/candles`      | Get candles       |
+| GET    | `/market/trades`       | Get trades        |
+| GET    | `/portfolio/summary`   | Account info      |
+| GET    | `/portfolio/positions` | Current positions |
+| GET    | `/settlement/summary`  | Settlement info   |
 
 ---
 
 ## 📈 Common Patterns
 
 ### Fetch Data with Loading State
+
 ```javascript
 const [data, setData] = useState(null);
 const [loading, setLoading] = useState(true);
@@ -105,7 +110,7 @@ const [error, setError] = useState(null);
 useEffect(() => {
   const load = async () => {
     try {
-      const result = await api.get('/endpoint');
+      const result = await api.get("/endpoint");
       setData(result);
     } catch (err) {
       setError(err.message);
@@ -122,24 +127,26 @@ return <Component data={data} />;
 ```
 
 ### Subscribe to Real-Time Updates
+
 ```javascript
 useEffect(() => {
-  websocketService.subscribe('channel_name', { param: 'value' });
-  
+  websocketService.subscribe("channel_name", { param: "value" });
+
   const handler = (update) => {
     // Handle update
   };
-  
-  websocketService.on('event_name', handler);
-  
+
+  websocketService.on("event_name", handler);
+
   return () => {
     // Cleanup
-    websocketService.off('event_name', handler);
+    websocketService.off("event_name", handler);
   };
 }, []);
 ```
 
 ### Form Submission with Error Handling
+
 ```javascript
 const [error, setError] = useState(null);
 const [loading, setLoading] = useState(false);
@@ -148,15 +155,15 @@ const handleSubmit = async (data) => {
   setLoading(true);
   setError(null);
   try {
-    const result = await api.post('/endpoint', data);
+    const result = await api.post("/endpoint", data);
     // Success
   } catch (err) {
     if (err.response?.status === 400) {
       setError(err.response.data.detail);
     } else if (err.response?.status === 429) {
-      setError('Rate limited. Try again later.');
+      setError("Rate limited. Try again later.");
     } else {
-      setError('Unexpected error');
+      setError("Unexpected error");
     }
   } finally {
     setLoading(false);
@@ -170,41 +177,41 @@ const handleSubmit = async (data) => {
 
 ```javascript
 // Subscribe to quotes
-websocketService.subscribe('quotes', {
-  instruments: ['AAPL', 'GOOGL']
+websocketService.subscribe("quotes", {
+  instruments: ["AAPL", "GOOGL"],
 });
-websocketService.on('quote', (quote) => {
+websocketService.on("quote", (quote) => {
   console.log(quote.symbol, quote.last);
 });
 
 // Subscribe to order book
-websocketService.subscribe('depth', {
-  instrument: 'AAPL'
+websocketService.subscribe("depth", {
+  instrument: "AAPL",
 });
-websocketService.on('depth_update', (depth) => {
+websocketService.on("depth_update", (depth) => {
   console.log(depth.bids, depth.asks);
 });
 
 // Subscribe to trades
-websocketService.subscribe('trades', {
-  instrument: 'AAPL'
+websocketService.subscribe("trades", {
+  instrument: "AAPL",
 });
-websocketService.on('trade', (trade) => {
+websocketService.on("trade", (trade) => {
   console.log(trade.side, trade.price, trade.size);
 });
 
 // Subscribe to candles
-websocketService.subscribe('candles', {
-  instrument: 'AAPL',
-  timeframe: '1m'
+websocketService.subscribe("candles", {
+  instrument: "AAPL",
+  timeframe: "1m",
 });
-websocketService.on('candle', (candle) => {
+websocketService.on("candle", (candle) => {
   console.log(candle.close);
 });
 
 // Subscribe to notifications
-websocketService.subscribe('notifications');
-websocketService.on('order_update', (order) => {
+websocketService.subscribe("notifications");
+websocketService.on("order_update", (order) => {
   console.log(order.status, order.filled);
 });
 ```
@@ -215,17 +222,17 @@ websocketService.on('order_update', (order) => {
 
 ```javascript
 const order = await ordersService.createOrder({
-  symbol: 'AAPL',
-  side: 'BUY',           // BUY or SELL
+  symbol: "AAPL",
+  side: "BUY", // BUY or SELL
   quantity: 100,
-  price: 150.50,         // Ignored for MARKET orders
-  type: 'LIMIT',         // MARKET or LIMIT
-  time_in_force: 'GTC'   // GTC (Good Till Cancel)
+  price: 150.5, // Ignored for MARKET orders
+  type: "LIMIT", // MARKET or LIMIT
+  time_in_force: "GTC", // GTC (Good Till Cancel)
 });
 
-console.log('Order ID:', order.id);
-console.log('Status:', order.status);
-console.log('Filled:', order.filled);
+console.log("Order ID:", order.id);
+console.log("Status:", order.status);
+console.log("Filled:", order.filled);
 ```
 
 ---
@@ -234,15 +241,15 @@ console.log('Filled:', order.filled);
 
 ```javascript
 // Account Summary
-const summary = await api.get('/portfolio/summary');
-console.log('Balance:', summary.balance);
-console.log('Equity:', summary.equity);
-console.log('P&L:', summary.equity - summary.balance);
-console.log('Margin %:', summary.margin_level);
+const summary = await api.get("/portfolio/summary");
+console.log("Balance:", summary.balance);
+console.log("Equity:", summary.equity);
+console.log("P&L:", summary.equity - summary.balance);
+console.log("Margin %:", summary.margin_level);
 
 // Current Positions
-const positions = await api.get('/portfolio/positions');
-positions.forEach(pos => {
+const positions = await api.get("/portfolio/positions");
+positions.forEach((pos) => {
   const pnl = (pos.current_price - pos.entry_price) * pos.quantity;
   console.log(`${pos.symbol}: ${pnl}`);
 });
@@ -254,24 +261,24 @@ positions.forEach(pos => {
 
 ```javascript
 // Single symbol
-const quote = await marketService.getQuotes(['AAPL']);
+const quote = await marketService.getQuotes(["AAPL"]);
 console.log(quote[0].bid, quote[0].ask);
 
 // Order book
-const depth = await marketService.getDepth('AAPL', 10);
+const depth = await marketService.getDepth("AAPL", 10);
 depth.bids.forEach(([price, size]) => {
   console.log(`BID ${price} x ${size}`);
 });
 
 // Candles
-const candles = await marketService.getCandles('AAPL', '1m', 100);
-candles.forEach(c => {
+const candles = await marketService.getCandles("AAPL", "1m", 100);
+candles.forEach((c) => {
   console.log(`${c.time}: O:${c.open} C:${c.close}`);
 });
 
 // Recent trades
-const trades = await marketService.getTrades('AAPL', 50);
-trades.forEach(t => {
+const trades = await marketService.getTrades("AAPL", 50);
+trades.forEach((t) => {
   console.log(`${t.side} ${t.size} @ ${t.price}`);
 });
 ```
@@ -283,29 +290,28 @@ trades.forEach(t => {
 ```javascript
 // API Errors
 try {
-  await api.post('/orders', data);
+  await api.post("/orders", data);
 } catch (error) {
   if (error.response?.status === 400) {
-    console.error('Invalid data:', error.response.data);
+    console.error("Invalid data:", error.response.data);
   } else if (error.response?.status === 401) {
-    console.error('Not authenticated');
+    console.error("Not authenticated");
   } else if (error.response?.status === 403) {
-    console.error('Insufficient margin');
+    console.error("Insufficient margin");
   } else if (error.response?.status === 429) {
-    console.error('Rate limited, wait:', 
-                  error.response.headers['retry-after']);
+    console.error("Rate limited, wait:", error.response.headers["retry-after"]);
   } else {
-    console.error('Unknown error:', error.message);
+    console.error("Unknown error:", error.message);
   }
 }
 
 // WebSocket Errors
-websocketService.on('error', (error) => {
-  console.error('WebSocket error:', error);
+websocketService.on("error", (error) => {
+  console.error("WebSocket error:", error);
 });
 
-websocketService.on('disconnected', () => {
-  console.log('Disconnected, will reconnect...');
+websocketService.on("disconnected", () => {
+  console.log("Disconnected, will reconnect...");
 });
 ```
 
@@ -315,11 +321,11 @@ websocketService.on('disconnected', () => {
 
 ```javascript
 // In browser console
-const token = localStorage.getItem('access_token');
-const response = await fetch('http://localhost:8000/api/v1/orders', {
+const token = localStorage.getItem("access_token");
+const response = await fetch("http://localhost:8000/api/v1/orders", {
   headers: {
-    'Authorization': `Bearer ${token}`
-  }
+    Authorization: `Bearer ${token}`,
+  },
 });
 const data = await response.json();
 console.log(data);
@@ -331,25 +337,25 @@ console.log(data);
 
 ```javascript
 // Log all API requests
-api.interceptors.request.use(config => {
-  console.log('API Request:', config.method.toUpperCase(), config.url);
+api.interceptors.request.use((config) => {
+  console.log("API Request:", config.method.toUpperCase(), config.url);
   return config;
 });
 
 // Log all responses
-api.interceptors.response.use(response => {
-  console.log('API Response:', response.status, response.config.url);
+api.interceptors.response.use((response) => {
+  console.log("API Response:", response.status, response.config.url);
   return response;
 });
 
 // Check token
-console.log('Token:', localStorage.getItem('access_token'));
+console.log("Token:", localStorage.getItem("access_token"));
 
 // Check WebSocket status
-console.log('Connected:', websocketService.isConnected);
+console.log("Connected:", websocketService.isConnected);
 
 // View API docs
-window.open('http://localhost:8000/docs');
+window.open("http://localhost:8000/docs");
 ```
 
 ---
@@ -357,8 +363,8 @@ window.open('http://localhost:8000/docs');
 ## 📱 Component Template
 
 ```javascript
-import { useState, useEffect } from 'react';
-import { api } from '@/services/api';
+import { useState, useEffect } from "react";
+import { api } from "@/services/api";
 
 export function MyComponent() {
   const [data, setData] = useState(null);
@@ -368,7 +374,7 @@ export function MyComponent() {
   useEffect(() => {
     const load = async () => {
       try {
-        const result = await api.get('/endpoint');
+        const result = await api.get("/endpoint");
         setData(result);
       } catch (err) {
         setError(err.message);
@@ -382,11 +388,7 @@ export function MyComponent() {
   if (loading) return <div>Loading...</div>;
   if (error) return <div>Error: {error}</div>;
 
-  return (
-    <div>
-      {/* Use data here */}
-    </div>
-  );
+  return <div>{/* Use data here */}</div>;
 }
 ```
 
@@ -394,15 +396,15 @@ export function MyComponent() {
 
 ## 🚨 Common Issues & Fixes
 
-| Issue | Fix |
-|-------|-----|
-| 401 Unauthorized | Check token: `localStorage.getItem('access_token')` |
-| CORS Error | Check frontend origin in backend CORS config |
-| WebSocket Not Connecting | Check URL: should be `ws://` not `http://` |
-| Rate Limit Error | Wait `Retry-After` seconds, reduce request frequency |
-| API Timeout | Increase `VITE_API_TIMEOUT` in .env |
-| Token Expired | Refresh token automatic, but ensure refresh token exists |
-| WebSocket Disconnect | Automatic reconnect, check network/backend health |
+| Issue                    | Fix                                                      |
+| ------------------------ | -------------------------------------------------------- |
+| 401 Unauthorized         | Check token: `localStorage.getItem('access_token')`      |
+| CORS Error               | Check frontend origin in backend CORS config             |
+| WebSocket Not Connecting | Check URL: should be `ws://` not `http://`               |
+| Rate Limit Error         | Wait `Retry-After` seconds, reduce request frequency     |
+| API Timeout              | Increase `VITE_API_TIMEOUT` in .env                      |
+| Token Expired            | Refresh token automatic, but ensure refresh token exists |
+| WebSocket Disconnect     | Automatic reconnect, check network/backend health        |
 
 ---
 

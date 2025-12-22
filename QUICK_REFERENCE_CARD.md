@@ -69,9 +69,11 @@
 ## 🚀 Getting Started
 
 ### 1. Copy main.py Template
+
 → See: `DEPLOYMENT_INTEGRATION_GUIDE.md`
 
 ### 2. Update Imports
+
 ```python
 from app.services.notification_service import get_notification_service
 from app.services.metrics_service import get_metrics_service
@@ -82,21 +84,25 @@ from app.utils.openapi_generator import generate_openapi_docs
 ```
 
 ### 3. Apply Security
+
 ```python
 apply_security_hardening(app)
 ```
 
 ### 4. Register Rate Limiter
+
 ```python
 app.add_middleware(rate_limit_middleware, rate_limiter=get_rate_limiter())
 ```
 
 ### 5. Register Monitoring API
+
 ```python
 app.include_router(monitoring_router, prefix="/api/v1/monitoring")
 ```
 
 ### 6. Run & Test
+
 ```bash
 python -m uvicorn app.main:app --reload
 curl http://localhost:8000/health
@@ -220,14 +226,14 @@ curl -X POST http://localhost:8000/api/v1/monitoring/cleanup
 
 ## 📈 Performance Targets
 
-| Metric | Target | How to Monitor |
-|--------|--------|-----------------|
-| API Latency (p95) | <1000ms | `/metrics/api` |
-| Order Matching (p99) | <100ms | `/metrics/trading` |
-| DB Query (p95) | <500ms | `/metrics/database` |
-| Notification Throughput | >10/sec | `get_stats()` |
-| Rate Limiter Overhead | <5ms | `/health` |
-| Health Check Response | <100ms | `/health` |
+| Metric                  | Target  | How to Monitor      |
+| ----------------------- | ------- | ------------------- |
+| API Latency (p95)       | <1000ms | `/metrics/api`      |
+| Order Matching (p99)    | <100ms  | `/metrics/trading`  |
+| DB Query (p95)          | <500ms  | `/metrics/database` |
+| Notification Throughput | >10/sec | `get_stats()`       |
+| Rate Limiter Overhead   | <5ms    | `/health`           |
+| Health Check Response   | <100ms  | `/health`           |
 
 ---
 
@@ -242,18 +248,20 @@ curl -X POST http://localhost:8000/api/v1/monitoring/cleanup
 ✅ SQL injection detection - Pattern matching  
 ✅ Path traversal detection - Pattern matching  
 ✅ Payload size limits - 10MB default  
-✅ Request validation - Via middleware  
+✅ Request validation - Via middleware
 
 ---
 
 ## 🧪 Testing
 
 ### Run All Tests
+
 ```bash
 pytest backend/tests/test_phase2_section8.py -v
 ```
 
 ### Run Specific Test Class
+
 ```bash
 pytest backend/tests/test_phase2_section8.py::TestNotificationService -v
 pytest backend/tests/test_phase2_section8.py::TestMetricsService -v
@@ -261,11 +269,13 @@ pytest backend/tests/test_phase2_section8.py::TestRateLimiter -v
 ```
 
 ### Run with Coverage
+
 ```bash
 pytest backend/tests/test_phase2_section8.py --cov=app --cov-report=html
 ```
 
 ### Expected Results
+
 - All 30+ tests should pass
 - No external dependencies
 - Coverage >90% for all modules
@@ -274,34 +284,38 @@ pytest backend/tests/test_phase2_section8.py --cov=app --cov-report=html
 
 ## 📁 File Locations
 
-| File | Path | Lines | Status |
-|------|------|-------|--------|
-| NotificationService | `backend/app/services/notification_service.py` | 500+ | ✅ |
-| MetricsService | `backend/app/services/metrics_service.py` | 550+ | ✅ |
-| RateLimiter | `backend/app/middleware/rate_limiter.py` | 380+ | ✅ |
-| Security | `backend/app/middleware/security.py` | 400+ | ✅ |
-| Monitoring API | `backend/app/api/monitoring.py` | 450+ | ✅ |
-| OpenAPI Generator | `backend/app/utils/openapi_generator.py` | 500+ | ✅ |
-| Test Suite | `backend/tests/test_phase2_section8.py` | 500+ | ✅ |
+| File                | Path                                           | Lines | Status |
+| ------------------- | ---------------------------------------------- | ----- | ------ |
+| NotificationService | `backend/app/services/notification_service.py` | 500+  | ✅     |
+| MetricsService      | `backend/app/services/metrics_service.py`      | 550+  | ✅     |
+| RateLimiter         | `backend/app/middleware/rate_limiter.py`       | 380+  | ✅     |
+| Security            | `backend/app/middleware/security.py`           | 400+  | ✅     |
+| Monitoring API      | `backend/app/api/monitoring.py`                | 450+  | ✅     |
+| OpenAPI Generator   | `backend/app/utils/openapi_generator.py`       | 500+  | ✅     |
+| Test Suite          | `backend/tests/test_phase2_section8.py`        | 500+  | ✅     |
 
 ---
 
 ## ⚡ Quick Setup (3 Steps)
 
 ### Step 1: Update main.py
+
 Copy template from `DEPLOYMENT_INTEGRATION_GUIDE.md`
 
 ### Step 2: Run Application
+
 ```bash
 python -m uvicorn app.main:app --reload
 ```
 
 ### Step 3: Verify Working
+
 ```bash
 curl http://localhost:8000/health
 ```
 
 Expected output:
+
 ```json
 {
   "status": "healthy",
@@ -318,16 +332,16 @@ Expected output:
 
 ## 🎯 Current Status
 
-| Task | Status | Lines | Notes |
-|------|--------|-------|-------|
-| 1. WebSocket Opt | ✅ | 500+ | NotificationService complete |
-| 2. Performance Mon | ✅ | 1000+ | MetricsService + Monitoring API |
-| 3. Rate Limiting | ✅ | 380+ | Token bucket with 3 tiers |
-| 4. OpenAPI Docs | ✅ | 500+ | Auto-schema generation |
-| 5. Security | ✅ | 400+ | HSTS, CSP, injection detection |
-| 6. Test Suite | ✅ | 500+ | 30+ comprehensive tests |
-| 7. App Integration | 🔄 | — | Ready for main.py setup |
-| 8. Validation | ⏳ | — | Run pytest after Task 7 |
+| Task               | Status | Lines | Notes                           |
+| ------------------ | ------ | ----- | ------------------------------- |
+| 1. WebSocket Opt   | ✅     | 500+  | NotificationService complete    |
+| 2. Performance Mon | ✅     | 1000+ | MetricsService + Monitoring API |
+| 3. Rate Limiting   | ✅     | 380+  | Token bucket with 3 tiers       |
+| 4. OpenAPI Docs    | ✅     | 500+  | Auto-schema generation          |
+| 5. Security        | ✅     | 400+  | HSTS, CSP, injection detection  |
+| 6. Test Suite      | ✅     | 500+  | 30+ comprehensive tests         |
+| 7. App Integration | 🔄     | —     | Ready for main.py setup         |
+| 8. Validation      | ⏳     | —     | Run pytest after Task 7         |
 
 **Progress**: 75% Complete (6 of 8 tasks)
 

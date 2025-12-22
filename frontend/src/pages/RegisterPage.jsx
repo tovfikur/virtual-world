@@ -3,7 +3,7 @@
  * User registration form with validation
  */
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import useAuthStore from '../stores/authStore';
@@ -13,8 +13,13 @@ function RegisterPage() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
-  const { register, isLoading, error } = useAuthStore();
+  const { register, isLoading, error, clearError } = useAuthStore();
   const navigate = useNavigate();
+
+  // Clear error when user starts typing
+  useEffect(() => {
+    clearError();
+  }, [username, email, password, confirmPassword, clearError]);
 
   const validatePassword = () => {
     if (password.length < 6) {
@@ -23,22 +28,38 @@ function RegisterPage() {
     return null;
   };
 
+  const passwordsMatch = password.length > 0 && password === confirmPassword;
+  const passwordsMismatch = password.length > 0 && confirmPassword.length > 0 && password !== confirmPassword;
+
   const handleSubmit = async (e) => {
     e.preventDefault();
 
+    // Trim whitespace for comparison
+    const trimmedPassword = password.trim();
+    const trimmedConfirmPassword = confirmPassword.trim();
+
     // Validation
-    if (password !== confirmPassword) {
+    if (trimmedPassword !== trimmedConfirmPassword) {
       toast.error('Passwords do not match');
       return;
     }
 
-    const passwordError = validatePassword();
-    if (passwordError) {
-      toast.error(passwordError);
+    if (trimmedPassword.length < 6) {
+      toast.error('Password must be at least 6 characters');
       return;
     }
 
-    const result = await register(username, email, password);
+    if (!username.trim()) {
+      toast.error('Username is required');
+      return;
+    }
+
+    if (!email.trim()) {
+      toast.error('Email is required');
+      return;
+    }
+
+    const result = await register(username.trim(), email.trim(), trimmedPassword);
 
     if (result.success) {
       toast.success('Account created! Welcome to Virtual Land World!');
@@ -109,21 +130,42 @@ function RegisterPage() {
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-300 mb-2">
-                Confirm Password
-              </label>
+              <div className="flex items-center justify-between mb-2">
+                <label className="block text-sm font-medium text-gray-300">
+                  Confirm Password
+                </label>
+                {confirmPassword.length > 0 && (
+                  <span className="text-xs font-medium">
+                    {passwordsMatch ? (
+                      <span className="text-green-400 flex items-center gap-1">
+                        <span>✓</span> Match
+                      </span>
+                    ) : (
+                      <span className="text-red-400 flex items-center gap-1">
+                        <span>✗</span> No Match
+                      </span>
+                    )}
+                  </span>
+                )}
+              </div>
               <input
                 type="password"
                 value={confirmPassword}
                 onChange={(e) => setConfirmPassword(e.target.value)}
-                className="w-full px-4 py-2 bg-gray-700 text-white rounded-lg border border-gray-600 focus:border-blue-500 focus:outline-none"
+                className={`w-full px-4 py-2 bg-gray-700 text-white rounded-lg border focus:outline-none transition-colors ${
+                  confirmPassword.length === 0
+                    ? 'border-gray-600 focus:border-blue-500'
+                    : passwordsMatch
+                    ? 'border-green-500 focus:border-green-400'
+                    : 'border-red-500 focus:border-red-400'
+                }`}
                 placeholder="Confirm your password"
                 required
               />
             </div>
 
             {error && (
-              <div className="bg-red-900/50 border border-red-700 text-red-200 px-4 py-3 rounded-lg">
+              <div className="bg-red-900/50 border border-red-700 text-red-200 px-4 py-3 rounded-lg text-sm">
                 {error}
               </div>
             )}
@@ -137,8 +179,9 @@ function RegisterPage() {
 
             <button
               type="submit"
-              disabled={isLoading}
-              className="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-3 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              disabled={isLoading || (confirmPassword.length > 0 && !passwordsMatch)}
+              className="w-full bg-blue-600 hover:bg-blue-700 disabled:bg-gray-600 text-white font-semibold py-3 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              title={confirmPassword.length > 0 && !passwordsMatch ? 'Passwords must match' : ''}
             >
               {isLoading ? 'Creating account...' : 'Create Account'}
             </button>
