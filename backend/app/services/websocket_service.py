@@ -397,7 +397,7 @@ class ConnectionManager:
                 except Exception as disconnect_error:
                     logger.error(f"Failed to disconnect websocket for user {user_id}: {disconnect_error}")
 
-        return True
+
 
     def get_stats(self) -> dict:
         """
@@ -441,5 +441,110 @@ class ConnectionManager:
             await self.broadcast_to_room(message, room_id, exclude_user=user_id)
 
 
+class MarketDataSubscriptionManager:
+    """
+    Manages WebSocket subscriptions to market data feeds.
+    
+    Channels:
+    - quote:{instrument_id} - Top of book quotes
+    - depth:{instrument_id} - Order book depth
+    - trades:{instrument_id} - Recent trades
+    - candles:{instrument_id}:{timeframe} - OHLCV candles
+    - status:{instrument_id} - Instrument status changes
+    """
+    
+    def __init__(self):
+        # Subscriptions: {channel: Set[websocket]}
+        self.subscriptions: Dict[str, Set[WebSocket]] = {}
+        # Reverse mapping: {websocket: Set[channel]}
+        self.websocket_channels: Dict[WebSocket, Set[str]] = {}
+        
+        logger.info("MarketDataSubscriptionManager initialized")
+    
+    async def subscribe(self, websocket: WebSocket, channel: str) -> None:
+        """Subscribe a websocket to a market data channel."""
+        if channel not in self.subscriptions:
+            self.subscriptions[channel] = set()
+        
+        self.subscriptions[channel].add(websocket)
+        
+        if websocket not in self.websocket_channels:
+            self.websocket_channels[websocket] = set()
+        
+        self.websocket_channels[websocket].add(channel)
+        logger.info(f"WebSocket subscribed to {channel}")
+    
+    async def unsubscribe(self, websocket: WebSocket, channel: Optional[str] = None) -> None:
+        """Unsubscribe from a channel (or all if channel is None)."""
+        if channel:
+            # Unsubscribe from specific channel
+            if channel in self.subscriptions:
+                self.subscriptions[channel].discard(websocket)
+            
+            if websocket in self.websocket_channels:
+                self.websocket_channels[websocket].discard(channel)
+            
+            logger.info(f"WebSocket unsubscribed from {channel}")
+        else:
+            # Unsubscribe from all channels
+            if websocket in self.websocket_channels:
+                for ch in list(self.websocket_channels[websocket]):
+                    if ch in self.subscriptions:
+                        self.subscriptions[ch].discard(websocket)
+                del self.websocket_channels[websocket]
+            
+            logger.info(f"WebSocket unsubscribed from all channels")
+    
+    async def publish(self, channel: str, data: dict) -> int:
+        """
+        Publish data to all subscribers of a channel.
+        
+        Args:
+            channel: Channel name
+            data: Data to publish
+            
+        Returns:
+            Number of messages sent
+        """
+        if channel not in self.subscriptions or not self.subscriptions[channel]:
+            return 0
+        
+        message = {
+            "type": "market_data",
+            "channel": channel,
+            "data": data,
+            "timestamp": datetime.utcnow().isoformat()
+        }
+        message_json = json.dumps(message)
+        
+        sent_count = 0
+        disconnected = set()
+        
+        for websocket in self.subscriptions[channel]:
+            try:
+                await websocket.send_text(message_json)
+                sent_count += 1
+            except Exception as e:
+                logger.error(f"Failed to publish to {channel}: {e}")
+                disconnected.add(websocket)
+        
+        # Clean up disconnected websockets
+        for ws in disconnected:
+            await self.unsubscribe(ws)
+        
+        return sent_count
+    
+    def get_subscriber_count(self, channel: str) -> int:
+        """Get number of subscribers to a channel."""
+        return len(self.subscriptions.get(channel, set()))
+    
+    def get_subscriptions(self, websocket: WebSocket) -> Set[str]:
+        """Get all subscriptions for a websocket."""
+        return self.websocket_channels.get(websocket, set())
+
+
 # Global connection manager instance
 connection_manager = ConnectionManager()
+
+# Global market data subscription manager
+market_data_manager = MarketDataSubscriptionManager()

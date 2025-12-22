@@ -1,10 +1,12 @@
 """
 Advanced matching service with iceberg disclosure, OCO linkage, trailing/stop activation,
 and stricter IOC/FOK handling (still a scaffold, no persistence of filled quantity).
+Publishes market data updates (trades, depth) to WebSocket subscribers.
 """
 from uuid import UUID
 from decimal import Decimal
 from typing import Dict, List, Tuple, Optional
+import logging
 
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
@@ -16,7 +18,10 @@ from app.models.order import Order, OrderStatus
 from app.models.trade import Trade
 from app.services.risk_service import risk_service
 from app.models.market_status import MarketStatus, MarketState
+from app.services.market_data_service import get_market_data_aggregator
+from app.services.websocket_service import market_data_manager
 
+logger = logging.getLogger(__name__)
 
 class MatchingService:
     def __init__(self) -> None:
@@ -241,6 +246,11 @@ class MatchingService:
             await self._evaluate_stops(db, order.instrument_id, self.last_trade_price[order.instrument_id])
             # Cancel OCO siblings once any execution happens
             await self._cancel_oco_siblings(db, order)
+            
+            # Publish trades and depth updates
+            for trade in trades:
+                await self._publish_trade_update(trade)
+            await self._publish_depth_update(order.instrument_id, book)
         else:
             if tif == "fok":
                 order.status = OrderStatus.CANCELLED
@@ -332,6 +342,42 @@ class MatchingService:
             db.add(trade)
             trades.append(trade)
         return trades
+    
+    async def _publish_trade_update(self, trade: Trade) -> None:
+        """Publish trade execution to subscribers."""
+        channel = f"trades:{trade.instrument_id}"
+        trade_data = {
+            "instrument_id": str(trade.instrument_id),
+            "side": "BUY" if trade.buyer_id else "SELL",
+            "price": float(trade.price),
+            "quantity": float(trade.quantity),
+            "buyer_id": str(trade.buyer_id) if trade.buyer_id else None,
+            "seller_id": str(trade.seller_id) if trade.seller_id else None,
+            "timestamp": trade.created_at.isoformat() if trade.created_at else None,
+        }
+        await market_data_manager.publish(channel, trade_data)
+    
+    async def _publish_depth_update(self, instrument_id: UUID, book: OrderBook) -> None:
+        """Publish order book depth to subscribers."""
+        channel = f"depth:{instrument_id}"
+        
+        # Convert book to depth format
+        bids = []
+        for price in sorted(book.bids.keys(), reverse=True)[:10]:  # Top 10 levels
+            size = sum(entry.quantity for entry in book.bids[price])
+            bids.append({"price": float(price), "size": float(size)})
+        
+        asks = []
+        for price in sorted(book.asks.keys())[:10]:  # Top 10 levels
+            size = sum(entry.quantity for entry in book.asks[price])
+            asks.append({"price": float(price), "size": float(size)})
+        
+        depth_data = {
+            "instrument_id": str(instrument_id),
+            "bids": bids,
+            "asks": asks,
+        }
+        await market_data_manager.publish(channel, depth_data)
 
     def _replenish_iceberg_if_needed(self, book: OrderBook, maker_side: OrderSide, maker_order_id: UUID, price: Decimal, client_order_id: Optional[str], maker_user_id: UUID) -> None:
         state = self.iceberg_reserve.get(maker_order_id)
