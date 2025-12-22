@@ -27,9 +27,9 @@
 
 ## Fees & PnL
 
-- [ ] Configurable fee schedules (maker/taker, per instrument/tier) and commissions per lot.
-- [ ] Swap/overnight fees for FX/CFDs; funding rates for derivatives.
-- [ ] PnL calculations (realized/unrealized), portfolio aggregation, VWAP/average price tracking.
+- [x] Configurable fee schedules (maker/taker, per instrument/tier) and commissions per lot.
+- [x] Swap/overnight fees for FX/CFDs; funding rates for derivatives.
+- [x] PnL calculations (realized/unrealized), portfolio aggregation, VWAP/average price tracking.
 
 ## Portfolio, Positions, History
 

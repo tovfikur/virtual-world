@@ -9,19 +9,21 @@ Complete implementation of risk management, margin tracking, liquidation handlin
 ### 1. Account & Margin Models (`backend/app/models/account.py`)
 
 **Account Model**
+
 - Tracks user's trading account balance and margin metrics
 - Fields:
   - `balance`: Cash balance in account currency
   - `equity`: Balance + unrealized P&L
   - `used_margin`: Margin locked by open positions
   - `free_margin`: Equity - used margin (available for new positions)
-  - `margin_level`: (Equity / Used Margin) * 100
+  - `margin_level`: (Equity / Used Margin) \* 100
   - `leverage_max`: Maximum leverage allowed for this account
   - `margin_call_level`: Margin level threshold for margin call (default 100%)
   - `liquidation_level`: Margin level threshold for forced liquidation (default 50%)
   - `status`: ACTIVE, MARGIN_CALL, LIQUIDATING, SUSPENDED
 
 **Position Model**
+
 - Tracks individual open positions
 - Fields:
   - `side`: LONG or SHORT
@@ -36,6 +38,7 @@ Complete implementation of risk management, margin tracking, liquidation handlin
   - `closed_at`: Timestamp when position closed (NULL for open positions)
 
 **MarginCall Model**
+
 - Records margin call and liquidation events
 - Fields:
   - `margin_level`: Margin level at time of event
@@ -45,6 +48,7 @@ Complete implementation of risk management, margin tracking, liquidation handlin
   - `resolved`: Whether issue has been resolved
 
 **CircuitBreaker Model**
+
 - Records volatility halts
 - Fields:
   - `breaker_type`: "INSTRUMENT" or "MARKET_WIDE"
@@ -58,31 +62,37 @@ Complete implementation of risk management, margin tracking, liquidation handlin
 ### 2. Margin Calculation Service (`backend/app/services/margin_service.py`)
 
 **Margin Calculation**
+
 ```python
 margin_required = (quantity * price) / leverage
 ```
 
 For a 100,000 EUR position at 1.1000 with 50x leverage:
+
 ```
 margin = (100,000 * 1.1000) / 50 = 2,200 USD
 ```
 
 **Equity Calculation**
+
 ```python
 equity = balance + sum(unrealized_pnl for all positions)
 ```
 
 **Free Margin**
+
 ```python
 free_margin = equity - used_margin
 ```
 
 **Margin Level**
+
 ```python
 margin_level = (equity / used_margin) * 100
 ```
 
 **Key Methods:**
+
 - `calculate_account_equity()`: Recalculates equity, used margin, free margin for account
 - `calculate_position_margin()`: Computes margin required for new position
 - `check_margin_sufficiency()`: Validates if account has enough free margin
@@ -93,10 +103,12 @@ margin_level = (equity / used_margin) * 100
 ### 3. Liquidation Service (`backend/app/services/liquidation_service.py`)
 
 **Margin Thresholds:**
+
 - **Margin Call (100% default)**: Warning notification, no forced action
 - **Liquidation (50% default)**: Automatic position closure
 
 **Liquidation Process:**
+
 1. Set account status to `LIQUIDATING`
 2. Cancel all pending orders
 3. Get all open positions, sort by P&L (worst first)
@@ -105,10 +117,12 @@ margin_level = (equity / used_margin) * 100
 6. Create `MarginCall` record with action="LIQUIDATION"
 
 **Key Methods:**
+
 - `check_margin_levels()`: Monitors margin level, triggers margin call or liquidation
 - `monitor_all_accounts()`: Periodic check of all accounts (called by background task)
 
 **Monitoring:**
+
 ```python
 # Call periodically (e.g., every minute)
 stats = await liquidation_service.monitor_all_accounts(db)
@@ -122,12 +136,13 @@ stats = await liquidation_service.monitor_all_accounts(db)
 1. **Leverage Limits**
    - Validate against instrument max leverage
    - Validate against account max leverage
-   
 2. **Margin Sufficiency**
+
    - Calculate margin required for new position
    - Verify account has sufficient free margin
 
 3. **Position Size Limits**
+
    - Max 20% of account equity per position
    - Prevents over-concentration
 
@@ -136,6 +151,7 @@ stats = await liquidation_service.monitor_all_accounts(db)
    - Sums notional value of all positions for same instrument
 
 **Integration:**
+
 ```python
 # Before placing order
 await risk_service.validate_order_with_account(
@@ -152,24 +168,26 @@ await risk_service.validate_order_with_account(
 **Instrument-Level Thresholds:**
 | Level | Percent Move | Time Window | Halt Duration |
 |-------|-------------|-------------|---------------|
-| 1     | 5%          | 1 minute    | 5 minutes     |
-| 2     | 10%         | 5 minutes   | 15 minutes    |
-| 3     | 20%         | 15 minutes  | 30 minutes    |
+| 1 | 5% | 1 minute | 5 minutes |
+| 2 | 10% | 5 minutes | 15 minutes |
+| 3 | 20% | 15 minutes | 30 minutes |
 
 **Market-Wide Thresholds:**
 | Level | Avg Move | Time Window | Halt Duration |
 |-------|----------|-------------|---------------|
-| 1     | 7%       | 5 minutes   | 15 minutes    |
-| 2     | 13%      | 10 minutes  | 30 minutes    |
-| 3     | 20%      | 15 minutes  | 60 minutes    |
+| 1 | 7% | 5 minutes | 15 minutes |
+| 2 | 13% | 10 minutes | 30 minutes |
+| 3 | 20% | 15 minutes | 60 minutes |
 
 **Detection:**
+
 - Uses `PriceHistory` 1-minute candles as reference
 - Compares current price to price N minutes ago
 - Calculates percent change
 - Triggers halt if threshold exceeded
 
 **Integration:**
+
 ```python
 # Check before executing trade
 is_halted = await circuit_breaker_service.is_trading_halted(
@@ -180,6 +198,7 @@ if is_halted:
 ```
 
 **Automatic Expiry:**
+
 - Circuit breakers automatically deactivate after duration expires
 - Checked on each query via `elapsed time > duration_seconds`
 
@@ -349,6 +368,7 @@ if breaker:
 Comprehensive test suite in `backend/tests/test_margin_and_risk.py`:
 
 **Test Cases:**
+
 1. `test_margin_calculation`: Validates margin computation for leveraged positions
 2. `test_account_equity_calculation`: Tests equity and P&L calculations
 3. `test_margin_call_detection`: Verifies margin call triggers at threshold
@@ -358,6 +378,7 @@ Comprehensive test suite in `backend/tests/test_margin_and_risk.py`:
 7. `test_exposure_limits`: Validates per-instrument exposure caps
 
 **Run tests:**
+
 ```bash
 cd backend
 pytest tests/test_margin_and_risk.py -v
@@ -366,6 +387,7 @@ pytest tests/test_margin_and_risk.py -v
 ## Integration Points
 
 ### Order Placement Flow
+
 1. User submits order
 2. **Risk validation** (`risk_service.validate_order_with_account()`)
 3. **Circuit breaker check** (`circuit_breaker_service.is_trading_halted()`)
@@ -374,6 +396,7 @@ pytest tests/test_margin_and_risk.py -v
 6. **Update account equity** (`margin_service.calculate_account_equity()`)
 
 ### Background Tasks
+
 Add to `backend/app/main.py`:
 
 ```python
@@ -389,7 +412,7 @@ async def startup_tasks():
                 liquidation_service = get_liquidation_service()
                 await liquidation_service.monitor_all_accounts(db)
             await asyncio.sleep(60)
-    
+
     # Circuit breaker monitoring (every 30 seconds)
     async def monitor_circuit_breakers():
         while True:
@@ -398,12 +421,13 @@ async def startup_tasks():
                 # Check market-wide volatility
                 await circuit_breaker_service.check_market_wide_volatility(db)
             await asyncio.sleep(30)
-    
+
     asyncio.create_task(monitor_margins())
     asyncio.create_task(monitor_circuit_breakers())
 ```
 
 ### WebSocket Price Updates
+
 When price updates via WebSocket:
 
 ```python
@@ -426,6 +450,7 @@ if breaker:
 ## Configuration
 
 **Risk Parameters** (in `risk_service.py`):
+
 ```python
 max_order_notional = 100_000_000  # $100M per order
 max_position_size_pct = 0.20      # 20% of equity per position
@@ -433,6 +458,7 @@ max_instrument_exposure_pct = 0.50  # 50% of equity per instrument
 ```
 
 **Margin Defaults** (in `Account` model):
+
 ```python
 margin_call_level = 100.0   # Margin call at 100%
 liquidation_level = 50.0    # Liquidate at 50%
@@ -458,6 +484,7 @@ Modify `instrument_thresholds` and `market_wide_thresholds` arrays.
 - **Pre-Trade Validation**: O(1) (few database queries)
 
 **Optimization Tips:**
+
 - Cache margin levels in Redis for high-frequency updates
 - Use database indexes on `account_id`, `instrument_id`, `is_active`
 - Batch margin monitoring for multiple accounts
@@ -492,6 +519,7 @@ Modify `instrument_thresholds` and `market_wide_thresholds` arrays.
 ## Summary
 
 The Risk, Margin & Exposure system provides:
+
 - ✅ Real-time margin tracking with used/free margin and equity calculations
 - ✅ Automatic margin call detection and forced liquidation
 - ✅ Pre-trade risk validation (leverage, margin, position size, exposure)

@@ -18,6 +18,10 @@ from app.models.trade import Trade
 from app.models.market_status import MarketStatus, MarketState
 from app.models.price_history import PriceHistory, CorporateAction, QuoteLevel, TimeframeEnum, CorporateActionType
 from app.models.account import Account, Position, MarginCall, CircuitBreaker, AccountStatus
+from app.models.fee_schedule import (
+    FeeSchedule, FeeVolumeTier, InstrumentFeeOverride, AccountFeeSchedule,
+    SwapRate, FundingRate, Commission, FeeType
+)
 from app.models.audit_log import AuditLog, AuditEventCategory
 from app.models.admin_config import AdminConfig
 
@@ -72,4 +76,13 @@ __all__ = [
     "MarginCall",
     "CircuitBreaker",
     "AccountStatus",
+    # Fees & PnL
+    "FeeSchedule",
+    "FeeVolumeTier",
+    "InstrumentFeeOverride",
+    "AccountFeeSchedule",
+    "SwapRate",
+    "FundingRate",
+    "Commission",
+    "FeeType",
 ]
