@@ -186,6 +186,110 @@ class AdminConfig(BaseModel):
         nullable=False
     )
 
+    # Price Formula Controls
+    land_pricing_formula = Column(
+        String(32),
+        default="dynamic",
+        nullable=False,
+        comment="Pricing formula type: dynamic (algorithmic) or fixed (flat rate)"
+    )
+    fixed_land_price_bdt = Column(
+        Integer,
+        default=1000,
+        nullable=False,
+        comment="Fixed price per land when formula=fixed"
+    )
+    dynamic_pricing_biome_influence = Column(
+        Float,
+        default=1.0,
+        nullable=False,
+        comment="Multiplier for biome influence on dynamic pricing (0=ignore biomes)"
+    )
+    dynamic_pricing_elevation_influence = Column(
+        Float,
+        default=1.0,
+        nullable=False,
+        comment="Multiplier for elevation influence on dynamic pricing (0=flat elevation)"
+    )
+
+    # Fencing Cost Controls
+    fencing_enabled = Column(
+        Boolean,
+        default=True,
+        nullable=False,
+        comment="Enable/disable land fencing feature"
+    )
+    fencing_cost_per_unit = Column(
+        Integer,
+        default=100,
+        nullable=False,
+        comment="Cost in BDT per unit perimeter for fencing"
+    )
+    fencing_maintenance_cost_percent = Column(
+        Float,
+        default=5.0,
+        nullable=False,
+        comment="Annual maintenance cost as % of fencing installation cost"
+    )
+    fencing_durability_years = Column(
+        Integer,
+        default=10,
+        nullable=False,
+        comment="Expected lifetime of fence before replacement needed"
+    )
+
+    # Parcel Rules
+    parcel_connectivity_required = Column(
+        Boolean,
+        default=True,
+        nullable=False,
+        comment="Require purchased lands to be connected/adjacent"
+    )
+    parcel_diagonal_allowed = Column(
+        Boolean,
+        default=False,
+        nullable=False,
+        comment="Allow diagonal adjacency for connectivity"
+    )
+    parcel_min_size = Column(
+        Integer,
+        default=1,
+        nullable=False,
+        comment="Minimum parcel size (number of lands)"
+    )
+    parcel_max_size = Column(
+        Integer,
+        default=1000,
+        nullable=False,
+        comment="Maximum parcel size (number of lands)"
+    )
+
+    # Ownership Limits
+    max_lands_per_user = Column(
+        Integer,
+        default=10000,
+        nullable=False,
+        comment="Maximum total lands one user can own"
+    )
+    max_lands_per_biome_per_user = Column(
+        Integer,
+        default=2000,
+        nullable=False,
+        comment="Maximum lands per biome type per user"
+    )
+    max_contiguous_lands = Column(
+        Integer,
+        default=500,
+        nullable=False,
+        comment="Maximum size of single contiguous land parcel"
+    )
+    ownership_cooldown_minutes = Column(
+        Integer,
+        default=0,
+        nullable=False,
+        comment="Cooldown between land purchases (0=disabled)"
+    )
+
     # Platform Fees
     transaction_fee_percent = Column(
         Float,
@@ -1212,6 +1316,30 @@ class AdminConfig(BaseModel):
                 "redistribution_gini_target": self.market_reset_redistribution_gini_target,
                 "require_confirmation": self.market_reset_require_confirmation,
                 "cooldown_minutes": self.market_reset_cooldown_minutes,
+            },
+            "land_pricing_formula": {
+                "formula": self.land_pricing_formula,
+                "fixed_price_bdt": self.fixed_land_price_bdt,
+                "dynamic_biome_influence": self.dynamic_pricing_biome_influence,
+                "dynamic_elevation_influence": self.dynamic_pricing_elevation_influence,
+            },
+            "fencing": {
+                "enabled": self.fencing_enabled,
+                "cost_per_unit_bdt": self.fencing_cost_per_unit,
+                "maintenance_cost_percent": self.fencing_maintenance_cost_percent,
+                "durability_years": self.fencing_durability_years,
+            },
+            "parcel_rules": {
+                "connectivity_required": self.parcel_connectivity_required,
+                "diagonal_allowed": self.parcel_diagonal_allowed,
+                "min_size": self.parcel_min_size,
+                "max_size": self.parcel_max_size,
+            },
+            "ownership_limits": {
+                "max_lands_per_user": self.max_lands_per_user,
+                "max_lands_per_biome_per_user": self.max_lands_per_biome_per_user,
+                "max_contiguous_lands": self.max_contiguous_lands,
+                "cooldown_minutes": self.ownership_cooldown_minutes,
             },
             "auth": {
                 "access_token_expire_minutes": self.access_token_expire_minutes,

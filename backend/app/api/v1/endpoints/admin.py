@@ -1460,6 +1460,30 @@ class EconomicSettingsUpdate(BaseModel):
     # Auction Duration Limits
     auction_min_duration_hours: Optional[int] = None
     auction_max_duration_hours: Optional[int] = None
+    
+    # Land Pricing Formula Controls
+    land_pricing_formula: Optional[str] = None
+    fixed_land_price_bdt: Optional[int] = None
+    dynamic_pricing_biome_influence: Optional[float] = None
+    dynamic_pricing_elevation_influence: Optional[float] = None
+    
+    # Fencing Cost Controls
+    fencing_enabled: Optional[bool] = None
+    fencing_cost_per_unit: Optional[int] = None
+    fencing_maintenance_cost_percent: Optional[float] = None
+    fencing_durability_years: Optional[int] = None
+    
+    # Parcel Rules
+    parcel_connectivity_required: Optional[bool] = None
+    parcel_diagonal_allowed: Optional[bool] = None
+    parcel_min_size: Optional[int] = None
+    parcel_max_size: Optional[int] = None
+    
+    # Ownership Limits
+    max_lands_per_user: Optional[int] = None
+    max_lands_per_biome_per_user: Optional[int] = None
+    max_contiguous_lands: Optional[int] = None
+    ownership_cooldown_minutes: Optional[int] = None
 
 
 class WorldSettingsUpdate(BaseModel):
@@ -1810,6 +1834,85 @@ async def update_economic_settings(
             if settings.market_reset_cooldown_minutes < 0:
                 raise HTTPException(status_code=400, detail="market_reset_cooldown_minutes must be non-negative")
             config.market_reset_cooldown_minutes = settings.market_reset_cooldown_minutes
+
+        # Land Pricing Formula Controls
+        if settings.land_pricing_formula is not None:
+            allowed_formulas = {"dynamic", "fixed"}
+            if settings.land_pricing_formula not in allowed_formulas:
+                raise HTTPException(status_code=400, detail=f"land_pricing_formula must be one of {allowed_formulas}")
+            config.land_pricing_formula = settings.land_pricing_formula
+
+        if settings.fixed_land_price_bdt is not None:
+            if settings.fixed_land_price_bdt < 1:
+                raise HTTPException(status_code=400, detail="fixed_land_price_bdt must be >= 1")
+            config.fixed_land_price_bdt = settings.fixed_land_price_bdt
+
+        if settings.dynamic_pricing_biome_influence is not None:
+            if settings.dynamic_pricing_biome_influence < 0:
+                raise HTTPException(status_code=400, detail="dynamic_pricing_biome_influence must be non-negative")
+            config.dynamic_pricing_biome_influence = settings.dynamic_pricing_biome_influence
+
+        if settings.dynamic_pricing_elevation_influence is not None:
+            if settings.dynamic_pricing_elevation_influence < 0:
+                raise HTTPException(status_code=400, detail="dynamic_pricing_elevation_influence must be non-negative")
+            config.dynamic_pricing_elevation_influence = settings.dynamic_pricing_elevation_influence
+
+        # Fencing Cost Controls
+        if settings.fencing_enabled is not None:
+            config.fencing_enabled = settings.fencing_enabled
+
+        if settings.fencing_cost_per_unit is not None:
+            if settings.fencing_cost_per_unit < 0:
+                raise HTTPException(status_code=400, detail="fencing_cost_per_unit must be non-negative")
+            config.fencing_cost_per_unit = settings.fencing_cost_per_unit
+
+        if settings.fencing_maintenance_cost_percent is not None:
+            if settings.fencing_maintenance_cost_percent < 0 or settings.fencing_maintenance_cost_percent > 100:
+                raise HTTPException(status_code=400, detail="fencing_maintenance_cost_percent must be 0-100")
+            config.fencing_maintenance_cost_percent = settings.fencing_maintenance_cost_percent
+
+        if settings.fencing_durability_years is not None:
+            if settings.fencing_durability_years < 1:
+                raise HTTPException(status_code=400, detail="fencing_durability_years must be >= 1")
+            config.fencing_durability_years = settings.fencing_durability_years
+
+        # Parcel Rules
+        if settings.parcel_connectivity_required is not None:
+            config.parcel_connectivity_required = settings.parcel_connectivity_required
+
+        if settings.parcel_diagonal_allowed is not None:
+            config.parcel_diagonal_allowed = settings.parcel_diagonal_allowed
+
+        if settings.parcel_min_size is not None:
+            if settings.parcel_min_size < 1:
+                raise HTTPException(status_code=400, detail="parcel_min_size must be >= 1")
+            config.parcel_min_size = settings.parcel_min_size
+
+        if settings.parcel_max_size is not None:
+            if settings.parcel_max_size < settings.parcel_min_size if settings.parcel_min_size else 1:
+                raise HTTPException(status_code=400, detail="parcel_max_size must be >= parcel_min_size")
+            config.parcel_max_size = settings.parcel_max_size
+
+        # Ownership Limits
+        if settings.max_lands_per_user is not None:
+            if settings.max_lands_per_user < 1:
+                raise HTTPException(status_code=400, detail="max_lands_per_user must be >= 1")
+            config.max_lands_per_user = settings.max_lands_per_user
+
+        if settings.max_lands_per_biome_per_user is not None:
+            if settings.max_lands_per_biome_per_user < 1:
+                raise HTTPException(status_code=400, detail="max_lands_per_biome_per_user must be >= 1")
+            config.max_lands_per_biome_per_user = settings.max_lands_per_biome_per_user
+
+        if settings.max_contiguous_lands is not None:
+            if settings.max_contiguous_lands < 1:
+                raise HTTPException(status_code=400, detail="max_contiguous_lands must be >= 1")
+            config.max_contiguous_lands = settings.max_contiguous_lands
+
+        if settings.ownership_cooldown_minutes is not None:
+            if settings.ownership_cooldown_minutes < 0:
+                raise HTTPException(status_code=400, detail="ownership_cooldown_minutes must be non-negative")
+            config.ownership_cooldown_minutes = settings.ownership_cooldown_minutes
 
         config.updated_at = datetime.utcnow()
 
