@@ -3,37 +3,38 @@
  * Root component with routing and global providers
  */
 
-import { useEffect } from 'react';
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
-import { Toaster, toast } from 'react-hot-toast';
-import useAuthStore from './stores/authStore';
-import { wsService } from './services/websocket';
+import { useEffect } from "react";
+import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import { Toaster, toast } from "react-hot-toast";
+import useAuthStore from "./stores/authStore";
+import { wsService } from "./services/websocket";
 
 // Pages
-import LoginPage from './pages/LoginPage';
-import RegisterPage from './pages/RegisterPage';
-import WorldPage from './pages/WorldPage';
-import MarketplacePage from './pages/MarketplacePage';
-import ProfilePage from './pages/ProfilePage';
+import LoginPage from "./pages/LoginPage";
+import RegisterPage from "./pages/RegisterPage";
+import WorldPage from "./pages/WorldPage";
+import MarketplacePage from "./pages/MarketplacePage";
+import ProfilePage from "./pages/ProfilePage";
+import BiomeMarketPage from "./pages/BiomeMarketPage";
 
 // Admin Pages
-import AdminDashboardPage from './pages/AdminDashboardPage';
-import AdminUsersPage from './pages/AdminUsersPage';
-import AdminLogsPage from './pages/AdminLogsPage';
-import AdminMarketplacePage from './pages/AdminMarketplacePage';
-import AdminLandsPage from './pages/AdminLandsPage';
-import AdminEconomyPage from './pages/AdminEconomyPage';
-import AdminModerationPage from './pages/AdminModerationPage';
-import AdminFeaturesPage from './pages/AdminFeaturesPage';
-import AdminCommunicationPage from './pages/AdminCommunicationPage';
-import AdminSecurityPage from './pages/AdminSecurityPage';
+import AdminDashboardPage from "./pages/AdminDashboardPage";
+import AdminUsersPage from "./pages/AdminUsersPage";
+import AdminLogsPage from "./pages/AdminLogsPage";
+import AdminMarketplacePage from "./pages/AdminMarketplacePage";
+import AdminLandsPage from "./pages/AdminLandsPage";
+import AdminEconomyPage from "./pages/AdminEconomyPage";
+import AdminModerationPage from "./pages/AdminModerationPage";
+import AdminFeaturesPage from "./pages/AdminFeaturesPage";
+import AdminCommunicationPage from "./pages/AdminCommunicationPage";
+import AdminSecurityPage from "./pages/AdminSecurityPage";
 
 // Components
-import ProtectedRoute from './components/ProtectedRoute';
-import LoadingScreen from './components/LoadingScreen';
+import ProtectedRoute from "./components/ProtectedRoute";
+import LoadingScreen from "./components/LoadingScreen";
 
 function App() {
-  const { isAuthenticated, isLoading, loadUser } = useAuthStore();
+  const { isAuthenticated, isLoading, loadUser, logout } = useAuthStore();
 
   // Load user on mount
   useEffect(() => {
@@ -50,19 +51,29 @@ function App() {
         (t) => (
           <div
             className={`${
-              t.visible ? 'animate-enter' : 'animate-leave'
+              t.visible ? "animate-enter" : "animate-leave"
             } max-w-md w-full bg-gradient-to-r from-blue-600 to-purple-600 shadow-lg rounded-lg pointer-events-auto flex ring-1 ring-black ring-opacity-5`}
           >
             <div className="flex-1 w-0 p-4">
               <div className="flex items-start">
                 <div className="flex-shrink-0 pt-0.5">
-                  <svg className="h-10 w-10 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5.882V19.24a1.76 1.76 0 01-3.417.592l-2.147-6.15M18 13a3 3 0 100-6M5.436 13.683A4.001 4.001 0 017 6h1.832c4.1 0 7.625-1.234 9.168-3v14c-1.543-1.766-5.067-3-9.168-3H7a3.988 3.988 0 01-1.564-.317z" />
+                  <svg
+                    className="h-10 w-10 text-white"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    stroke="currentColor"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M11 5.882V19.24a1.76 1.76 0 01-3.417.592l-2.147-6.15M18 13a3 3 0 100-6M5.436 13.683A4.001 4.001 0 017 6h1.832c4.1 0 7.625-1.234 9.168-3v14c-1.543-1.766-5.067-3-9.168-3H7a3.988 3.988 0 01-1.564-.317z"
+                    />
                   </svg>
                 </div>
                 <div className="ml-3 flex-1">
                   <p className="text-sm font-bold text-white">
-                    {message.title || 'System Announcement'}
+                    {message.title || "System Announcement"}
                   </p>
                   <p className="mt-1 text-sm text-gray-100">
                     {message.message}
@@ -82,19 +93,34 @@ function App() {
         ),
         {
           duration: 10000, // Show for 10 seconds
-          position: 'top-center',
+          position: "top-center",
         }
       );
     };
 
     // Subscribe to broadcast messages
-    const unsubscribe = wsService.on('broadcast', handleBroadcast);
+    const unsubscribe = wsService.on("broadcast", handleBroadcast);
 
     // Cleanup on unmount
     return () => {
       if (unsubscribe) unsubscribe();
     };
   }, [isAuthenticated]);
+
+  useEffect(() => {
+    if (!isAuthenticated) return;
+
+    const unsubscribe = wsService.on("session_invalidated", (message) => {
+      const reason =
+        message?.reason || "You have been logged out from another device.";
+      toast.error(reason);
+      logout();
+    });
+
+    return () => {
+      if (unsubscribe) unsubscribe();
+    };
+  }, [isAuthenticated, logout]);
 
   if (isLoading) {
     return <LoadingScreen />;
@@ -107,9 +133,9 @@ function App() {
         toastOptions={{
           duration: 3000,
           style: {
-            background: '#1f2937',
-            color: '#f3f4f6',
-            border: '1px solid #374151',
+            background: "#1f2937",
+            color: "#f3f4f6",
+            border: "1px solid #374151",
           },
         }}
       />
@@ -118,9 +144,7 @@ function App() {
         {/* Public routes */}
         <Route
           path="/login"
-          element={
-            isAuthenticated ? <Navigate to="/world" /> : <LoginPage />
-          }
+          element={isAuthenticated ? <Navigate to="/world" /> : <LoginPage />}
         />
         <Route
           path="/register"
@@ -143,6 +167,14 @@ function App() {
           element={
             <ProtectedRoute>
               <MarketplacePage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/biome-market"
+          element={
+            <ProtectedRoute>
+              <BiomeMarketPage />
             </ProtectedRoute>
           }
         />
@@ -240,9 +272,7 @@ function App() {
         {/* Default redirect */}
         <Route
           path="/"
-          element={
-            <Navigate to={isAuthenticated ? '/world' : '/login'} />
-          }
+          element={<Navigate to={isAuthenticated ? "/world" : "/login"} />}
         />
       </Routes>
     </BrowserRouter>

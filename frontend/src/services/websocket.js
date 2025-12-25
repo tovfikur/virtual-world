@@ -12,6 +12,8 @@ class WebSocketService {
     this.maxReconnectAttempts = 5;
     this.reconnectDelay = 1000;
     this.heartbeatInterval = null;
+    this.shouldReconnect = true;
+    this.lastToken = null;
   }
 
   connect(token) {
@@ -19,6 +21,9 @@ class WebSocketService {
     const defaultWsUrl = `${window.location.protocol === 'https:' ? 'wss://' : 'ws://'}${window.location.host}`;
     const wsUrl = envWsUrl && envWsUrl.trim() !== '' ? envWsUrl : defaultWsUrl;
     const url = `${wsUrl.replace(/\/?$/, '')}/api/v1/ws/connect?token=${token}`;
+
+    this.lastToken = token;
+    this.shouldReconnect = true;
 
     return new Promise((resolve, reject) => {
       try {
@@ -50,7 +55,11 @@ class WebSocketService {
           console.log('WebSocket disconnected');
           this.isConnected = false;
           this.stopHeartbeat();
-          this.attemptReconnect(token);
+          if (this.shouldReconnect && this.lastToken) {
+            this.attemptReconnect(this.lastToken);
+          } else {
+            this.reconnectAttempts = 0;
+          }
         };
       } catch (error) {
         console.error('Failed to create WebSocket:', error);
@@ -61,6 +70,9 @@ class WebSocketService {
 
   disconnect() {
     this.stopHeartbeat();
+    this.shouldReconnect = false;
+    this.reconnectAttempts = 0;
+    this.lastToken = null;
     if (this.ws) {
       this.ws.close();
       this.ws = null;

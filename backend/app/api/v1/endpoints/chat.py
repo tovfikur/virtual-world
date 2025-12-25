@@ -15,6 +15,7 @@ from app.db.session import get_db
 from app.models.chat import ChatSession
 from app.models.chat import Message
 from app.models.user import User
+from app.models.land import Land
 from app.dependencies import get_current_user
 from app.services.chat_service import chat_service
 from app.services.websocket_service import connection_manager
@@ -175,12 +176,18 @@ async def send_chat_message(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=str(e)
         )
+    except PermissionError as e:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=str(e)
+        )
 
 
 @router.get("/land/{land_id}/messages")
 async def get_land_messages(
     land_id: str,
     limit: int = Query(50, ge=1, le=200),
+    current_user: dict = Depends(get_current_user),
     db: AsyncSession = Depends(get_db)
 ):
     """
@@ -201,6 +208,35 @@ async def get_land_messages(
         )
 
     try:
+        user_uuid = uuid.UUID(current_user["sub"])
+    except ValueError:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid user ID"
+        )
+
+    try:
+        land_result = await db.execute(select(Land).where(Land.land_id == land_uuid))
+        land = land_result.scalar_one_or_none()
+        if not land:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Land not found"
+            )
+
+        try:
+            await chat_service.enforce_land_chat_access(
+                db=db,
+                land=land,
+                user_id=user_uuid,
+                require_write=False,
+            )
+        except PermissionError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=str(exc),
+            ) from exc
+
         # Get or create chat session for this land
         logger.info(f"Getting/creating chat session for land {land_uuid}")
         chat_session = await chat_service.get_or_create_land_chat(db, land_uuid)
@@ -435,9 +471,11 @@ async def get_unread_messages(
     db: AsyncSession = Depends(get_db)
 ):
     """
-    Get count of unread and read leave messages for all lands owned by current user.
+    Get leave-message indicator data scoped to the current user.
 
-    Returns a dict mapping land_id to {"unread": count, "read": count}.
+    Each record now includes unread/read counts for owned lands plus
+    participation metadata (received/mine/others) for squares where the user
+    has left messages.
     """
     try:
         user_uuid = uuid.UUID(current_user["sub"])

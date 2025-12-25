@@ -30,28 +30,30 @@ class ListingStatus(str, PyEnum):
 
 class Listing(BaseModel):
     """
-    Marketplace listing for land sales.
+    Marketplace listing for land sales (parcel system).
 
     Supports multiple listing types:
     - Auction: Time-limited bidding with highest bidder winning
     - Fixed Price: Set price with immediate purchase option
     - Buy Now: Instant purchase at fixed price
 
+    A listing can contain multiple connected lands (parcel).
+
     Attributes:
         listing_id: Unique UUID identifier
-        land_id: Reference to land being sold (unique - one listing per land)
-        seller_id: Reference to user selling the land
+        seller_id: Reference to user selling the parcel
+        listing_lands: List of lands in this parcel (via junction table)
         type: Listing type (auction/fixed_price/buy_now)
-        description: Seller's description of the land
+        description: Seller's description of the parcel
         images: Array of image URLs
-        price_bdt: Starting/fixed price in BDT
+        price_bdt: Starting/fixed price in BDT (for entire parcel)
         reserve_price_bdt: Minimum acceptable price for auctions
         auction_start_time: When auction begins
         auction_end_time: When auction ends
         auto_extend: Whether to extend auction if bids near end
         auto_extend_minutes: Minutes to extend by
         buy_now_enabled: Whether instant purchase is available
-        buy_now_price_bdt: Fixed price for instant purchase
+        buy_now_price_bdt: Fixed price for instant purchase (for entire parcel)
         status: Current listing status
         sold_at: When listing was sold
     """
@@ -72,13 +74,6 @@ class Listing(BaseModel):
     )
 
     # Foreign Keys
-    land_id = Column(
-        UUID(as_uuid=True),
-        ForeignKey("lands.land_id"),
-        unique=True,  # Only one active listing per land
-        nullable=False,
-        index=True
-    )
     seller_id = Column(
         UUID(as_uuid=True),
         ForeignKey("users.user_id"),
@@ -118,7 +113,7 @@ class Listing(BaseModel):
     sold_at = Column(DateTime(timezone=True), nullable=True)
 
     # Relationships
-    land = relationship("Land", back_populates="listings")
+    listing_lands = relationship("ListingLand", back_populates="listing", cascade="all, delete-orphan")
     seller = relationship("User", back_populates="listings")
     bids = relationship("Bid", back_populates="listing", cascade="all, delete-orphan")
 
@@ -183,16 +178,22 @@ class Listing(BaseModel):
         """String representation of Listing."""
         return f"<Listing {self.listing_id} - {self.type.value}>"
 
+    @property
+    def land_count(self) -> int:
+        """Get number of lands in this parcel."""
+        return len(self.listing_lands) if self.listing_lands else 0
+
     def to_dict(self) -> dict:
         """
         Convert listing to dictionary for API responses.
+
+        Note: land_count should be added manually in API endpoints to avoid lazy loading.
 
         Returns:
             dict: Listing data dictionary
         """
         return {
             "listing_id": str(self.listing_id),
-            "land_id": str(self.land_id),
             "seller_id": str(self.seller_id),
             "listing_type": self.type.value,
             "status": self.status.value,

@@ -156,6 +156,18 @@ class User(BaseModel):
         back_populates="actor",
         foreign_keys="AuditLog.actor_id"
     )
+    biome_holdings = relationship(
+        "BiomeHolding",
+        back_populates="user"
+    )
+    biome_transactions = relationship(
+        "BiomeTransaction",
+        back_populates="user"
+    )
+    attention_scores = relationship(
+        "AttentionScore",
+        back_populates="user"
+    )
 
     def set_password(self, password: str) -> None:
         """

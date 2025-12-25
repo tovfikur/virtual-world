@@ -3,10 +3,10 @@
  * Top bar with user info and navigation
  */
 
-import { Link, useNavigate } from 'react-router-dom';
-import useAuthStore from '../stores/authStore';
-import { wsAPI } from '../services/api';
-import { useEffect, useState } from 'react';
+import { Link, useNavigate } from "react-router-dom";
+import useAuthStore from "../stores/authStore";
+import { wsAPI } from "../services/api";
+import { useEffect, useState } from "react";
 
 function HUD() {
   const { user, logout } = useAuthStore();
@@ -22,7 +22,7 @@ function HUD() {
         const response = await wsAPI.getOnlineUsers();
         setOnlineCount(response.data.count);
       } catch (error) {
-        console.error('Failed to load online count:', error);
+        console.error("Failed to load online count:", error);
       }
     };
 
@@ -34,7 +34,7 @@ function HUD() {
 
   const handleLogout = async () => {
     await logout();
-    navigate('/login');
+    navigate("/login");
   };
 
   if (!user) return null;
@@ -49,26 +49,58 @@ function HUD() {
             onClick={() => setShowMobileMenu(!showMobileMenu)}
             className="md:hidden text-gray-300 hover:text-white p-1"
           >
-            <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <svg
+              className="w-6 h-6"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
               {showMobileMenu ? (
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M6 18L18 6M6 6l12 12"
+                />
               ) : (
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M4 6h16M4 12h16M4 18h16"
+                />
               )}
             </svg>
           </button>
-          <h1 className="text-base sm:text-xl font-bold text-white truncate">Virtual Land World</h1>
+          <h1 className="text-base sm:text-xl font-bold text-white truncate">
+            Virtual Land World
+          </h1>
         </div>
 
         {/* Desktop Nav */}
         <nav className="hidden md:flex space-x-6">
-          <Link to="/world" className="text-gray-300 hover:text-white transition-colors font-medium">
+          <Link
+            to="/world"
+            className="text-gray-300 hover:text-white transition-colors font-medium"
+          >
             World
           </Link>
-          <Link to="/marketplace" className="text-gray-300 hover:text-white transition-colors font-medium">
+          <Link
+            to="/marketplace"
+            className="text-gray-300 hover:text-white transition-colors font-medium"
+          >
             Marketplace
           </Link>
-          <Link to="/profile" className="text-gray-300 hover:text-white transition-colors font-medium">
+          <Link
+            to="/biome-market"
+            className="text-cyan-400 hover:text-cyan-300 transition-colors font-medium"
+          >
+            Biome Market
+          </Link>
+          <Link
+            to="/profile"
+            className="text-gray-300 hover:text-white transition-colors font-medium"
+          >
             Profile
           </Link>
         </nav>
@@ -88,11 +120,25 @@ function HUD() {
               className="flex items-center space-x-2 bg-gray-700 hover:bg-gray-600 px-2 sm:px-4 py-1.5 sm:py-2 rounded-lg transition-colors"
             >
               <div className="text-right">
-                <p className="text-white font-semibold text-xs sm:text-sm">{user.username}</p>
-                <p className="text-[10px] sm:text-xs text-green-400">{user.balance_bdt} BDT</p>
+                <p className="text-white font-semibold text-xs sm:text-sm">
+                  {user.username}
+                </p>
+                <p className="text-[10px] sm:text-xs text-green-400">
+                  {user.balance_bdt} BDT
+                </p>
               </div>
-              <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+              <svg
+                className="w-4 h-4 text-gray-400"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M19 9l-7 7-7-7"
+                />
               </svg>
             </button>
 
@@ -113,7 +159,7 @@ function HUD() {
                 >
                   Marketplace
                 </Link>
-                {user.role === 'admin' && (
+                {user.role === "admin" && (
                   <Link
                     to="/admin"
                     className="block px-4 py-3 hover:bg-gray-700 text-yellow-400 hover:text-yellow-300 transition-colors border-t border-gray-700"
@@ -153,13 +199,20 @@ function HUD() {
               🏪 Marketplace
             </Link>
             <Link
+              to="/biome-market"
+              className="px-4 py-3 text-cyan-400 hover:bg-gray-700 hover:text-cyan-300 transition-colors border-b border-gray-700/50"
+              onClick={() => setShowMobileMenu(false)}
+            >
+              💎 Biome Market
+            </Link>
+            <Link
               to="/profile"
               className="px-4 py-3 text-gray-300 hover:bg-gray-700 hover:text-white transition-colors border-b border-gray-700/50"
               onClick={() => setShowMobileMenu(false)}
             >
               👤 Profile
             </Link>
-            {user.role === 'admin' && (
+            {user.role === "admin" && (
               <Link
                 to="/admin"
                 className="px-4 py-3 text-yellow-400 hover:bg-gray-700 hover:text-yellow-300 transition-colors border-b border-gray-700/50"
@@ -172,7 +225,9 @@ function HUD() {
               <span>Online Users</span>
               <span className="flex items-center space-x-2">
                 <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
-                <span className="text-green-400 font-semibold">{onlineCount}</span>
+                <span className="text-green-400 font-semibold">
+                  {onlineCount}
+                </span>
               </span>
             </div>
             <button

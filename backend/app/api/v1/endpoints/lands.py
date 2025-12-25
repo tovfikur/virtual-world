@@ -6,19 +6,25 @@ Land management, search, transfer, and fencing operations
 from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func, and_, or_
-from typing import Optional, Dict
+from typing import Optional, Dict, List
 import logging
 import uuid
 
 from app.db.session import get_db
 from app.models.land import Land, Biome
+from app.models.land_chat_access import LandChatAccess
 from app.models.user import User
 from app.schemas.land_schema import (
     LandResponse,
     LandUpdate,
     LandFence,
     LandTransfer,
-    LandSearch
+    LandSearch,
+    LandChatAccessList,
+    LandChatAccessEntry,
+    LandChatAccessRequest,
+    LandChatAccessRemove,
+    LandChatAccessSearchResult,
 )
 from app.dependencies import get_current_user, get_optional_user
 from app.services.cache_service import cache_service
@@ -61,6 +67,40 @@ async def _serialize_land(
     land_dict = land.to_dict()
     land_dict["owner_username"] = owner_username
     return land_dict
+
+
+async def _get_land_or_404(land_id: str, db: AsyncSession) -> Land:
+    """Fetch land by ID or raise HTTP 404."""
+    try:
+        land_uuid = uuid.UUID(land_id)
+    except ValueError:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid land ID format",
+        )
+
+    result = await db.execute(select(Land).where(Land.land_id == land_uuid))
+    land = result.scalar_one_or_none()
+
+    if not land:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Land not found",
+        )
+
+    return land
+
+
+async def _require_land_owner(
+    land: Land,
+    current_user: dict,
+) -> None:
+    """Ensure current user owns the provided land."""
+    if str(land.owner_id) != current_user["sub"]:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only the land owner can manage this resource",
+        )
 
 
 @router.get("/coordinates/{x}/{y}", response_model=LandResponse)
@@ -553,6 +593,231 @@ async def transfer_land(
         "transfer_completed_at": land.updated_at.isoformat(),
         "message": transfer_data.message
     }
+
+
+@router.get("/{land_id}/chat/access", response_model=LandChatAccessList)
+async def get_land_chat_access(
+    land_id: str,
+    current_user: dict = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """List explicit chat access entries for a land."""
+    land = await _get_land_or_404(land_id, db)
+    await _require_land_owner(land, current_user)
+
+    result = await db.execute(
+        select(LandChatAccess, User.username)
+        .join(User, LandChatAccess.user_id == User.user_id)
+        .where(LandChatAccess.land_id == land.land_id)
+        .order_by(User.username.asc())
+    )
+
+    entries: List[LandChatAccessEntry] = []
+    for access, username in result.all():
+        entries.append(
+            LandChatAccessEntry(
+                access_id=str(access.access_id),
+                land_id=str(access.land_id),
+                user_id=str(access.user_id),
+                username=username,
+                can_read=access.can_read,
+                can_write=access.can_write,
+                created_at=access.created_at,
+            )
+        )
+
+    return LandChatAccessList(
+        land_id=land_id,
+        restricted=len(entries) > 0,
+        entries=entries,
+    )
+
+
+@router.post("/{land_id}/chat/access", response_model=LandChatAccessEntry)
+async def add_land_chat_access(
+    land_id: str,
+    access_request: LandChatAccessRequest,
+    current_user: dict = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Grant or update chat access for a user by username."""
+    land = await _get_land_or_404(land_id, db)
+    await _require_land_owner(land, current_user)
+
+    username_search = access_request.username.lower()
+    user_result = await db.execute(
+        select(User).where(func.lower(User.username) == username_search)
+    )
+    target_user = user_result.scalar_one_or_none()
+
+    if not target_user:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="User not found",
+        )
+
+    if target_user.user_id == land.owner_id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Owners already have full access to their own land",
+        )
+
+    target_land_ids = [land.land_id]
+    if access_request.apply_to_all_fenced:
+        all_land_result = await db.execute(
+            select(Land.land_id)
+            .where(Land.owner_id == land.owner_id, Land.fenced.is_(True))
+        )
+        target_land_ids = [row[0] for row in all_land_result.scalars().all()] or [land.land_id]
+
+    upserted_entry = None
+    for target_land_id in target_land_ids:
+        result = await db.execute(
+            select(LandChatAccess).where(
+                LandChatAccess.land_id == target_land_id,
+                LandChatAccess.user_id == target_user.user_id,
+            )
+        )
+        access_entry = result.scalar_one_or_none()
+
+        if access_entry:
+            access_entry.can_read = access_request.can_read
+            access_entry.can_write = access_request.can_write
+        else:
+            access_entry = LandChatAccess(
+                land_id=target_land_id,
+                user_id=target_user.user_id,
+                can_read=access_request.can_read,
+                can_write=access_request.can_write,
+            )
+            db.add(access_entry)
+
+        if target_land_id == land.land_id:
+            upserted_entry = access_entry
+
+    await db.commit()
+
+    if upserted_entry is None:
+        result = await db.execute(
+            select(LandChatAccess).where(
+                LandChatAccess.land_id == land.land_id,
+                LandChatAccess.user_id == target_user.user_id,
+            )
+        )
+        upserted_entry = result.scalar_one()
+
+    return LandChatAccessEntry(
+        access_id=str(upserted_entry.access_id),
+        land_id=str(upserted_entry.land_id),
+        user_id=str(upserted_entry.user_id),
+        username=target_user.username,
+        can_read=upserted_entry.can_read,
+        can_write=upserted_entry.can_write,
+        created_at=upserted_entry.created_at,
+    )
+
+
+@router.delete("/{land_id}/chat/access")
+async def remove_land_chat_access(
+    land_id: str,
+    remove_request: LandChatAccessRemove,
+    current_user: dict = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Remove chat access for a specific username."""
+    land = await _get_land_or_404(land_id, db)
+    await _require_land_owner(land, current_user)
+
+    username_search = remove_request.username.lower()
+    user_result = await db.execute(
+        select(User).where(func.lower(User.username) == username_search)
+    )
+    target_user = user_result.scalar_one_or_none()
+
+    if not target_user:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="User not found",
+        )
+
+    if target_user.user_id == land.owner_id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Owner access cannot be revoked",
+        )
+
+    access_result = await db.execute(
+        select(LandChatAccess).where(
+            LandChatAccess.land_id == land.land_id,
+            LandChatAccess.user_id == target_user.user_id,
+        )
+    )
+    access_entry = access_result.scalar_one_or_none()
+
+    if not access_entry:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="User does not have chat access to this land",
+        )
+
+    await db.delete(access_entry)
+    await db.commit()
+
+    return {
+        "status": "success",
+        "message": f"Removed chat access for {target_user.username}",
+    }
+
+
+@router.get(
+    "/{land_id}/chat/access/search",
+    response_model=List[LandChatAccessSearchResult],
+)
+async def search_users_for_chat_access(
+    land_id: str,
+    username: str = Query(..., min_length=2, max_length=64),
+    current_user: dict = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Search users by username substring to grant chat access."""
+    land = await _get_land_or_404(land_id, db)
+    await _require_land_owner(land, current_user)
+
+    normalized = username.strip().lower()
+    if not normalized:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Username query is required",
+        )
+
+    access_ids_result = await db.execute(
+        select(LandChatAccess.user_id).where(LandChatAccess.land_id == land.land_id)
+    )
+    existing_user_ids = {
+        str(row[0]) for row in access_ids_result.all() if row[0] is not None
+    }
+
+    search_pattern = f"%{normalized}%"
+    result = await db.execute(
+        select(User)
+        .where(func.lower(User.username).like(search_pattern))
+        .order_by(User.username.asc())
+        .limit(10)
+    )
+
+    matches: List[LandChatAccessSearchResult] = []
+    for user_obj in result.scalars():
+        if user_obj.user_id == land.owner_id:
+            continue
+        matches.append(
+            LandChatAccessSearchResult(
+                user_id=str(user_obj.user_id),
+                username=user_obj.username,
+                has_access=str(user_obj.user_id) in existing_user_ids,
+            )
+        )
+
+    return matches
 
 
 @router.post("/claim", response_model=LandResponse)

@@ -4,7 +4,7 @@ Pydantic models for marketplace listing requests/responses
 """
 
 from pydantic import BaseModel, Field, validator
-from typing import Optional
+from typing import Optional, List, Dict
 from datetime import datetime
 from enum import Enum
 
@@ -25,23 +25,23 @@ class ListingStatus(str, Enum):
 
 
 class ListingCreate(BaseModel):
-    """Schema for creating a new listing."""
-    land_id: str = Field(..., description="UUID of land to list")
+    """Schema for creating a new parcel listing."""
+    land_ids: List[str] = Field(..., description="List of land UUIDs in parcel (must be connected)")
     listing_type: ListingType = Field(..., description="Type of listing")
     starting_price_bdt: Optional[int] = Field(
         None,
         ge=1,
-        description="Starting price for auction (required for auctions)"
+        description="Starting price for auction (required for auctions, for entire parcel)"
     )
     reserve_price_bdt: Optional[int] = Field(
         None,
         ge=1,
-        description="Minimum acceptable price for auction"
+        description="Minimum acceptable price for auction (for entire parcel)"
     )
     buy_now_price_bdt: Optional[int] = Field(
         None,
         ge=1,
-        description="Buy now price (required for fixed_price and auction_with_buynow)"
+        description="Buy now price (required for fixed_price and auction_with_buynow, for entire parcel)"
     )
     duration_hours: Optional[int] = Field(
         None,
@@ -55,6 +55,15 @@ class ListingCreate(BaseModel):
         le=60,
         description="Auto-extend auction by X minutes on late bids"
     )
+
+    @validator("land_ids")
+    def validate_land_ids(cls, v):
+        """Validate land_ids list."""
+        if not v or len(v) == 0:
+            raise ValueError("At least one land required")
+        if len(v) > 1000:  # Prevent abuse
+            raise ValueError("Maximum 1000 lands per parcel")
+        return v
 
     @validator("starting_price_bdt")
     def validate_starting_price(cls, v, values):
@@ -86,7 +95,10 @@ class ListingCreate(BaseModel):
     class Config:
         json_schema_extra = {
             "example": {
-                "land_id": "123e4567-e89b-12d3-a456-426614174000",
+                "land_ids": [
+                    "123e4567-e89b-12d3-a456-426614174000",
+                    "223e4567-e89b-12d3-a456-426614174000"
+                ],
                 "listing_type": "auction",
                 "starting_price_bdt": 100,
                 "reserve_price_bdt": 150,
@@ -98,9 +110,9 @@ class ListingCreate(BaseModel):
 
 
 class ListingResponse(BaseModel):
-    """Schema for listing response."""
+    """Schema for listing response (parcel)."""
     listing_id: str
-    land_id: str
+    land_count: int
     seller_id: str
     seller_username: Optional[str] = None
     listing_type: str
@@ -115,10 +127,10 @@ class ListingResponse(BaseModel):
     created_at: str
     updated_at: str
 
-    # Land information
-    land_x: Optional[int] = None
-    land_y: Optional[int] = None
-    land_biome: Optional[str] = None
+    # Parcel information
+    lands: Optional[List[Dict]] = None  # List of land details
+    bounding_box: Optional[Dict] = None  # min_x, max_x, min_y, max_y
+    biomes: Optional[List[str]] = None  # Unique biomes in parcel
 
     class Config:
         from_attributes = True

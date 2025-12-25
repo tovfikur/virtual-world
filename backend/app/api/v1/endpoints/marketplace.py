@@ -13,6 +13,7 @@ from datetime import datetime
 
 from app.db.session import get_db
 from app.models.listing import Listing, ListingType, ListingStatus
+from app.models.listing_land import ListingLand
 from app.models.bid import Bid
 from app.models.land import Land, Biome
 from app.models.user import User
@@ -25,6 +26,7 @@ from app.schemas.listing_schema import (
 )
 from app.dependencies import get_current_user
 from app.services.marketplace_service import marketplace_service
+from app.services.parcel_service import parcel_service
 from app.services.cache_service import cache_service
 from app.config import CACHE_TTLS
 
@@ -39,17 +41,22 @@ async def create_listing(
     db: AsyncSession = Depends(get_db)
 ):
     """
-    Create a new marketplace listing.
+    Create a new marketplace listing for a parcel (one or more connected lands).
 
-    Listing Types:
+    **Parcel Requirements:**
+    - All lands must be owned by you
+    - Lands must be edge-connected (no diagonal-only connections)
+    - No land can be in another active listing
+
+    **Listing Types:**
     - **auction**: Auction with starting price and duration
     - **fixed_price**: Fixed price with buy now only
     - **auction_with_buynow**: Auction with optional instant buy now
 
-    Returns created listing with ID and status.
+    Returns created listing with parcel details.
     """
     try:
-        land_uuid = uuid.UUID(listing_data.land_id)
+        land_uuids = [uuid.UUID(land_id) for land_id in listing_data.land_ids]
         seller_uuid = uuid.UUID(current_user["sub"])
     except ValueError:
         raise HTTPException(
@@ -60,7 +67,7 @@ async def create_listing(
     try:
         listing = await marketplace_service.create_listing(
             db=db,
-            land_id=land_uuid,
+            land_ids=land_uuids,
             seller_id=seller_uuid,
             listing_type=ListingType(listing_data.listing_type),
             starting_price_bdt=listing_data.starting_price_bdt,
@@ -70,9 +77,31 @@ async def create_listing(
             auto_extend_minutes=listing_data.auto_extend_minutes
         )
 
-        # Build response with seller info
+        # Get lands in parcel for response
+        result = await db.execute(
+            select(Land).join(ListingLand).where(
+                ListingLand.listing_id == listing.listing_id
+            )
+        )
+        lands = result.scalars().all()
+
+        # Build response with parcel data
         listing_dict = listing.to_dict()
         listing_dict["seller_username"] = current_user.get("username")
+        listing_dict["land_count"] = len(lands)
+        listing_dict["lands"] = [
+            {
+                "land_id": str(land.land_id),
+                "x": land.x,
+                "y": land.y,
+                "biome": land.biome.value
+            }
+            for land in lands
+        ]
+        listing_dict["bounding_box"] = parcel_service.calculate_bounding_box(
+            [(land.x, land.y) for land in lands]
+        )
+        listing_dict["biomes"] = list(set(land.biome.value for land in lands))
 
         return ListingResponse(**listing_dict)
 
@@ -82,7 +111,7 @@ async def create_listing(
             detail=str(e)
         )
     except Exception as e:
-        logger.error(f"Failed to create listing: {e}")
+        logger.error(f"Failed to create parcel listing: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to create listing"
@@ -103,7 +132,7 @@ async def search_listings(
     db: AsyncSession = Depends(get_db)
 ):
     """
-    Search and filter marketplace listings.
+    Search and filter marketplace parcel listings.
 
     Supports:
     - Filtering by status, type, price range, biome, seller
@@ -115,10 +144,8 @@ async def search_listings(
     - created_at_asc, created_at_desc
     - ending_soon (auctions ending soonest first)
     """
-    # Build query with joins to get land info
-    query = select(Listing, Land, User).join(
-        Land, Listing.land_id == Land.land_id
-    ).join(
+    # Build base query - listings with seller info
+    query = select(Listing).join(
         User, Listing.seller_id == User.user_id
     )
 
@@ -136,7 +163,7 @@ async def search_listings(
     if listing_type:
         try:
             type_enum = ListingType(listing_type)
-            query = query.where(Listing.listing_type == type_enum)
+            query = query.where(Listing.type == type_enum)
         except ValueError:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
@@ -144,15 +171,16 @@ async def search_listings(
             )
 
     if min_price_bdt is not None:
-        query = query.where(Listing.current_price_bdt >= min_price_bdt)
+        query = query.where(Listing.price_bdt >= min_price_bdt)
 
     if max_price_bdt is not None:
-        query = query.where(Listing.current_price_bdt <= max_price_bdt)
+        query = query.where(Listing.price_bdt <= max_price_bdt)
 
     if biome:
+        # Filter parcels that contain the specified biome
         try:
             biome_enum = Biome(biome)
-            query = query.where(Land.biome == biome_enum)
+            query = query.join(ListingLand).join(Land).where(Land.biome == biome_enum)
         except ValueError:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
@@ -171,19 +199,21 @@ async def search_listings(
 
     # Apply sorting
     if sort_by == "price_asc":
-        query = query.order_by(Listing.current_price_bdt.asc())
+        query = query.order_by(Listing.price_bdt.asc())
     elif sort_by == "price_desc":
-        query = query.order_by(Listing.current_price_bdt.desc())
+        query = query.order_by(Listing.price_bdt.desc())
     elif sort_by == "created_at_asc":
         query = query.order_by(Listing.created_at.asc())
     elif sort_by == "ending_soon":
-        query = query.where(Listing.ends_at.isnot(None))
-        query = query.order_by(Listing.ends_at.asc())
+        query = query.where(Listing.auction_end_time.isnot(None))
+        query = query.order_by(Listing.auction_end_time.asc())
     else:  # created_at_desc
         query = query.order_by(Listing.created_at.desc())
 
     # Get total count
-    count_query = select(func.count()).select_from(query.subquery())
+    count_query = select(func.count(Listing.listing_id.distinct())).select_from(Listing)
+    if status_filter:
+        count_query = count_query.where(Listing.status == status_enum)
     total_result = await db.execute(count_query)
     total = total_result.scalar()
 
@@ -192,16 +222,36 @@ async def search_listings(
     query = query.offset(offset).limit(limit)
 
     result = await db.execute(query)
-    rows = result.all()
+    listings = result.scalars().all()
 
-    # Build response with enriched data
+    # Build response with parcel data for each listing
     listings_data = []
-    for listing, land, seller in rows:
+    for listing in listings:
+        # Get lands in this parcel
+        lands_result = await db.execute(
+            select(Land).join(ListingLand).where(
+                ListingLand.listing_id == listing.listing_id
+            )
+        )
+        lands = lands_result.scalars().all()
+
+        # Get seller
+        seller_result = await db.execute(
+            select(User).where(User.user_id == listing.seller_id)
+        )
+        seller = seller_result.scalar_one_or_none()
+
         listing_dict = listing.to_dict()
-        listing_dict["seller_username"] = seller.username
-        listing_dict["land_x"] = land.x
-        listing_dict["land_y"] = land.y
-        listing_dict["land_biome"] = land.biome.value
+        listing_dict["seller_username"] = seller.username if seller else None
+        listing_dict["land_count"] = len(lands)
+        listing_dict["lands"] = [
+            {"x": land.x, "y": land.y, "biome": land.biome.value}
+            for land in lands
+        ]
+        listing_dict["bounding_box"] = parcel_service.calculate_bounding_box(
+            [(land.x, land.y) for land in lands]
+        )
+        listing_dict["biomes"] = list(set(land.biome.value for land in lands))
         listings_data.append(listing_dict)
 
     return {
@@ -223,7 +273,9 @@ async def get_listing(
     db: AsyncSession = Depends(get_db)
 ):
     """
-    Get detailed information about a specific listing.
+    Get detailed information about a specific parcel listing.
+
+    Includes all lands in the parcel, bounding box, and unique biomes.
     """
     # Check cache
     cache_key = f"listing:{listing_id}"
@@ -240,29 +292,50 @@ async def get_listing(
             detail="Invalid listing ID format"
         )
 
+    # Get listing
     result = await db.execute(
-        select(Listing, Land, User).join(
-            Land, Listing.land_id == Land.land_id
-        ).join(
-            User, Listing.seller_id == User.user_id
-        ).where(Listing.listing_id == listing_uuid)
+        select(Listing).where(Listing.listing_id == listing_uuid)
     )
-    row = result.first()
+    listing = result.scalar_one_or_none()
 
-    if not row:
+    if not listing:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Listing not found"
         )
 
-    listing, land, seller = row
+    # Get seller
+    seller_result = await db.execute(
+        select(User).where(User.user_id == listing.seller_id)
+    )
+    seller = seller_result.scalar_one_or_none()
 
-    # Build response
+    # Get all lands in parcel
+    lands_result = await db.execute(
+        select(Land).join(ListingLand).where(
+            ListingLand.listing_id == listing_uuid
+        )
+    )
+    lands = lands_result.scalars().all()
+
+    # Build response with parcel data
     listing_dict = listing.to_dict()
-    listing_dict["seller_username"] = seller.username
-    listing_dict["land_x"] = land.x
-    listing_dict["land_y"] = land.y
-    listing_dict["land_biome"] = land.biome.value
+    listing_dict["seller_username"] = seller.username if seller else None
+    listing_dict["land_count"] = len(lands)
+    listing_dict["lands"] = [
+        {
+            "land_id": str(land.land_id),
+            "x": land.x,
+            "y": land.y,
+            "biome": land.biome.value,
+            "elevation": land.elevation
+        }
+        for land in lands
+    ]
+    listing_dict["bounding_box"] = parcel_service.calculate_bounding_box(
+        [(land.x, land.y) for land in lands]
+    )
+    listing_dict["biomes"] = list(set(land.biome.value for land in lands))
 
     # Cache the result
     await cache_service.set(cache_key, listing_dict, ttl=CACHE_TTLS["listing"])
@@ -599,3 +672,130 @@ async def get_landowners_leaderboard(
     await cache_service.set(cache_key, response, ttl=CACHE_TTLS["leaderboard"])
 
     return response
+
+
+# =============================================================================
+# Unified Transaction History
+# =============================================================================
+
+@router.get("/transactions/audit-trail", tags=["analytics"])
+async def get_unified_audit_trail(
+    limit: int = Query(100, ge=1, le=500),
+    offset: int = Query(0, ge=0),
+    transaction_source: Optional[str] = Query(None, description="Filter by: marketplace, biome, or wallet"),
+    current_user: dict = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Get unified audit trail of all transactions (marketplace + biome trading).
+    
+    Shows complete transaction history combining:
+    - Land marketplace transactions (buy/sell/auction)
+    - Biome share trading transactions
+    - Wallet top-ups
+    
+    Each entry includes:
+    - transaction_source: Type of transaction (marketplace, biome, wallet)
+    - All transaction details (amount, fees, participants)
+    - For biome trades: share quantity and price
+    - For marketplace: land and listing info
+    """
+    try:
+        user_uuid = uuid.UUID(current_user["sub"])
+        
+        # Build query for unified transactions
+        from app.models.transaction import Transaction, TransactionType
+        
+        query = select(Transaction).where(
+            or_(
+                Transaction.buyer_id == user_uuid,
+                Transaction.seller_id == user_uuid
+            )
+        )
+        
+        # Filter by transaction source if specified
+        if transaction_source:
+            if transaction_source == "biome":
+                query = query.where(
+                    Transaction.transaction_type.in_([
+                        TransactionType.BIOME_BUY,
+                        TransactionType.BIOME_SELL
+                    ])
+                )
+            elif transaction_source == "marketplace":
+                query = query.where(
+                    Transaction.transaction_type.in_([
+                        TransactionType.AUCTION,
+                        TransactionType.BUY_NOW,
+                        TransactionType.FIXED_PRICE,
+                        TransactionType.TRANSFER
+                    ])
+                )
+            elif transaction_source == "wallet":
+                query = query.where(
+                    Transaction.transaction_type == TransactionType.TOPUP
+                )
+        
+        # Order by creation date (newest first) and apply pagination
+        query = query.order_by(Transaction.created_at.desc()).offset(offset).limit(limit)
+        
+        result = await db.execute(query)
+        transactions = result.scalars().all()
+        
+        # Get total count for pagination
+        count_result = await db.execute(
+            select(func.count(Transaction.transaction_id)).where(
+                or_(
+                    Transaction.buyer_id == user_uuid,
+                    Transaction.seller_id == user_uuid
+                )
+            )
+        )
+        total_count = count_result.scalar() or 0
+        
+        # Format response
+        transactions_data = []
+        for tx in transactions:
+            tx_dict = tx.to_dict()
+            
+            # Add transaction source for easier filtering
+            if tx.transaction_type.value.startswith("biome"):
+                tx_dict["transaction_source"] = "biome"
+            elif tx.transaction_type == TransactionType.TOPUP:
+                tx_dict["transaction_source"] = "wallet"
+            else:
+                tx_dict["transaction_source"] = "marketplace"
+            
+            # Add user role context (was user buyer or seller)
+            if tx.buyer_id == user_uuid:
+                tx_dict["user_role"] = "buyer"
+            elif tx.seller_id == user_uuid:
+                tx_dict["user_role"] = "seller"
+            else:
+                tx_dict["user_role"] = "none"
+            
+            transactions_data.append(tx_dict)
+        
+        return {
+            "transactions": transactions_data,
+            "pagination": {
+                "offset": offset,
+                "limit": limit,
+                "total": total_count,
+                "returned": len(transactions_data)
+            },
+            "timestamp": datetime.utcnow().isoformat()
+        }
+        
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Invalid request: {str(e)}"
+        )
+    except Exception as e:
+        logger.error(f"Failed to retrieve audit trail: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to retrieve transaction history"
+        )
+

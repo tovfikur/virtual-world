@@ -15,6 +15,9 @@ from contextlib import asynccontextmanager
 from app.config import settings
 from app.db.session import init_db, close_db
 from app.services.cache_service import cache_service
+from app.services.biome_market_worker import biome_market_worker
+from app.services.biome_market_service import biome_market_service
+from app.db.session import AsyncSessionLocal
 
 # Setup logging (only if not already configured)
 if not logging.getLogger().handlers:
@@ -33,11 +36,14 @@ async def lifespan(app: FastAPI):
     Startup:
     - Initialize database
     - Connect to Redis
+    - Initialize biome markets
+    - Start biome market worker
     - Log configuration
 
     Shutdown:
     - Close database connections
     - Disconnect from Redis
+    - Stop biome market worker
     """
     # Startup
     logger.info(f"Starting {settings.app_name} v{settings.app_version}")
@@ -57,12 +63,29 @@ async def lifespan(app: FastAPI):
         logger.error(f"Redis connection failed: {e}")
         raise
 
+    # Initialize biome markets
+    try:
+        async with AsyncSessionLocal() as db:
+            await biome_market_service.initialize_markets(db)
+        logger.info("Biome markets initialized")
+    except Exception as e:
+        logger.error(f"Biome market initialization failed: {e}")
+        # Not raising - markets can be created on first request
+
+    # Start biome market worker
+    try:
+        biome_market_worker.start()
+        logger.info("Biome market worker started")
+    except Exception as e:
+        logger.error(f"Biome market worker failed to start: {e}")
+
     logger.info("Application startup complete")
 
     yield
 
     # Shutdown
     logger.info("Shutting down application...")
+    await biome_market_worker.stop()
     await close_db()
     await cache_service.disconnect()
     logger.info("Application shutdown complete")

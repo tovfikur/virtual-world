@@ -14,19 +14,31 @@ A full-stack web application featuring real-time multiplayer interaction, land o
 ## ✨ Features
 
 ### 🗺️ Infinite Procedural World
+
 - **Deterministic generation** using OpenSimplex noise
 - **7 unique biomes**: Ocean, Beach, Plains, Forest, Desert, Mountain, Snow
 - **Dynamic pricing** based on biome and terrain elevation
 - **Chunk-based streaming** for infinite exploration
 
 ### 🏪 Marketplace & Trading
+
 - **3 listing types**: Auction, Fixed Price, Hybrid
 - **Real-time bidding** with auto-extend to prevent sniping
 - **Instant buy-now** option
 - **Balance-based payments** (BDT currency)
 - **Leaderboards**: Richest players, Largest landowners
 
+### 📈 Biome Trading System
+
+- **Attention-based trading**: Buy/sell biome shares based on player engagement
+- **Real-time price updates**: Prices adjust every 0.5 seconds via WebSocket
+- **Dynamic redistribution**: 25% of market pool reallocates based on attention
+- **Portfolio tracking**: Monitor holdings, P&L, and performance
+- **7 biome markets**: Trade across all game biomes
+- **Transaction history**: Full audit trail of all trades
+
 ### 💬 Real-Time Communication
+
 - **Land-based chat** with proximity detection
 - **Private messaging** between users
 - **End-to-end encryption** for all messages
@@ -34,12 +46,14 @@ A full-stack web application featuring real-time multiplayer interaction, land o
 - **WebRTC voice/video calls** (1-to-1)
 
 ### 👤 User Management
+
 - **Secure authentication** with JWT + refresh tokens
 - **User profiles** with stats and land ownership
 - **BDT balance** with top-up integration
 - **Transaction history** for audit trail
 
 ### 🔒 Security
+
 - **JWT authentication** with automatic refresh
 - **End-to-end encryption** for messages
 - **Rate limiting** to prevent abuse
@@ -77,6 +91,27 @@ See [DEPLOYMENT.md](./DEPLOYMENT.md) for detailed setup instructions.
 
 ---
 
+## 📚 Documentation
+
+### System Overview & Features
+
+- [README.md](./README.md) - This file (overview)
+- [DEPLOYMENT.md](./DEPLOYMENT.md) - Deployment guide
+
+### Biome Trading System
+
+The Biome Trading System is a complete attention-based trading platform. **Start here:**
+
+- [BIOME_TRADING_DOCUMENTATION_INDEX.md](./BIOME_TRADING_DOCUMENTATION_INDEX.md) - Documentation hub and navigation guide
+- [BIOME_TRADING_SESSION_SUMMARY.md](./BIOME_TRADING_SESSION_SUMMARY.md) - Executive summary and project status
+- [BIOME_TRADING_QUICKSTART.md](./BIOME_TRADING_QUICKSTART.md) - User guide and API reference
+- [BIOME_TRADING_SYSTEM_COMPLETE.md](./BIOME_TRADING_SYSTEM_COMPLETE.md) - Technical architecture and design
+- [BIOME_TRADING_FILE_REFERENCE.md](./BIOME_TRADING_FILE_REFERENCE.md) - Code organization and file listing
+- [BIOME_TRADING_IMPLEMENTATION_CHECKLIST.md](./BIOME_TRADING_IMPLEMENTATION_CHECKLIST.md) - Implementation status verification
+- [BIOME_TRADING_NEXT_STEPS.md](./BIOME_TRADING_NEXT_STEPS.md) - Handoff guide and operational procedures
+
+---
+
 ## 📋 Prerequisites
 
 - **Docker & Docker Compose** (for containerized deployment)
@@ -90,6 +125,7 @@ See [DEPLOYMENT.md](./DEPLOYMENT.md) for detailed setup instructions.
 ## 🏗️ Architecture
 
 ### Backend (FastAPI)
+
 ```
 backend/
 ├── app/
@@ -104,6 +140,7 @@ backend/
 ```
 
 ### Frontend (React + PixiJS)
+
 ```
 frontend/
 ├── src/
@@ -117,6 +154,7 @@ frontend/
 ```
 
 ### Infrastructure
+
 ```
 ├── docker-compose.yml   # Multi-service orchestration
 ├── nginx/              # Reverse proxy config
@@ -128,6 +166,7 @@ frontend/
 ## 📊 Tech Stack
 
 ### Backend
+
 - **[FastAPI](https://fastapi.tiangolo.com/)** - Modern async web framework
 - **[SQLAlchemy 2.0](https://www.sqlalchemy.org/)** - ORM with async support
 - **[PostgreSQL](https://www.postgresql.org/)** - Primary database
@@ -136,6 +175,7 @@ frontend/
 - **[Alembic](https://alembic.sqlalchemy.org/)** - Database migrations
 
 ### Frontend
+
 - **[React 18](https://react.dev/)** - UI framework
 - **[Vite](https://vitejs.dev/)** - Build tool
 - **[PixiJS](https://pixijs.com/)** - 2D WebGL rendering
@@ -144,6 +184,7 @@ frontend/
 - **[Axios](https://axios-http.com/)** - HTTP client
 
 ### Infrastructure
+
 - **[Docker](https://www.docker.com/)** - Containerization
 - **[Nginx](https://nginx.org/)** - Reverse proxy
 - **[Gunicorn](https://gunicorn.org/)** - WSGI server
@@ -154,30 +195,35 @@ frontend/
 ## 📚 API Documentation
 
 Once running, visit:
+
 - **Swagger UI**: `http://localhost:8000/api/docs`
 - **ReDoc**: `http://localhost:8000/api/redoc`
 
 ### Key Endpoints
 
 #### Authentication
+
 - `POST /api/v1/auth/register` - Register new user
 - `POST /api/v1/auth/login` - Login and get tokens
 - `POST /api/v1/auth/refresh` - Refresh access token
 - `GET /api/v1/auth/me` - Get current user
 
 #### World & Lands
+
 - `GET /api/v1/chunks/{x}/{y}` - Get chunk data
 - `GET /api/v1/lands/{id}` - Get land details
 - `GET /api/v1/lands` - Search lands
 - `POST /api/v1/lands/{id}/fence` - Enable fencing
 
 #### Marketplace
+
 - `GET /api/v1/marketplace/listings` - Browse listings
 - `POST /api/v1/marketplace/listings` - Create listing
 - `POST /api/v1/marketplace/listings/{id}/bids` - Place bid
 - `POST /api/v1/marketplace/listings/{id}/buy-now` - Buy instantly
 
 #### Chat & WebSocket
+
 - `WS /api/v1/ws/connect?token={jwt}` - WebSocket connection
 - `GET /api/v1/chat/sessions` - Get chat sessions
 - `GET /api/v1/chat/sessions/{id}/messages` - Chat history
@@ -188,18 +234,23 @@ Once running, visit:
 ## 🎮 Usage
 
 ### 1. Register & Login
+
 Visit `http://localhost` and create an account.
 
 ### 2. Explore the World
+
 Use the interactive map to explore the infinite procedurally generated world.
 
 ### 3. Own Land
+
 Click on any land parcel to view details and purchase options.
 
 ### 4. List on Marketplace
+
 List your land for auction or fixed price sale.
 
 ### 5. Chat & Connect
+
 Chat with nearby landowners and make voice calls.
 
 ---
@@ -235,6 +286,7 @@ See [.env.production](./.env.production) for full configuration.
 ## 📦 Database Schema
 
 ### Core Models
+
 - **User** - Authentication, balance, role
 - **Land** - Coordinates, biome, owner, fencing
 - **Listing** - Marketplace listings (auction/fixed)
@@ -245,6 +297,7 @@ See [.env.production](./.env.production) for full configuration.
 - **AuditLog** - System audit trail
 
 ### Relationships
+
 ```
 User 1-* Land (owner)
 User 1-* Listing (seller)
@@ -259,18 +312,21 @@ ChatSession 1-* Message
 ## 🧪 Testing
 
 ### Backend Tests
+
 ```bash
 cd backend
 pytest
 ```
 
 ### Frontend Tests
+
 ```bash
 cd frontend
 npm test
 ```
 
 ### Manual Testing
+
 ```bash
 # Test backend health
 curl http://localhost:8000/health
@@ -297,6 +353,7 @@ wscat -c ws://localhost:8000/api/v1/ws/connect?token=YOUR_TOKEN
 ## 🔄 Development Workflow
 
 ### Backend Development
+
 ```bash
 cd backend
 python -m venv venv
@@ -306,6 +363,7 @@ uvicorn app.main:app --reload
 ```
 
 ### Frontend Development
+
 ```bash
 cd frontend
 npm install
@@ -313,6 +371,7 @@ npm run dev
 ```
 
 ### Database Migrations
+
 ```bash
 # Create migration
 alembic revision --autogenerate -m "description"
@@ -344,26 +403,31 @@ See [PROGRESS.md](./PROGRESS.md) for detailed status.
 ## 🗺️ Roadmap
 
 ### Phase 1 (Completed)
+
 - [x] Project foundation
 - [x] Database models
 - [x] Authentication system
 
 ### Phase 2 (Completed)
+
 - [x] User & Land endpoints
 - [x] World generation service
 - [x] Marketplace implementation
 
 ### Phase 3 (Completed)
+
 - [x] WebSocket communication
 - [x] Chat with E2EE
 - [x] WebRTC signaling
 
 ### Phase 4 (Current)
+
 - [x] Frontend foundation
 - [ ] PixiJS world renderer
 - [ ] Complete UI components
 
 ### Phase 5 (Planned)
+
 - [ ] Payment gateway integration
 - [ ] Mobile app (React Native)
 - [ ] Admin dashboard
@@ -391,7 +455,7 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ## 👥 Authors
 
-- **Autonomous AI Full-Stack Agent** - *Initial development*
+- **Autonomous AI Full-Stack Agent** - _Initial development_
 
 ---
 

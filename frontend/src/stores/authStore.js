@@ -11,7 +11,7 @@ const useAuthStore = create((set, get) => ({
   // State
   user: null,
   isAuthenticated: false,
-  isLoading: false,
+  isLoading: true,
   error: null,
 
   // Actions
@@ -77,6 +77,7 @@ const useAuthStore = create((set, get) => ({
       set({
         user: null,
         isAuthenticated: false,
+        isLoading: false,
         error: null,
       });
     }
@@ -86,7 +87,11 @@ const useAuthStore = create((set, get) => ({
     const token = localStorage.getItem('access_token');
 
     if (!token) {
-      set({ isLoading: false });
+      set({
+        user: null,
+        isAuthenticated: false,
+        isLoading: false,
+      });
       return;
     }
 
@@ -106,7 +111,11 @@ const useAuthStore = create((set, get) => ({
       await wsService.connect(token);
     } catch (error) {
       console.error('Failed to load user:', error);
-      set({ isLoading: false });
+      set({
+        user: null,
+        isAuthenticated: false,
+        isLoading: false,
+      });
       get().logout();
     }
   },

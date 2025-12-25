@@ -3,7 +3,7 @@ Land-related Pydantic schemas for request/response validation
 """
 
 from pydantic import BaseModel, Field, field_validator
-from typing import Optional
+from typing import Optional, List
 from datetime import datetime
 
 
@@ -130,5 +130,64 @@ class LandSearch(BaseModel):
                 "page": 1,
                 "limit": 20,
                 "sort": "price_asc"
-            }
         }
+        }
+
+
+class LandChatAccessEntry(BaseModel):
+    """Single chat access entry for a land."""
+
+    access_id: str
+    land_id: str
+    user_id: str
+    username: Optional[str] = None
+    can_read: bool
+    can_write: bool
+    created_at: datetime
+
+
+class LandChatAccessList(BaseModel):
+    """Chat access response."""
+
+    land_id: str
+    restricted: bool
+    entries: List[LandChatAccessEntry]
+
+
+class LandChatAccessRequest(BaseModel):
+    """Add/update chat access request."""
+
+    username: str = Field(..., min_length=3, max_length=64)
+    can_read: bool = True
+    can_write: bool = True
+    apply_to_all_fenced: bool = False
+
+    @field_validator("username")
+    @classmethod
+    def normalize_username(cls, value: str) -> str:
+        value = value.strip()
+        if not value:
+            raise ValueError("Username is required")
+        return value
+
+
+class LandChatAccessRemove(BaseModel):
+    """Remove chat access request."""
+
+    username: str = Field(..., min_length=3, max_length=64)
+
+    @field_validator("username")
+    @classmethod
+    def normalize_username(cls, value: str) -> str:
+        value = value.strip()
+        if not value:
+            raise ValueError("Username is required")
+        return value
+
+
+class LandChatAccessSearchResult(BaseModel):
+    """Search result entry when owner searches by username."""
+
+    user_id: str
+    username: str
+    has_access: bool
