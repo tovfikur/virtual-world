@@ -192,9 +192,14 @@ class MarketplaceService:
             raise ValueError("Cannot bid on your own listing")
 
         # Validate bid amount
-        min_bid = listing.current_price_bdt + 1  # Must be at least 1 BDT higher
+        # Fetch AdminConfig for minimum bid increment
+        cfg_res = await db.execute(select(AdminConfig).limit(1))
+        config = cfg_res.scalar_one_or_none()
+        increment = int(config.auction_bid_increment) if config and config.auction_bid_increment is not None else 1
+        current_price = listing.current_price_bdt if listing.current_price_bdt is not None else (listing.price_bdt or 0)
+        min_bid = current_price + increment
         if amount_bdt < min_bid:
-            raise ValueError(f"Bid must be at least {min_bid} BDT")
+            raise ValueError(f"Bid must be at least {min_bid} BDT (increment {increment})")
 
         # Check bidder has sufficient balance
         result = await db.execute(
