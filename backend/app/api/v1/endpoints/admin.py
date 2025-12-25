@@ -864,6 +864,8 @@ class EconomicSettingsUpdate(BaseModel):
     transaction_fee_percent: Optional[float] = None
     biome_trade_fee_percent: Optional[float] = None
     base_land_price_bdt: Optional[int] = None
+    elevation_price_min_factor: Optional[float] = None
+    elevation_price_max_factor: Optional[float] = None
     forest_multiplier: Optional[float] = None
     grassland_multiplier: Optional[float] = None
     water_multiplier: Optional[float] = None
@@ -957,6 +959,12 @@ async def update_economic_settings(
 
         if settings.base_land_price_bdt is not None:
             config.base_land_price_bdt = settings.base_land_price_bdt
+
+        if settings.elevation_price_min_factor is not None:
+            config.elevation_price_min_factor = settings.elevation_price_min_factor
+
+        if settings.elevation_price_max_factor is not None:
+            config.elevation_price_max_factor = settings.elevation_price_max_factor
 
         if settings.forest_multiplier is not None:
             config.forest_multiplier = settings.forest_multiplier

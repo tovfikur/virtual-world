@@ -128,6 +128,18 @@ class AdminConfig(BaseModel):
         default=1000,
         nullable=False
     )
+    elevation_price_min_factor = Column(
+        Float,
+        default=0.8,
+        nullable=False,
+        comment="Minimum elevation price factor (elevation=0)"
+    )
+    elevation_price_max_factor = Column(
+        Float,
+        default=1.2,
+        nullable=False,
+        comment="Maximum elevation price factor (elevation=1)"
+    )
     forest_multiplier = Column(
         Float,
         default=1.0,
@@ -398,6 +410,10 @@ class AdminConfig(BaseModel):
                 "snow": self.biome_snow_percent
             },
             "base_land_price_bdt": self.base_land_price_bdt,
+            "elevation_price_factor": {
+                "min": self.elevation_price_min_factor,
+                "max": self.elevation_price_max_factor
+            },
             "biome_multipliers": {
                 "forest": self.forest_multiplier,
                 "grassland": self.grassland_multiplier,

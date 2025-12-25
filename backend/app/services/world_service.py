@@ -219,8 +219,25 @@ class WorldGenerationService:
             }
             base = base_prices[biome]
 
-        # Slight variation based on elevation (±20%)
-        elevation_factor = 0.8 + (elevation * 0.4)
+        # Elevation-based variation using configurable min/max factors
+        # Clamp elevation to [0, 1]
+        if elevation < 0:
+            elevation = 0.0
+        elif elevation > 1:
+            elevation = 1.0
+
+        if config and hasattr(config, 'elevation_price_min_factor') and hasattr(config, 'elevation_price_max_factor'):
+            min_factor = float(config.elevation_price_min_factor)
+            max_factor = float(config.elevation_price_max_factor)
+        else:
+            min_factor = 0.8
+            max_factor = 1.2
+
+        # Ensure min_factor <= max_factor
+        if min_factor > max_factor:
+            min_factor, max_factor = max_factor, min_factor
+
+        elevation_factor = min_factor + (elevation * (max_factor - min_factor))
 
         return int(base * elevation_factor)
 
@@ -246,7 +263,15 @@ class WorldGenerationService:
             Biome.OCEAN: 30
         }
         base = base_prices[biome]
-        elevation_factor = 0.8 + (elevation * 0.4)
+        # Clamp elevation to [0, 1]
+        if elevation < 0:
+            elevation = 0.0
+        elif elevation > 1:
+            elevation = 1.0
+
+        min_factor = 0.8
+        max_factor = 1.2
+        elevation_factor = min_factor + (elevation * (max_factor - min_factor))
         return int(base * elevation_factor)
 
     async def generate_chunk(self, chunk_x: int, chunk_y: int, chunk_size: int = 32, db: AsyncSession = None) -> Dict:
