@@ -798,6 +798,56 @@ class AdminConfig(BaseModel):
         comment="Price deviation % threshold for auto-reject transaction (0 to disable)"
     )
 
+    # Market Manipulation Detection Thresholds
+    market_spike_threshold_percent = Column(
+        Float,
+        default=30.0,
+        nullable=False,
+        comment="Price spike % threshold to trigger manipulation alert"
+    )
+    market_spike_window_seconds = Column(
+        Integer,
+        default=300,
+        nullable=False,
+        comment="Time window for detecting sudden price spikes (seconds)"
+    )
+    order_clustering_threshold = Column(
+        Integer,
+        default=5,
+        nullable=False,
+        comment="Number of orders within clustering time window to trigger alert"
+    )
+    order_clustering_window_seconds = Column(
+        Integer,
+        default=60,
+        nullable=False,
+        comment="Time window for order clustering detection (seconds)"
+    )
+    pump_and_dump_price_increase_percent = Column(
+        Float,
+        default=50.0,
+        nullable=False,
+        comment="Price increase % threshold for pump-and-dump pattern detection"
+    )
+    pump_and_dump_volume_window_minutes = Column(
+        Integer,
+        default=30,
+        nullable=False,
+        comment="Time window for analyzing volume in pump-and-dump patterns (minutes)"
+    )
+    manipulation_alert_auto_freeze = Column(
+        Boolean,
+        default=False,
+        nullable=False,
+        comment="Auto-freeze market when manipulation detected (requires manual review)"
+    )
+    manipulation_alert_severity_threshold = Column(
+        String(16),
+        default="high",
+        nullable=False,
+        comment="Alert severity level to trigger action (low, medium, high, critical)"
+    )
+
     access_token_expire_minutes = Column(
         Integer,
         default=60,
@@ -1092,6 +1142,16 @@ class AdminConfig(BaseModel):
                 "related_account_min_transactions": self.related_account_min_transactions,
                 "related_account_max_price_variance_percent": self.related_account_max_price_variance_percent,
                 "price_deviation_auto_reject_percent": self.price_deviation_auto_reject_percent,
+            },
+            "market_manipulation_detection": {
+                "spike_threshold_percent": self.market_spike_threshold_percent,
+                "spike_window_seconds": self.market_spike_window_seconds,
+                "order_clustering_threshold": self.order_clustering_threshold,
+                "order_clustering_window_seconds": self.order_clustering_window_seconds,
+                "pump_and_dump_price_increase_percent": self.pump_and_dump_price_increase_percent,
+                "pump_and_dump_volume_window_minutes": self.pump_and_dump_volume_window_minutes,
+                "alert_auto_freeze": self.manipulation_alert_auto_freeze,
+                "alert_severity_threshold": self.manipulation_alert_severity_threshold,
             },
             "auth": {
                 "access_token_expire_minutes": self.access_token_expire_minutes,

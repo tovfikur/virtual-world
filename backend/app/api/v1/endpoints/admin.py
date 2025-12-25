@@ -1422,6 +1422,17 @@ class EconomicSettingsUpdate(BaseModel):
     related_account_min_transactions: Optional[int] = None
     related_account_max_price_variance_percent: Optional[float] = None
     price_deviation_auto_reject_percent: Optional[float] = None
+    
+    # Market Manipulation Detection Thresholds
+    market_spike_threshold_percent: Optional[float] = None
+    market_spike_window_seconds: Optional[int] = None
+    order_clustering_threshold: Optional[int] = None
+    order_clustering_window_seconds: Optional[int] = None
+    pump_and_dump_price_increase_percent: Optional[float] = None
+    pump_and_dump_volume_window_minutes: Optional[int] = None
+    manipulation_alert_auto_freeze: Optional[bool] = None
+    manipulation_alert_severity_threshold: Optional[str] = None
+    
     # Biome Market Initialization
     biome_initial_cash_bdt: Optional[int] = None
     biome_initial_shares_outstanding: Optional[int] = None
@@ -1720,6 +1731,46 @@ async def update_economic_settings(
             if settings.attention_weight_update_interval_seconds < 10:
                 raise HTTPException(status_code=400, detail="attention_weight_update_interval_seconds must be >= 10 (10 seconds minimum)")
             config.attention_weight_update_interval_seconds = settings.attention_weight_update_interval_seconds
+
+        # Market Manipulation Detection Thresholds
+        if settings.market_spike_threshold_percent is not None:
+            if settings.market_spike_threshold_percent < 0:
+                raise HTTPException(status_code=400, detail="market_spike_threshold_percent must be non-negative")
+            config.market_spike_threshold_percent = settings.market_spike_threshold_percent
+
+        if settings.market_spike_window_seconds is not None:
+            if settings.market_spike_window_seconds < 30:
+                raise HTTPException(status_code=400, detail="market_spike_window_seconds must be >= 30 (30 seconds minimum)")
+            config.market_spike_window_seconds = settings.market_spike_window_seconds
+
+        if settings.order_clustering_threshold is not None:
+            if settings.order_clustering_threshold < 1:
+                raise HTTPException(status_code=400, detail="order_clustering_threshold must be >= 1")
+            config.order_clustering_threshold = settings.order_clustering_threshold
+
+        if settings.order_clustering_window_seconds is not None:
+            if settings.order_clustering_window_seconds < 10:
+                raise HTTPException(status_code=400, detail="order_clustering_window_seconds must be >= 10")
+            config.order_clustering_window_seconds = settings.order_clustering_window_seconds
+
+        if settings.pump_and_dump_price_increase_percent is not None:
+            if settings.pump_and_dump_price_increase_percent < 0:
+                raise HTTPException(status_code=400, detail="pump_and_dump_price_increase_percent must be non-negative")
+            config.pump_and_dump_price_increase_percent = settings.pump_and_dump_price_increase_percent
+
+        if settings.pump_and_dump_volume_window_minutes is not None:
+            if settings.pump_and_dump_volume_window_minutes < 1:
+                raise HTTPException(status_code=400, detail="pump_and_dump_volume_window_minutes must be >= 1")
+            config.pump_and_dump_volume_window_minutes = settings.pump_and_dump_volume_window_minutes
+
+        if settings.manipulation_alert_auto_freeze is not None:
+            config.manipulation_alert_auto_freeze = settings.manipulation_alert_auto_freeze
+
+        if settings.manipulation_alert_severity_threshold is not None:
+            allowed_severities = {"low", "medium", "high", "critical"}
+            if settings.manipulation_alert_severity_threshold not in allowed_severities:
+                raise HTTPException(status_code=400, detail=f"manipulation_alert_severity_threshold must be one of {allowed_severities}")
+            config.manipulation_alert_severity_threshold = settings.manipulation_alert_severity_threshold
 
         config.updated_at = datetime.utcnow()
 
