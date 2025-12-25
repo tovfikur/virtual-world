@@ -1433,6 +1433,16 @@ class EconomicSettingsUpdate(BaseModel):
     manipulation_alert_auto_freeze: Optional[bool] = None
     manipulation_alert_severity_threshold: Optional[str] = None
     
+    # Emergency Market Reset Controls
+    market_emergency_reset_enabled: Optional[bool] = None
+    market_reset_clear_all_orders: Optional[bool] = None
+    market_reset_reset_prices: Optional[bool] = None
+    market_reset_clear_volatility_history: Optional[bool] = None
+    market_reset_redistribute_wealth: Optional[bool] = None
+    market_reset_redistribution_gini_target: Optional[float] = None
+    market_reset_require_confirmation: Optional[bool] = None
+    market_reset_cooldown_minutes: Optional[int] = None
+    
     # Biome Market Initialization
     biome_initial_cash_bdt: Optional[int] = None
     biome_initial_shares_outstanding: Optional[int] = None
@@ -1771,6 +1781,35 @@ async def update_economic_settings(
             if settings.manipulation_alert_severity_threshold not in allowed_severities:
                 raise HTTPException(status_code=400, detail=f"manipulation_alert_severity_threshold must be one of {allowed_severities}")
             config.manipulation_alert_severity_threshold = settings.manipulation_alert_severity_threshold
+
+        # Emergency Market Reset Controls
+        if settings.market_emergency_reset_enabled is not None:
+            config.market_emergency_reset_enabled = settings.market_emergency_reset_enabled
+
+        if settings.market_reset_clear_all_orders is not None:
+            config.market_reset_clear_all_orders = settings.market_reset_clear_all_orders
+
+        if settings.market_reset_reset_prices is not None:
+            config.market_reset_reset_prices = settings.market_reset_reset_prices
+
+        if settings.market_reset_clear_volatility_history is not None:
+            config.market_reset_clear_volatility_history = settings.market_reset_clear_volatility_history
+
+        if settings.market_reset_redistribute_wealth is not None:
+            config.market_reset_redistribute_wealth = settings.market_reset_redistribute_wealth
+
+        if settings.market_reset_redistribution_gini_target is not None:
+            if settings.market_reset_redistribution_gini_target < 0 or settings.market_reset_redistribution_gini_target > 1:
+                raise HTTPException(status_code=400, detail="market_reset_redistribution_gini_target must be 0-1 (0=equality, 1=inequality)")
+            config.market_reset_redistribution_gini_target = settings.market_reset_redistribution_gini_target
+
+        if settings.market_reset_require_confirmation is not None:
+            config.market_reset_require_confirmation = settings.market_reset_require_confirmation
+
+        if settings.market_reset_cooldown_minutes is not None:
+            if settings.market_reset_cooldown_minutes < 0:
+                raise HTTPException(status_code=400, detail="market_reset_cooldown_minutes must be non-negative")
+            config.market_reset_cooldown_minutes = settings.market_reset_cooldown_minutes
 
         config.updated_at = datetime.utcnow()
 

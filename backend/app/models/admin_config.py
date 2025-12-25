@@ -848,6 +848,56 @@ class AdminConfig(BaseModel):
         comment="Alert severity level to trigger action (low, medium, high, critical)"
     )
 
+    # Emergency Market Reset Controls
+    market_emergency_reset_enabled = Column(
+        Boolean,
+        default=True,
+        nullable=False,
+        comment="Enable emergency market reset functionality"
+    )
+    market_reset_clear_all_orders = Column(
+        Boolean,
+        default=True,
+        nullable=False,
+        comment="Clear all pending orders during emergency reset"
+    )
+    market_reset_reset_prices = Column(
+        Boolean,
+        default=True,
+        nullable=False,
+        comment="Reset all prices to initialization values during reset"
+    )
+    market_reset_clear_volatility_history = Column(
+        Boolean,
+        default=True,
+        nullable=False,
+        comment="Clear price volatility history to reset momentum tracking"
+    )
+    market_reset_redistribute_wealth = Column(
+        Boolean,
+        default=False,
+        nullable=False,
+        comment="Redistribute wealth to Gini coefficient target (advanced, rarely used)"
+    )
+    market_reset_redistribution_gini_target = Column(
+        Float,
+        default=0.3,
+        nullable=False,
+        comment="Target Gini coefficient for wealth redistribution (0=perfect equality, 1=max inequality)"
+    )
+    market_reset_require_confirmation = Column(
+        Boolean,
+        default=True,
+        nullable=False,
+        comment="Require two-factor confirmation from multiple admins"
+    )
+    market_reset_cooldown_minutes = Column(
+        Integer,
+        default=120,
+        nullable=False,
+        comment="Minimum cooldown between emergency resets (minutes)"
+    )
+
     access_token_expire_minutes = Column(
         Integer,
         default=60,
@@ -1152,6 +1202,16 @@ class AdminConfig(BaseModel):
                 "pump_and_dump_volume_window_minutes": self.pump_and_dump_volume_window_minutes,
                 "alert_auto_freeze": self.manipulation_alert_auto_freeze,
                 "alert_severity_threshold": self.manipulation_alert_severity_threshold,
+            },
+            "market_emergency_reset": {
+                "enabled": self.market_emergency_reset_enabled,
+                "clear_all_orders": self.market_reset_clear_all_orders,
+                "reset_prices": self.market_reset_reset_prices,
+                "clear_volatility_history": self.market_reset_clear_volatility_history,
+                "redistribute_wealth": self.market_reset_redistribute_wealth,
+                "redistribution_gini_target": self.market_reset_redistribution_gini_target,
+                "require_confirmation": self.market_reset_require_confirmation,
+                "cooldown_minutes": self.market_reset_cooldown_minutes,
             },
             "auth": {
                 "access_token_expire_minutes": self.access_token_expire_minutes,
