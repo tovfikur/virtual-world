@@ -888,6 +888,13 @@ class EconomicSettingsUpdate(BaseModel):
     desert_base_price: Optional[float] = None
     snow_base_price: Optional[float] = None
     ocean_base_price: Optional[float] = None
+    # Marketplace Fee Tiers
+    fee_tier_1_threshold: Optional[int] = None
+    fee_tier_1_percent: Optional[float] = None
+    fee_tier_2_threshold: Optional[int] = None
+    fee_tier_2_percent: Optional[float] = None
+    fee_tier_3_threshold: Optional[int] = None
+    fee_tier_3_percent: Optional[float] = None
 
 
 @router.get("/config/economy")
@@ -1026,6 +1033,20 @@ async def update_economic_settings(
 
         if settings.ocean_base_price is not None:
             config.ocean_base_price = settings.ocean_base_price
+
+        # Marketplace Fee Tiers
+        if settings.fee_tier_1_threshold is not None:
+            config.fee_tier_1_threshold = settings.fee_tier_1_threshold
+        if settings.fee_tier_1_percent is not None:
+            config.fee_tier_1_percent = settings.fee_tier_1_percent
+        if settings.fee_tier_2_threshold is not None:
+            config.fee_tier_2_threshold = settings.fee_tier_2_threshold
+        if settings.fee_tier_2_percent is not None:
+            config.fee_tier_2_percent = settings.fee_tier_2_percent
+        if settings.fee_tier_3_threshold is not None:
+            config.fee_tier_3_threshold = settings.fee_tier_3_threshold
+        if settings.fee_tier_3_percent is not None:
+            config.fee_tier_3_percent = settings.fee_tier_3_percent
 
 
         config.updated_at = datetime.utcnow()

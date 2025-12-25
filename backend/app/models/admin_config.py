@@ -172,6 +172,43 @@ class AdminConfig(BaseModel):
         default=5.0,
         nullable=False
     )
+    # Marketplace Fee Tiers
+    fee_tier_1_threshold = Column(
+        Integer,
+        default=10000,
+        nullable=False,
+        comment="Amount threshold (BDT) for tier 1"
+    )
+    fee_tier_1_percent = Column(
+        Float,
+        default=5.0,
+        nullable=False,
+        comment="Platform fee percent for amounts below tier 1 threshold"
+    )
+    fee_tier_2_threshold = Column(
+        Integer,
+        default=50000,
+        nullable=False,
+        comment="Amount threshold (BDT) for tier 2"
+    )
+    fee_tier_2_percent = Column(
+        Float,
+        default=3.5,
+        nullable=False,
+        comment="Platform fee percent for amounts between tier 1 and tier 2"
+    )
+    fee_tier_3_threshold = Column(
+        Integer,
+        default=100000,
+        nullable=False,
+        comment="Amount threshold (BDT) for tier 3"
+    )
+    fee_tier_3_percent = Column(
+        Float,
+        default=2.0,
+        nullable=False,
+        comment="Platform fee percent for amounts above tier 2"
+    )
     biome_trade_fee_percent = Column(
         Float,
         default=2.0,
@@ -422,6 +459,20 @@ class AdminConfig(BaseModel):
                 "snow": self.snow_multiplier
             },
             "transaction_fee_percent": self.transaction_fee_percent,
+            "marketplace_fee_tiers": {
+                "tier_1": {
+                    "threshold_bdt": self.fee_tier_1_threshold,
+                    "percent": self.fee_tier_1_percent
+                },
+                "tier_2": {
+                    "threshold_bdt": self.fee_tier_2_threshold,
+                    "percent": self.fee_tier_2_percent
+                },
+                "tier_3": {
+                    "threshold_bdt": self.fee_tier_3_threshold,
+                    "percent": self.fee_tier_3_percent
+                }
+            },
             "biome_trade_fee_percent": self.biome_trade_fee_percent,
             "biome_market_controls": {
                 "max_price_move_percent": self.max_price_move_percent,

@@ -16,6 +16,7 @@ from app.models.bid import Bid, BidStatus
 from app.models.land import Land
 from app.models.user import User
 from app.models.transaction import Transaction, TransactionType, TransactionStatus
+from app.models.admin_config import AdminConfig
 from app.services.cache_service import cache_service
 from app.services.parcel_service import parcel_service
 from app.config import CACHE_TTLS
@@ -292,9 +293,30 @@ class MarketplaceService:
         if not lands:
             raise ValueError("No lands found in listing")
 
-        # Execute transaction
-        buyer.balance_bdt -= listing.buy_now_price_bdt
-        seller.balance_bdt += listing.buy_now_price_bdt
+        # Execute transaction (apply tiered platform fee)
+        amount = listing.buy_now_price_bdt
+
+        # Fetch admin config for fee tiers
+        cfg_res = await db.execute(select(AdminConfig).limit(1))
+        config = cfg_res.scalar_one_or_none()
+
+        def get_fee_percent(amount_bdt: int) -> float:
+            if not config:
+                return 5.0
+            if amount_bdt < config.fee_tier_1_threshold:
+                return float(config.fee_tier_1_percent)
+            if amount_bdt < config.fee_tier_2_threshold:
+                return float(config.fee_tier_2_percent)
+            if amount_bdt < config.fee_tier_3_threshold:
+                return float(config.fee_tier_3_percent)
+            # Above highest threshold, use tier 3 percent
+            return float(config.fee_tier_3_percent)
+
+        fee_percent = get_fee_percent(amount)
+        platform_fee = int(amount * (fee_percent / 100.0))
+
+        buyer.balance_bdt -= amount
+        seller.balance_bdt += (amount - platform_fee)
 
         # Transfer all lands in parcel to buyer
         for land in lands:
@@ -309,10 +331,13 @@ class MarketplaceService:
             land_id=lands[0].land_id if lands else None,  # Primary land for legacy compat
             buyer_id=buyer_id,
             seller_id=listing.seller_id,
-            amount_bdt=listing.buy_now_price_bdt,
+            amount_bdt=amount,
             transaction_type=TransactionType.BUY_NOW,
             status=TransactionStatus.COMPLETED
         )
+
+        # Record platform fee
+        transaction.platform_fee_bdt = platform_fee
 
         db.add(transaction)
 
@@ -438,9 +463,27 @@ class MarketplaceService:
             logger.warning(f"Auction failed (buyer insufficient funds): {listing_id}")
             return None
 
-        # Transfer funds
+        # Transfer funds (apply tiered platform fee)
+        # Fetch admin config for fee tiers
+        cfg_res = await db.execute(select(AdminConfig).limit(1))
+        config = cfg_res.scalar_one_or_none()
+
+        def get_fee_percent(amount_bdt: int) -> float:
+            if not config:
+                return 5.0
+            if amount_bdt < config.fee_tier_1_threshold:
+                return float(config.fee_tier_1_percent)
+            if amount_bdt < config.fee_tier_2_threshold:
+                return float(config.fee_tier_2_percent)
+            if amount_bdt < config.fee_tier_3_threshold:
+                return float(config.fee_tier_3_percent)
+            return float(config.fee_tier_3_percent)
+
+        fee_percent = get_fee_percent(final_price)
+        platform_fee = int(final_price * (fee_percent / 100.0))
+
         buyer.balance_bdt -= final_price
-        seller.balance_bdt += final_price
+        seller.balance_bdt += (final_price - platform_fee)
 
         # Transfer all lands in parcel
         for land in lands:
@@ -459,6 +502,8 @@ class MarketplaceService:
             transaction_type=TransactionType.AUCTION,
             status=TransactionStatus.COMPLETED
         )
+
+        transaction.platform_fee_bdt = platform_fee
 
         db.add(transaction)
 
