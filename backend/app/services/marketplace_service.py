@@ -88,6 +88,21 @@ class MarketplaceService:
         if not parcel_service.validate_connectivity(land_coords):
             raise ValueError("Lands must be connected (edge-adjacent, no diagonal-only connections)")
 
+        # Validate auction duration against admin-configured limits
+        if listing_type in [ListingType.AUCTION, ListingType.AUCTION_WITH_BUYNOW]:
+            # Fetch AdminConfig
+            cfg_res = await db.execute(select(AdminConfig).limit(1))
+            config = cfg_res.scalar_one_or_none()
+            min_hours = int(config.auction_min_duration_hours) if config else 1
+            max_hours = int(config.auction_max_duration_hours) if config else 168
+
+            if duration_hours is None:
+                duration_hours = max(min_hours, 24)  # default to 24h within bounds
+            if duration_hours < min_hours:
+                raise ValueError(f"Auction duration must be at least {min_hours} hours")
+            if duration_hours > max_hours:
+                raise ValueError(f"Auction duration must be at most {max_hours} hours")
+
         # Calculate end time for auctions
         ends_at = None
         if listing_type in [ListingType.AUCTION, ListingType.AUCTION_WITH_BUYNOW]:

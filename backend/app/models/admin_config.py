@@ -324,6 +324,19 @@ class AdminConfig(BaseModel):
         default=10,
         nullable=False
     )
+    # Auction Duration Limits
+    auction_min_duration_hours = Column(
+        Integer,
+        default=1,
+        nullable=False,
+        comment="Minimum allowed auction duration in hours"
+    )
+    auction_max_duration_hours = Column(
+        Integer,
+        default=168,
+        nullable=False,
+        comment="Maximum allowed auction duration in hours (7 days)"
+    )
     auction_bid_increment = Column(
         Integer,
         default=100,
@@ -489,6 +502,10 @@ class AdminConfig(BaseModel):
                 "desert": self.desert_base_price,
                 "snow": self.snow_base_price,
                 "ocean": self.ocean_base_price
+            },
+            "auction_limits": {
+                "min_duration_hours": self.auction_min_duration_hours,
+                "max_duration_hours": self.auction_max_duration_hours
             },
             "updated_at": self.updated_at.isoformat() if self.updated_at else None
         }

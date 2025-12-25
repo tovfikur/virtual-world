@@ -895,6 +895,9 @@ class EconomicSettingsUpdate(BaseModel):
     fee_tier_2_percent: Optional[float] = None
     fee_tier_3_threshold: Optional[int] = None
     fee_tier_3_percent: Optional[float] = None
+    # Auction Duration Limits
+    auction_min_duration_hours: Optional[int] = None
+    auction_max_duration_hours: Optional[int] = None
 
 
 @router.get("/config/economy")
@@ -1047,6 +1050,12 @@ async def update_economic_settings(
             config.fee_tier_3_threshold = settings.fee_tier_3_threshold
         if settings.fee_tier_3_percent is not None:
             config.fee_tier_3_percent = settings.fee_tier_3_percent
+
+        # Auction Duration Limits
+        if settings.auction_min_duration_hours is not None:
+            config.auction_min_duration_hours = settings.auction_min_duration_hours
+        if settings.auction_max_duration_hours is not None:
+            config.auction_max_duration_hours = settings.auction_max_duration_hours
 
 
         config.updated_at = datetime.utcnow()
