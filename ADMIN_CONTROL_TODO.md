@@ -2,7 +2,7 @@
 
 Statuses: ✅ Done · 🔄 In Progress · ⏳ Not Started
 
-## Completed (61)
+## Completed (65)
 
 - ✅ Biome trade fee configuration (AdminConfig + API + services)
 - ✅ Market volatility control (max price move per cycle)
@@ -65,12 +65,16 @@ Statuses: ✅ Done · 🔄 In Progress · ⏳ Not Started
 - ✅ Attention-weight algorithm controls (version + 5 parameter fields)
 - ✅ Market manipulation detection thresholds (price spikes, order clustering, pump-and-dump)
 - ✅ Emergency market reset controls (8 configuration fields for comprehensive recovery)
+- ✅ Price formula toggle (dynamic vs fixed pricing with influence factors)
+- ✅ Fencing cost controls (enable/cost/maintenance/durability)
+- ✅ Parcel rules toggles (connectivity, diagonal allowed, min/max size)
+- ✅ Ownership limits (max lands per user/biome, contiguous size, cooldown)
 
 ## In Progress (0)
 
 - None right now.
 
-## Not Started / Pending (~66)
+## Not Started / Pending (~62)
 
 ### Biome Trading & Market Stability
 
@@ -82,12 +86,7 @@ Statuses: ✅ Done · 🔄 In Progress · ⏳ Not Started
 
 ### Land Pricing & Mechanics
 
-- ⏳ Price formula toggle (dynamic vs fixed)
 - ⏳ Price history/analytics per biome
-- ⏳ Fencing cost controls
-- ⏳ Parcel rules toggles (connectivity, diagonal allowed)
-- ⏳ Ownership limits (max lands per biome/user, contiguous size)
-- ⏳ Ownership cooldown between purchases
 - ⏳ Exploration incentives (first-discover bonus, rare land spawn rate)
 
 ### Communication & Notifications
