@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   # PostgreSQL Database
   postgres:
@@ -13,7 +11,7 @@ services:
     volumes:
       - postgres_data:/var/lib/postgresql/data
     ports:
-      - "5432:5432"
+      - "127.0.0.1:5432:5432"
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-virtualworld}"]
       interval: 10s
@@ -31,9 +29,13 @@ services:
     volumes:
       - redis_data:/data
     ports:
-      - "6379:6379"
+      - "127.0.0.1:6379:6379"
     healthcheck:
-      test: ["CMD", "redis-cli", "--raw", "incr", "ping"]
+      test:
+        [
+          "CMD-SHELL",
+          "redis-cli -a ${REDIS_PASSWORD:-changeme} --raw ping | grep -q PONG",
+        ]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -47,11 +49,14 @@ services:
       dockerfile: Dockerfile
     container_name: virtualworld-backend
     restart: unless-stopped
-    env_file:
-      - .env
     environment:
       - DATABASE_URL=postgresql+asyncpg://${DB_USER:-virtualworld}:${DB_PASSWORD:-changeme}@postgres:5432/${DB_NAME:-virtualworld}
       - REDIS_URL=redis://:${REDIS_PASSWORD:-changeme}@redis:6379/0
+      - JWT_SECRET_KEY=${JWT_SECRET_KEY:-dev-jwt-secret-change-me}
+      - ENCRYPTION_KEY=${ENCRYPTION_KEY:-dev-encryption-key-change-me}
+      - ENVIRONMENT=${APP_ENVIRONMENT:-development}
+      - DEBUG=${APP_DEBUG:-false}
+      - LOG_LEVEL=${APP_LOG_LEVEL:-WARNING}
     depends_on:
       postgres:
         condition: service_healthy
@@ -77,8 +82,6 @@ services:
       - backend
     networks:
       - virtualworld-network
-    environment:
-      - VITE_API_URL=http://localhost:8000/api/v1
 
 volumes:
   postgres_data:

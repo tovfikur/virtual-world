@@ -16,6 +16,24 @@ depends_on = None
 
 
 def upgrade() -> None:
+    # Ensure transactiontype enum supports biome trading.
+    # Postgres requires enum additions to be COMMITTED before they can be used.
+    with op.get_context().autocommit_block():
+        op.execute("""
+        DO $$ BEGIN
+            ALTER TYPE transactiontype ADD VALUE 'BIOME_BUY';
+        EXCEPTION
+            WHEN duplicate_object THEN null;
+        END $$;
+        """)
+        op.execute("""
+        DO $$ BEGIN
+            ALTER TYPE transactiontype ADD VALUE 'BIOME_SELL';
+        EXCEPTION
+            WHEN duplicate_object THEN null;
+        END $$;
+        """)
+
     # Create unified view combining marketplace and biome transactions
     op.execute('''
     CREATE VIEW v_unified_transactions AS
@@ -46,13 +64,8 @@ def upgrade() -> None:
     FROM transactions
     ORDER BY created_at DESC
     ''')
-    
-    # Create index on the underlying table to improve view query performance
-    op.create_index('idx_transactions_source', 'transactions', 
-                   [sa.text("CASE WHEN transaction_type IN ('BIOME_BUY', 'BIOME_SELL') THEN 'biome' ELSE 'marketplace' END")])
 
 
 def downgrade() -> None:
-    # Drop the view and index
-    op.drop_index('idx_transactions_source', table_name='transactions')
+    # Drop the view
     op.execute('DROP VIEW IF EXISTS v_unified_transactions')

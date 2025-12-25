@@ -60,7 +60,7 @@ class Settings(BaseSettings):
 
     # CORS
     cors_origins: List[str] = Field(default=[], env="CORS_ORIGINS")
-    cors_origin_regex: str = Field(default=".*", env="CORS_ORIGIN_REGEX")
+    cors_origin_regex: Optional[str] = Field(default=None, env="CORS_ORIGIN_REGEX")
     cors_credentials: bool = Field(default=True, env="CORS_CREDENTIALS")
     cors_methods: List[str] = Field(
         default=["*"],
@@ -170,6 +170,28 @@ class Settings(BaseSettings):
                 return json.loads(v)
             except json.JSONDecodeError:
                 return [header.strip() for header in v.split(",")]
+        return v
+
+    @validator("jwt_secret_key")
+    def validate_jwt_secret(cls, v, values):
+        """Ensure JWT secret is strong in production."""
+        env = values.get("environment", "development")
+        if env == "production":
+            if not v or len(v) < 32:
+                raise ValueError("JWT_SECRET_KEY must be at least 32 characters in production")
+            if v.startswith("dev-") or "change" in v.lower() or "secret" in v.lower():
+                raise ValueError("JWT_SECRET_KEY appears to be a dev/demo key; use a strong random key in production")
+        return v
+
+    @validator("encryption_key")
+    def validate_encryption_key(cls, v, values):
+        """Ensure encryption key is strong in production."""
+        env = values.get("environment", "development")
+        if env == "production":
+            if not v or len(v) < 32:
+                raise ValueError("ENCRYPTION_KEY must be at least 32 characters in production")
+            if v.startswith("dev-") or "change" in v.lower() or "secret" in v.lower():
+                raise ValueError("ENCRYPTION_KEY appears to be a dev/demo key; use a strong random key in production")
         return v
 
     class Config:

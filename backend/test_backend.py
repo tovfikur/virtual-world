@@ -20,6 +20,16 @@ def test_health():
     print("✓ Health check passed\n")
 
 
+def test_api_v1_health():
+    """Test API v1 health alias endpoint."""
+    print("Testing API v1 health check...")
+    response = requests.get(f"{API_URL}/health")
+    print(f"Status: {response.status_code}")
+    print(f"Response: {response.json()}")
+    assert response.status_code == 200
+    print("✓ API v1 health check passed\n")
+
+
 def test_register():
     """Test user registration."""
     print("Testing user registration...")

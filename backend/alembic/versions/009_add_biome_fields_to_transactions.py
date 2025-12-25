@@ -1,7 +1,7 @@
 """Add biome trading fields to transactions table
 
 Revision ID: 009
-Revises: 008
+Revises: 1de27dadc797
 Create Date: 2025-12-26 10:00:00.000000
 
 """
@@ -11,7 +11,7 @@ from sqlalchemy.dialects import postgresql
 
 # revision identifiers, used by Alembic.
 revision = '009'
-down_revision = '008'
+down_revision = '1de27dadc797'
 branch_labels = None
 depends_on = None
 

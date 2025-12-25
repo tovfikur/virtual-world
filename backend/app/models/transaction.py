@@ -3,7 +3,7 @@ Transaction model
 Immutable record of all land purchases and transfers
 """
 
-from sqlalchemy import Column, String, Integer, ForeignKey, DateTime, Enum as SQLEnum, Index, CheckConstraint
+from sqlalchemy import Column, String, Integer, Float, ForeignKey, DateTime, Enum as SQLEnum, Index, CheckConstraint
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship, column_property
 from sqlalchemy.ext.hybrid import hybrid_property
@@ -16,21 +16,21 @@ from app.db.base import BaseModel
 
 class TransactionStatus(str, PyEnum):
     """Transaction status enumeration."""
-    PENDING = "pending"
-    COMPLETED = "completed"
-    FAILED = "failed"
-    REFUNDED = "refunded"
+    PENDING = "PENDING"
+    COMPLETED = "COMPLETED"
+    FAILED = "FAILED"
+    REFUNDED = "REFUNDED"
 
 
 class TransactionType(str, PyEnum):
     """Transaction type enumeration."""
-    AUCTION = "auction"
-    BUY_NOW = "buy_now"
-    FIXED_PRICE = "fixed_price"
-    TRANSFER = "transfer"
-    TOPUP = "topup"
-    BIOME_BUY = "biome_buy"
-    BIOME_SELL = "biome_sell"
+    AUCTION = "AUCTION"
+    BUY_NOW = "BUY_NOW"
+    FIXED_PRICE = "FIXED_PRICE"
+    TRANSFER = "TRANSFER"
+    TOPUP = "TOPUP"
+    BIOME_BUY = "BIOME_BUY"
+    BIOME_SELL = "BIOME_SELL"
 
 
 class Transaction(BaseModel):

@@ -203,6 +203,11 @@ async def health_check():
     }
 
 
+@app.get("/api/v1/health", tags=["health"], include_in_schema=False)
+async def health_check_api_v1():
+    return await health_check()
+
+
 @app.get("/health/db", tags=["health"])
 async def database_health():
     """

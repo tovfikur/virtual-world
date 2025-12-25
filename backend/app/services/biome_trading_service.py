@@ -304,25 +304,33 @@ class BiomeTradingService:
         Returns:
             Dictionary with transactions and pagination
         """
-        query = select(BiomeTransaction).where(
-            BiomeTransaction.user_id == user_id
+        base_query = select(Transaction).where(
+            Transaction.buyer_id == user_id,
+            Transaction.transaction_type.in_([
+                TransactionType.BIOME_BUY,
+                TransactionType.BIOME_SELL,
+            ])
         )
 
         if biome:
-            query = query.where(BiomeTransaction.biome == biome)
+            base_query = base_query.where(Transaction.biome == biome.value)
 
         # Get total count
         count_result = await db.execute(
-            select(func.count(BiomeTransaction.transaction_id)).select_from(
-                BiomeTransaction
-            ).where(BiomeTransaction.user_id == user_id)
+            select(func.count(Transaction.transaction_id)).select_from(Transaction).where(
+                Transaction.buyer_id == user_id,
+                Transaction.transaction_type.in_([
+                    TransactionType.BIOME_BUY,
+                    TransactionType.BIOME_SELL,
+                ]),
+                *( [Transaction.biome == biome.value] if biome else [] )
+            )
         )
-        total = count_result.scalar()
+        total = count_result.scalar() or 0
 
         # Apply pagination
         offset = (page - 1) * limit
-        query = query.order_by(BiomeTransaction.executed_at.desc())
-        query = query.offset(offset).limit(limit)
+        query = base_query.order_by(Transaction.created_at.desc()).offset(offset).limit(limit)
 
         result = await db.execute(query)
         transactions = result.scalars().all()

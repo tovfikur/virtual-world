@@ -41,9 +41,9 @@ A full-stack web application featuring real-time multiplayer interaction, land o
 
 - **Land-based chat** with proximity detection
 - **Private messaging** between users
-- **End-to-end encryption** for all messages
+- **Message encryption** (server-side; see implementation notes)
 - **Typing indicators** and presence tracking
-- **WebRTC voice/video calls** (1-to-1)
+- **WebRTC signaling API** (voice/video UI integration in progress)
 
 ### 👤 User Management
 
@@ -55,10 +55,11 @@ A full-stack web application featuring real-time multiplayer interaction, land o
 ### 🔒 Security
 
 - **JWT authentication** with automatic refresh
-- **End-to-end encryption** for messages
+- **Message encryption** (server-side storage)
 - **Rate limiting** to prevent abuse
 - **SQL injection protection** via SQLAlchemy ORM
 - **Password hashing** with bcrypt
+- **Production secret validation** (enforces strong keys)
 
 ---
 
@@ -72,14 +73,11 @@ git clone https://github.com/yourusername/virtual-land-world.git
 cd virtual-land-world
 
 # Copy and configure environment
-cp .env.production .env
-# Edit .env with your settings
+cp .env.example .env
+# Edit .env with your settings (REQUIRED for real deployments)
 
 # Start all services
 docker-compose up -d
-
-# Initialize database
-docker-compose exec backend alembic upgrade head
 
 # Access the application
 open http://localhost

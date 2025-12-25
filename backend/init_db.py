@@ -5,6 +5,7 @@ Run this script after database setup to create default admin and config.
 
 import asyncio
 import sys
+import os
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy import select
@@ -18,6 +19,18 @@ from app.models.user import User, UserRole
 async def create_default_admin():
     """Create default admin user if it doesn't exist."""
 
+    environment = (settings.environment or "development").lower()
+    create_demo_admin = os.getenv("CREATE_DEMO_ADMIN", "").lower() in ("1", "true", "yes")
+
+    # In non-production, default to creating a demo admin unless explicitly disabled.
+    if environment != "production" and os.getenv("CREATE_DEMO_ADMIN") is None:
+        create_demo_admin = True
+
+    bootstrap_email = (os.getenv("ADMIN_BOOTSTRAP_EMAIL") or "").strip()
+    bootstrap_password = os.getenv("ADMIN_BOOTSTRAP_PASSWORD") or ""
+    demo_email = (os.getenv("DEMO_ADMIN_EMAIL") or "demo@example.com").strip()
+    demo_password = os.getenv("DEMO_ADMIN_PASSWORD") or "DemoPassword123!"
+
     # Create async engine
     engine = create_async_engine(str(settings.database_url), echo=False)
 
@@ -27,35 +40,72 @@ async def create_default_admin():
     )
 
     async with async_session() as session:
-        # Check if admin already exists
-        result = await session.execute(
-            select(User).where(User.email == "demo@example.com")
-        )
-        existing_admin = result.scalar_one_or_none()
+        admin_user = None
 
-        if existing_admin:
-            print("✓ Default admin user already exists (demo@example.com)")
-            admin_user = existing_admin
+        if environment == "production":
+            if not bootstrap_email or not bootstrap_password:
+                raise RuntimeError(
+                    "Production bootstrap requires ADMIN_BOOTSTRAP_EMAIL and ADMIN_BOOTSTRAP_PASSWORD. "
+                    "Set these env vars (or run init_db manually in a secure environment)."
+                )
+
+            # Find existing bootstrap admin by email
+            result = await session.execute(select(User).where(User.email == bootstrap_email))
+            existing_admin = result.scalar_one_or_none()
+
+            if existing_admin:
+                admin_user = existing_admin
+                print(f"✓ Admin user already exists ({bootstrap_email})")
+            else:
+                admin_user = User(
+                    user_id=uuid.uuid4(),
+                    username="admin",
+                    email=bootstrap_email,
+                    role=UserRole.ADMIN,
+                    verified=True,
+                    balance_bdt=0,
+                )
+                admin_user.set_password(bootstrap_password)
+                session.add(admin_user)
+                await session.commit()
+                await session.refresh(admin_user)
+                print(f"✓ Admin user created successfully ({bootstrap_email})")
+
         else:
-            # Create admin user
-            admin_user = User(
-                user_id=uuid.uuid4(),
-                username="admin",
-                email="demo@example.com",
-                role=UserRole.ADMIN,
-                verified=True,
-                balance_bdt=0
+            if create_demo_admin:
+                result = await session.execute(select(User).where(User.email == demo_email))
+                existing_admin = result.scalar_one_or_none()
+
+                if existing_admin:
+                    admin_user = existing_admin
+                    print(f"✓ Demo admin user already exists ({demo_email})")
+                else:
+                    admin_user = User(
+                        user_id=uuid.uuid4(),
+                        username="admin",
+                        email=demo_email,
+                        role=UserRole.ADMIN,
+                        verified=True,
+                        balance_bdt=0,
+                    )
+                    admin_user.set_password(demo_password)
+                    session.add(admin_user)
+                    await session.commit()
+                    await session.refresh(admin_user)
+
+                    print("✓ Demo admin user created successfully!")
+                    print(f"  - Email: {demo_email}")
+                    print(f"  - Password: {demo_password}")
+                    print("  - Role: ADMIN")
+            else:
+                print("ℹ️  CREATE_DEMO_ADMIN is disabled; no admin user will be created")
+
+        # Admin config requires an admin reference
+        if not admin_user:
+            raise RuntimeError(
+                "AdminConfig requires an admin user (updated_by_id). "
+                "Enable demo admin (CREATE_DEMO_ADMIN=true) or set ADMIN_BOOTSTRAP_EMAIL/ADMIN_BOOTSTRAP_PASSWORD."
             )
-            admin_user.set_password("DemoPassword123!")
-
-            session.add(admin_user)
-            await session.commit()
-            await session.refresh(admin_user)
-
-            print("✓ Default admin user created successfully!")
-            print(f"  - Email: demo@example.com")
-            print(f"  - Password: DemoPassword123!")
-            print(f"  - Role: ADMIN")
 
         # Check if admin config exists
         result = await session.execute(select(AdminConfig))

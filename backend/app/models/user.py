@@ -160,10 +160,6 @@ class User(BaseModel):
         "BiomeHolding",
         back_populates="user"
     )
-    biome_transactions = relationship(
-        "BiomeTransaction",
-        back_populates="user"
-    )
     attention_scores = relationship(
         "AttentionScore",
         back_populates="user"

@@ -25,14 +25,14 @@ def upgrade() -> None:
     # Drop the table
     op.drop_table('biome_transactions')
     
-    # Drop biome_transaction_type enum if not used elsewhere
-    op.execute('DROP TYPE IF EXISTS biome_transaction_type CASCADE')
+    # Drop biometransactiontype enum created by the biome trading tables migration
+    op.execute('DROP TYPE IF EXISTS biometransactiontype CASCADE')
 
 
 def downgrade() -> None:
     # Recreate the enum
     op.execute('''
-        CREATE TYPE biome_transaction_type AS ENUM (
+        CREATE TYPE biometransactiontype AS ENUM (
             'buy',
             'sell'
         )
@@ -44,7 +44,7 @@ def downgrade() -> None:
         sa.Column('transaction_id', postgresql.UUID(as_uuid=True), nullable=False),
         sa.Column('user_id', postgresql.UUID(as_uuid=True), nullable=False),
         sa.Column('biome', sa.String(50), nullable=False),
-        sa.Column('type', sa.Enum('buy', 'sell', name='biome_transaction_type'), nullable=False),
+        sa.Column('type', sa.Enum('buy', 'sell', name='biometransactiontype'), nullable=False),
         sa.Column('shares', sa.Float(), nullable=False),
         sa.Column('price_per_share_bdt', sa.Integer(), nullable=False),
         sa.Column('total_amount_bdt', sa.Integer(), nullable=False),

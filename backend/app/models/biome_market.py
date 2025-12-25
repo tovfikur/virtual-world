@@ -76,7 +76,6 @@ class BiomeMarket(BaseModel):
 
     # Relationships
     holdings = relationship("BiomeHolding", back_populates="biome_market")
-    transactions = relationship("BiomeTransaction", back_populates="biome_market")
     price_history = relationship("BiomePriceHistory", back_populates="biome_market", cascade="all, delete-orphan")
 
     def calculate_share_price(self) -> float:
