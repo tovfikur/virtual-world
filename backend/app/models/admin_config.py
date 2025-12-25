@@ -199,6 +199,50 @@ class AdminConfig(BaseModel):
         comment="Freeze biome prices (no redistribution)"
     )
 
+    # Biome Land Base Prices (BDT per land)
+    plains_base_price = Column(
+        Float,
+        default=125.0,
+        nullable=False,
+        comment="Base price for plains biome land"
+    )
+    forest_base_price = Column(
+        Float,
+        default=100.0,
+        nullable=False,
+        comment="Base price for forest biome land"
+    )
+    beach_base_price = Column(
+        Float,
+        default=90.0,
+        nullable=False,
+        comment="Base price for beach biome land"
+    )
+    mountain_base_price = Column(
+        Float,
+        default=80.0,
+        nullable=False,
+        comment="Base price for mountain biome land"
+    )
+    desert_base_price = Column(
+        Float,
+        default=55.0,
+        nullable=False,
+        comment="Base price for desert biome land"
+    )
+    snow_base_price = Column(
+        Float,
+        default=45.0,
+        nullable=False,
+        comment="Base price for snow biome land"
+    )
+    ocean_base_price = Column(
+        Float,
+        default=30.0,
+        nullable=False,
+        comment="Base price for ocean biome land"
+    )
+
     # Feature Toggles
     enable_land_trading = Column(
         Boolean,
@@ -369,6 +413,15 @@ class AdminConfig(BaseModel):
                 "redistribution_pool_percent": self.redistribution_pool_percent,
                 "biome_trading_paused": self.biome_trading_paused,
                 "biome_prices_frozen": self.biome_prices_frozen
+            },
+            "biome_land_base_prices": {
+                "plains": self.plains_base_price,
+                "forest": self.forest_base_price,
+                "beach": self.beach_base_price,
+                "mountain": self.mountain_base_price,
+                "desert": self.desert_base_price,
+                "snow": self.snow_base_price,
+                "ocean": self.ocean_base_price
             },
             "updated_at": self.updated_at.isoformat() if self.updated_at else None
         }

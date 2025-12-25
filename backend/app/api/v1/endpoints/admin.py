@@ -878,6 +878,14 @@ class EconomicSettingsUpdate(BaseModel):
     redistribution_pool_percent: Optional[float] = None
     biome_trading_paused: Optional[bool] = None
     biome_prices_frozen: Optional[bool] = None
+    # Biome Land Base Prices
+    plains_base_price: Optional[float] = None
+    forest_base_price: Optional[float] = None
+    beach_base_price: Optional[float] = None
+    mountain_base_price: Optional[float] = None
+    desert_base_price: Optional[float] = None
+    snow_base_price: Optional[float] = None
+    ocean_base_price: Optional[float] = None
 
 
 @router.get("/config/economy")
@@ -989,6 +997,28 @@ async def update_economic_settings(
 
         if settings.biome_prices_frozen is not None:
             config.biome_prices_frozen = settings.biome_prices_frozen
+        # Biome Land Base Prices
+        if settings.plains_base_price is not None:
+            config.plains_base_price = settings.plains_base_price
+
+        if settings.forest_base_price is not None:
+            config.forest_base_price = settings.forest_base_price
+
+        if settings.beach_base_price is not None:
+            config.beach_base_price = settings.beach_base_price
+
+        if settings.mountain_base_price is not None:
+            config.mountain_base_price = settings.mountain_base_price
+
+        if settings.desert_base_price is not None:
+            config.desert_base_price = settings.desert_base_price
+
+        if settings.snow_base_price is not None:
+            config.snow_base_price = settings.snow_base_price
+
+        if settings.ocean_base_price is not None:
+            config.ocean_base_price = settings.ocean_base_price
+
 
         config.updated_at = datetime.utcnow()
         await db.commit()

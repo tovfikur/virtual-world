@@ -7,7 +7,9 @@ import hashlib
 from typing import Dict, List, Tuple
 from opensimplex import OpenSimplex
 import logging
+from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.land import Biome
+from app.models.admin_config import AdminConfig
 from app.services.cache_service import cache_service
 from app.config import settings, CACHE_TTLS
 
@@ -167,7 +169,7 @@ class WorldGenerationService:
         # Plains (default/medium)
         return Biome.PLAINS
 
-    def calculate_base_price(self, biome: Biome, elevation: float) -> int:
+    async def calculate_base_price(self, biome: Biome, elevation: float, db: AsyncSession) -> int:
         """
         Calculate base land price in BDT based on biome and elevation.
 
@@ -179,6 +181,53 @@ class WorldGenerationService:
         - DESERT: Harsh - 40-70 BDT
         - SNOW: Very harsh - 30-60 BDT
         - OCEAN: Not buildable - 20-40 BDT
+
+        Args:
+            biome: Land biome
+            elevation: Elevation value (0-1)
+            db: Database session for fetching AdminConfig
+
+        Returns:
+            Base price in BDT
+        """
+        # Fetch admin config for biome pricing
+        from sqlalchemy import select
+        config = await db.scalar(select(AdminConfig))
+        
+        if not config:
+            # Fallback to defaults if config not found
+            base_prices = {
+                Biome.PLAINS: 125,
+                Biome.FOREST: 100,
+                Biome.BEACH: 90,
+                Biome.MOUNTAIN: 80,
+                Biome.DESERT: 55,
+                Biome.SNOW: 45,
+                Biome.OCEAN: 30
+            }
+            base = base_prices[biome]
+        else:
+            # Use configured prices
+            base_prices = {
+                Biome.PLAINS: config.plains_base_price,
+                Biome.FOREST: config.forest_base_price,
+                Biome.BEACH: config.beach_base_price,
+                Biome.MOUNTAIN: config.mountain_base_price,
+                Biome.DESERT: config.desert_base_price,
+                Biome.SNOW: config.snow_base_price,
+                Biome.OCEAN: config.ocean_base_price
+            }
+            base = base_prices[biome]
+
+        # Slight variation based on elevation (±20%)
+        elevation_factor = 0.8 + (elevation * 0.4)
+
+        return int(base * elevation_factor)
+
+    def calculate_base_price_fallback(self, biome: Biome, elevation: float) -> int:
+        """
+        Fallback method for calculating base price without database access.
+        Used when db session is not available.
 
         Args:
             biome: Land biome
@@ -196,15 +245,11 @@ class WorldGenerationService:
             Biome.SNOW: 45,
             Biome.OCEAN: 30
         }
-
         base = base_prices[biome]
-
-        # Slight variation based on elevation (±20%)
         elevation_factor = 0.8 + (elevation * 0.4)
-
         return int(base * elevation_factor)
 
-    async def generate_chunk(self, chunk_x: int, chunk_y: int, chunk_size: int = 32) -> Dict:
+    async def generate_chunk(self, chunk_x: int, chunk_y: int, chunk_size: int = 32, db: AsyncSession = None) -> Dict:
         """
         Generate a chunk of land data.
 
@@ -212,6 +257,7 @@ class WorldGenerationService:
             chunk_x: Chunk X coordinate
             chunk_y: Chunk Y coordinate
             chunk_size: Size of chunk (default 32x32)
+            db: Database session for fetching pricing config
 
         Returns:
             Dictionary containing chunk data:
@@ -250,7 +296,7 @@ class WorldGenerationService:
                 moisture = self.get_moisture(world_x, world_y)
                 temperature = self.get_temperature(world_x, world_y)
                 biome = self.get_biome(world_x, world_y)
-                base_price = self.calculate_base_price(biome, elevation)
+                base_price = await self.calculate_base_price(biome, elevation, db) if db else self.calculate_base_price_fallback(biome, elevation)
 
                 land_data = {
                     "x": world_x,
@@ -284,7 +330,8 @@ class WorldGenerationService:
     async def generate_chunks_batch(
         self,
         chunks: List[Tuple[int, int]],
-        chunk_size: int = 32
+        chunk_size: int = 32,
+        db: AsyncSession = None
     ) -> List[Dict]:
         """
         Generate multiple chunks in batch.
@@ -292,6 +339,7 @@ class WorldGenerationService:
         Args:
             chunks: List of (chunk_x, chunk_y) tuples
             chunk_size: Size of each chunk
+            db: Database session for fetching pricing config
 
         Returns:
             List of chunk data dictionaries
@@ -299,7 +347,7 @@ class WorldGenerationService:
         result = []
 
         for chunk_x, chunk_y in chunks:
-            chunk_data = await self.generate_chunk(chunk_x, chunk_y, chunk_size)
+            chunk_data = await self.generate_chunk(chunk_x, chunk_y, chunk_size, db)
             result.append(chunk_data)
 
         logger.info(f"Generated {len(result)} chunks in batch")
@@ -320,7 +368,7 @@ class WorldGenerationService:
         moisture = self.get_moisture(x, y)
         temperature = self.get_temperature(x, y)
         biome = self.get_biome(x, y)
-        base_price = self.calculate_base_price(biome, elevation)
+        base_price = self.calculate_base_price_fallback(biome, elevation)
 
         return {
             "x": x,

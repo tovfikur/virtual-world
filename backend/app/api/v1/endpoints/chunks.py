@@ -139,7 +139,7 @@ async def get_chunk(
         Chunk data with land information including fencing flags
     """
     try:
-        chunk_data = await world_service.generate_chunk(chunk_x, chunk_y, chunk_size)
+        chunk_data = await world_service.generate_chunk(chunk_x, chunk_y, chunk_size, db)
         # Enrich with ownership/fencing data
         user_uuid = None
         if current_user:
@@ -197,7 +197,7 @@ async def get_chunks_batch(
     try:
         # Convert list of lists to list of tuples
         chunk_tuples = [tuple(c) for c in chunks]
-        chunks_data = await world_service.generate_chunks_batch(chunk_tuples, chunk_size)
+        chunks_data = await world_service.generate_chunks_batch(chunk_tuples, chunk_size, db)
         user_uuid = None
         if current_user:
             try:
