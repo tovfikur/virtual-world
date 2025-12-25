@@ -2,7 +2,7 @@
 
 Statuses: ✅ Done · 🔄 In Progress · ⏳ Not Started
 
-## Completed (56)
+## Completed (57)
 
 - ✅ Biome trade fee configuration (AdminConfig + API + services)
 - ✅ Market volatility control (max price move per cycle)
@@ -60,18 +60,13 @@ Statuses: ✅ Done · 🔄 In Progress · ⏳ Not Started
 - ✅ Economic velocity (volume/money supply)
 - ✅ Top earners (seller revenue window)
 - ✅ Query performance telemetry (key table timings)
+- ✅ Fraud detection thresholds (wash trading, related accounts, price deviation auto-reject)
 
 ## In Progress (0)
 
 - None right now.
 
-## Not Started / Pending (~70+)
-
-### Security & Rate Limiting
-
-### Payment Gateway Controls
-
-### Marketplace Rules
+## Not Started / Pending (~69)
 
 ### Biome Trading & Market Stability
 
@@ -112,8 +107,9 @@ Statuses: ✅ Done · 🔄 In Progress · ⏳ Not Started
 
 ### Payment & Fraud
 
-- ⏳ Fraud detection thresholds (wash trading detection, related-account flagging)
-- ⏳ Max price deviation auto-reject rules
+- ⏳ Wash trading detection enforcement (flag & monitor)
+- ⏳ Related account linkage detection enforcement
+- ⏳ Auto-reject transaction rules based on price deviation
 
 ### Misc Governance
 
