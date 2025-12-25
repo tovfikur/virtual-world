@@ -37,6 +37,29 @@ async def create_default_admin():
     # Create all tables from models (SQLAlchemy-based schema initialization)
     from app.db.base import Base
     async with engine.begin() as conn:
+        # Drop all tables first with CASCADE to handle foreign keys
+        from sqlalchemy import text
+        await conn.execute(text("DROP TABLE IF EXISTS admin_config CASCADE"))
+        await conn.execute(text("DROP TABLE IF EXISTS users CASCADE"))
+        await conn.execute(text("DROP TABLE IF EXISTS lands CASCADE"))
+        await conn.execute(text("DROP TABLE IF EXISTS biome_prices CASCADE"))
+        await conn.execute(text("DROP TABLE IF EXISTS biome_market CASCADE"))
+        await conn.execute(text("DROP TABLE IF EXISTS market_listings CASCADE"))
+        await conn.execute(text("DROP TABLE IF EXISTS market_offers CASCADE"))
+        await conn.execute(text("DROP TABLE IF EXISTS marketplace_transactions CASCADE"))
+        await conn.execute(text("DROP TABLE IF EXISTS biome_trades CASCADE"))
+        await conn.execute(text("DROP TABLE IF EXISTS user_sessions CASCADE"))
+        await conn.execute(text("DROP TABLE IF EXISTS payments CASCADE"))
+        await conn.execute(text("DROP TABLE IF EXISTS topups CASCADE"))
+        await conn.execute(text("DROP TABLE IF EXISTS chat_messages CASCADE"))
+        await conn.execute(text("DROP TABLE IF EXISTS chat_channels CASCADE"))
+        await conn.execute(text("DROP TABLE IF EXISTS notifications CASCADE"))
+        await conn.execute(text("DROP TABLE IF EXISTS user_notifications CASCADE"))
+        await conn.execute(text("DROP TABLE IF EXISTS bans CASCADE"))
+        await conn.execute(text("DROP TABLE IF EXISTS reports CASCADE"))
+        await conn.execute(text("DROP TABLE IF EXISTS announcements CASCADE"))
+        await conn.execute(text("DROP TABLE IF EXISTS audit_logs CASCADE"))
+        # Then create all tables
         await conn.run_sync(Base.metadata.create_all)
 
     # Create async session

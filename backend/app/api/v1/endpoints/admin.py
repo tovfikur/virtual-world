@@ -1422,6 +1422,12 @@ class EconomicSettingsUpdate(BaseModel):
     related_account_min_transactions: Optional[int] = None
     related_account_max_price_variance_percent: Optional[float] = None
     price_deviation_auto_reject_percent: Optional[float] = None
+    # Biome Market Initialization
+    biome_initial_cash_bdt: Optional[int] = None
+    biome_initial_shares_outstanding: Optional[int] = None
+    biome_initial_share_price_bdt: Optional[float] = None
+    biome_price_update_frequency_seconds: Optional[int] = None
+    attention_weight_algorithm_version: Optional[str] = None
     # Auction Duration Limits
     auction_min_duration_hours: Optional[int] = None
     auction_max_duration_hours: Optional[int] = None
@@ -1457,39 +1463,8 @@ async def get_economic_settings(
         if not config:
             raise HTTPException(status_code=404, detail="Configuration not found")
 
-        return {
-            "transaction_fee_percent": config.transaction_fee_percent,
-            "biome_trade_fee_percent": config.biome_trade_fee_percent,
-            "base_land_price_bdt": config.base_land_price_bdt,
-            "biome_multipliers": {
-                "forest": config.forest_multiplier,
-                "grassland": config.grassland_multiplier,
-                "water": config.water_multiplier,
-                "desert": config.desert_multiplier,
-                "snow": config.snow_multiplier
-            },
-            "max_land_price_bdt": config.max_land_price_bdt,
-            "min_land_price_bdt": config.min_land_price_bdt,
-            "enable_land_trading": config.enable_land_trading,
-            "biome_market_controls": {
-                "max_price_move_percent": config.max_price_move_percent,
-                "max_transaction_percent": config.max_transaction_percent,
-                "redistribution_pool_percent": config.redistribution_pool_percent,
-                "biome_trading_paused": config.biome_trading_paused,
-                "biome_prices_frozen": config.biome_prices_frozen
-            },
-            "listing_fees": {
-                "creation_bdt": config.listing_creation_fee_bdt,
-                "premium_bdt": config.premium_listing_fee_bdt,
-                "success_fee_mode": config.success_fee_mode,
-                "success_fee_percent": config.success_fee_percent,
-                "success_fee_flat_bdt": config.success_fee_flat_bdt,
-            },
-            "price_controls": {
-                "max_price_deviation_percent": config.max_price_deviation_percent,
-                "parcel_size_limit": config.parcel_size_limit,
-            }
-        }
+        # Use the model's to_dict method to return all fields
+        return config.to_dict()
 
     except HTTPException:
         raise
@@ -1685,6 +1660,33 @@ async def update_economic_settings(
                 raise HTTPException(status_code=400, detail="price_deviation_auto_reject_percent must be >= 0")
             config.price_deviation_auto_reject_percent = settings.price_deviation_auto_reject_percent
 
+        # Biome Market Initialization
+        if settings.biome_initial_cash_bdt is not None:
+            if settings.biome_initial_cash_bdt < 0:
+                raise HTTPException(status_code=400, detail="biome_initial_cash_bdt must be non-negative")
+            config.biome_initial_cash_bdt = settings.biome_initial_cash_bdt
+
+        if settings.biome_initial_shares_outstanding is not None:
+            if settings.biome_initial_shares_outstanding < 1:
+                raise HTTPException(status_code=400, detail="biome_initial_shares_outstanding must be >= 1")
+            config.biome_initial_shares_outstanding = settings.biome_initial_shares_outstanding
+
+        if settings.biome_initial_share_price_bdt is not None:
+            if settings.biome_initial_share_price_bdt < 0.01:
+                raise HTTPException(status_code=400, detail="biome_initial_share_price_bdt must be >= 0.01")
+            config.biome_initial_share_price_bdt = settings.biome_initial_share_price_bdt
+
+        if settings.biome_price_update_frequency_seconds is not None:
+            if settings.biome_price_update_frequency_seconds < 60:
+                raise HTTPException(status_code=400, detail="biome_price_update_frequency_seconds must be >= 60 (1 minute)")
+            config.biome_price_update_frequency_seconds = settings.biome_price_update_frequency_seconds
+
+        if settings.attention_weight_algorithm_version is not None:
+            allowed = {"v1_uniform", "v1_volume_weighted", "v2_momentum", "v2_volatility"}
+            if settings.attention_weight_algorithm_version not in allowed:
+                raise HTTPException(status_code=400, detail=f"attention_weight_algorithm_version must be one of {allowed}")
+            config.attention_weight_algorithm_version = settings.attention_weight_algorithm_version
+
         config.updated_at = datetime.utcnow()
 
         # Log action and commit once
@@ -1699,10 +1701,8 @@ async def update_economic_settings(
         db.add(audit_log)
         await db.commit()
 
-        return {
-            "message": "Economic settings updated successfully",
-            "updated_fields": settings.dict(exclude_none=True)
-        }
+        # Return the full updated config
+        return config.to_dict()
 
     except HTTPException:
         raise

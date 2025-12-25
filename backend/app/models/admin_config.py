@@ -310,6 +310,38 @@ class AdminConfig(BaseModel):
         comment="Freeze biome prices (no redistribution)"
     )
 
+    # Biome Market Initialization (per-biome starting state)
+    biome_initial_cash_bdt = Column(
+        Integer,
+        default=10000,
+        nullable=False,
+        comment="Initial market cash (BDT) per biome market initialization"
+    )
+    biome_initial_shares_outstanding = Column(
+        Integer,
+        default=1000,
+        nullable=False,
+        comment="Initial shares outstanding per biome on market init"
+    )
+    biome_initial_share_price_bdt = Column(
+        Float,
+        default=10.0,
+        nullable=False,
+        comment="Initial share price (BDT) at market initialization"
+    )
+    biome_price_update_frequency_seconds = Column(
+        Integer,
+        default=300,
+        nullable=False,
+        comment="Frequency of price updates via redistribution (seconds)"
+    )
+    attention_weight_algorithm_version = Column(
+        String(32),
+        default="v1_uniform",
+        nullable=False,
+        comment="Attention-weight algorithm version (v1_uniform, v1_volume_weighted, etc)"
+    )
+
     # Biome Land Base Prices (BDT per land)
     plains_base_price = Column(
         Float,
@@ -987,6 +1019,13 @@ class AdminConfig(BaseModel):
                 "redistribution_pool_percent": self.redistribution_pool_percent,
                 "biome_trading_paused": self.biome_trading_paused,
                 "biome_prices_frozen": self.biome_prices_frozen
+            },
+            "biome_market_initialization": {
+                "initial_cash_bdt": self.biome_initial_cash_bdt,
+                "initial_shares_outstanding": self.biome_initial_shares_outstanding,
+                "initial_share_price_bdt": self.biome_initial_share_price_bdt,
+                "price_update_frequency_seconds": self.biome_price_update_frequency_seconds,
+                "attention_weight_algorithm_version": self.attention_weight_algorithm_version,
             },
             "biome_land_base_prices": {
                 "plains": self.plains_base_price,
