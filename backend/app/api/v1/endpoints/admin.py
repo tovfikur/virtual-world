@@ -150,7 +150,7 @@ async def get_dashboard_stats(
         # Total revenue
         total_revenue = await db.scalar(
             select(func.sum(Transaction.amount_bdt)).where(
-                Transaction.status == "completed"
+                Transaction.status == "COMPLETED"
             )
         ) or 0
 
@@ -210,7 +210,7 @@ async def get_revenue_analytics(
             .where(
                 and_(
                     Transaction.created_at >= start_date,
-                    Transaction.status == "completed"
+                    Transaction.status == "COMPLETED"
                 )
             )
             .group_by(func.date(Transaction.created_at))
@@ -759,7 +759,7 @@ async def refund_transaction(
         if not transaction:
             raise HTTPException(status_code=404, detail="Transaction not found")
 
-        if transaction.status != "completed":
+        if transaction.status != "COMPLETED":
             raise HTTPException(
                 status_code=400,
                 detail="Can only refund completed transactions"
@@ -1427,13 +1427,13 @@ async def get_user_activity(
         # Get transactions count
         transactions_bought = await db.scalar(
             select(func.count(Transaction.transaction_id)).where(
-                and_(Transaction.buyer_id == user_id, Transaction.status == "completed")
+                and_(Transaction.buyer_id == user_id, Transaction.status == "COMPLETED")
             )
         )
 
         transactions_sold = await db.scalar(
             select(func.count(Transaction.transaction_id)).where(
-                and_(Transaction.seller_id == user_id, Transaction.status == "completed")
+                and_(Transaction.seller_id == user_id, Transaction.status == "COMPLETED")
             )
         )
 
