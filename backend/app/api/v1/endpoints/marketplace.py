@@ -3,7 +3,7 @@ Marketplace Endpoints
 Listing creation, bidding, and purchase operations
 """
 
-from fastapi import APIRouter, Depends, HTTPException, status, Query
+from fastapi import APIRouter, Depends, HTTPException, status, Query, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, and_, or_, func
 from typing import Optional
@@ -17,6 +17,7 @@ from app.models.listing_land import ListingLand
 from app.models.bid import Bid
 from app.models.land import Land, Biome
 from app.models.user import User
+from app.models.admin_config import AdminConfig
 from app.schemas.listing_schema import (
     ListingCreate,
     ListingResponse,
@@ -28,17 +29,57 @@ from app.dependencies import get_current_user
 from app.services.marketplace_service import marketplace_service
 from app.services.parcel_service import parcel_service
 from app.services.cache_service import cache_service
+from app.services.rate_limit_service import rate_limit_service
 from app.config import CACHE_TTLS
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/marketplace", tags=["marketplace"])
 
 
+def _rate_limit_identifier(request: Request, current_user: Optional[dict]) -> str:
+    if current_user and current_user.get("sub"):
+        return str(current_user["sub"])
+    if request.client:
+        return request.client.host
+    return "anonymous"
+
+
+async def _enforce_marketplace_rate_limit(
+    db: AsyncSession,
+    request: Request,
+    current_user: Optional[dict]
+):
+    cfg_res = await db.execute(select(AdminConfig).limit(1))
+    config = cfg_res.scalar_one_or_none()
+    limit = config.marketplace_actions_per_hour if config else None
+    if not limit:
+        return
+
+    identifier = _rate_limit_identifier(request, current_user)
+    result = await rate_limit_service.check(
+        bucket="marketplace",
+        identifier=identifier,
+        limit=limit,
+        window_seconds=3600
+    )
+    if result and not result.allowed:
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail="Marketplace rate limit exceeded",
+            headers={
+                "X-RateLimit-Limit": str(result.limit),
+                "X-RateLimit-Remaining": str(result.remaining),
+                "X-RateLimit-Reset": str(result.reset_epoch),
+            },
+        )
+
+
 @router.post("/listings", response_model=ListingResponse, status_code=status.HTTP_201_CREATED)
 async def create_listing(
     listing_data: ListingCreate,
     current_user: dict = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
+    request: Request = None
 ):
     """
     Create a new marketplace listing for a parcel (one or more connected lands).
@@ -65,6 +106,8 @@ async def create_listing(
         )
 
     try:
+        await _enforce_marketplace_rate_limit(db, request, current_user)
+
         listing = await marketplace_service.create_listing(
             db=db,
             land_ids=land_uuids,
@@ -348,7 +391,8 @@ async def place_bid(
     listing_id: str,
     bid_data: BidCreate,
     current_user: dict = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
+    request: Request = None
 ):
     """
     Place a bid on an auction listing.
@@ -369,6 +413,8 @@ async def place_bid(
         )
 
     try:
+        await _enforce_marketplace_rate_limit(db, request, current_user)
+
         bid = await marketplace_service.place_bid(
             db=db,
             listing_id=listing_uuid,
@@ -468,7 +514,8 @@ async def buy_now(
     listing_id: str,
     buy_request: BuyNowRequest,
     current_user: dict = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
+    request: Request = None
 ):
     """
     Execute instant purchase via buy now.
@@ -497,6 +544,8 @@ async def buy_now(
         )
 
     try:
+        await _enforce_marketplace_rate_limit(db, request, current_user)
+
         transaction = await marketplace_service.buy_now(
             db=db,
             listing_id=listing_uuid,

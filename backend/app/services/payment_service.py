@@ -16,6 +16,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from app.models.user import User
 from app.models.transaction import Transaction
+from app.models.admin_config import AdminConfig
+from app.models.payment_event import PaymentEvent
 from app.config import settings
 import logging
 
@@ -198,6 +200,14 @@ class PaymentService:
 
             if status != "Completed":
                 logger.info(f"bKash payment {payment_id} not completed: {status}")
+                db.add(PaymentEvent(
+                    gateway=PaymentGateway.BKASH,
+                    event_type="webhook",
+                    status="ignored",
+                    message=f"status={status}",
+                    payload=json.dumps(payload)
+                ))
+                await db.commit()
                 return False
 
             # Check idempotency - avoid duplicate processing
@@ -216,6 +226,10 @@ class PaymentService:
             amount = int(float(payload.get("amount", 0)))
             reference_id = payload.get("merchantInvoiceNumber")
 
+            config_res = await db.execute(select(AdminConfig).limit(1))
+            config = config_res.scalar_one_or_none()
+            net_amount, fee = self._apply_gateway_fee(amount, config)
+
             # Update user balance
             stmt = select(User).where(User.user_id == user_id).with_for_update()
             result = await db.execute(stmt)
@@ -223,9 +237,17 @@ class PaymentService:
 
             if not user:
                 logger.error(f"User not found for bKash payment: {user_id}")
+                db.add(PaymentEvent(
+                    gateway=PaymentGateway.BKASH,
+                    event_type="webhook",
+                    status="error",
+                    message=f"user_not_found:{user_id}",
+                    payload=json.dumps(payload)
+                ))
+                await db.commit()
                 return False
 
-            user.balance_bdt += amount
+            user.balance_bdt += net_amount
 
             # Log transaction
             transaction = Transaction(
@@ -233,7 +255,7 @@ class PaymentService:
                 land_id=None,
                 seller_id=user_id,
                 buyer_id=user_id,
-                amount_bdt=amount,
+                amount_bdt=net_amount,
                 transaction_type="topup",
                 gateway_name=PaymentGateway.BKASH,
                 gateway_transaction_id=payment_id,
@@ -245,6 +267,14 @@ class PaymentService:
             )
             db.add(transaction)
 
+            db.add(PaymentEvent(
+                gateway=PaymentGateway.BKASH,
+                event_type="webhook",
+                status="success",
+                message=f"credit {net_amount} fee {fee}",
+                payload=json.dumps(payload)
+            ))
+
             await db.commit()
             logger.info(f"bKash payment processed: {payment_id}, amount: {amount} BDT")
             return True
@@ -252,6 +282,14 @@ class PaymentService:
         except Exception as e:
             logger.error(f"Error processing bKash webhook: {e}")
             await db.rollback()
+            db.add(PaymentEvent(
+                gateway=PaymentGateway.BKASH,
+                event_type="webhook",
+                status="error",
+                message=str(e)[:250],
+                payload=json.dumps(payload) if payload else None
+            ))
+            await db.commit()
             return False
 
     async def initiate_nagad_payment(
@@ -391,8 +429,17 @@ class PaymentService:
         Generic webhook processor for Nagad, Rocket, SSLCommerz
         """
         try:
-            if status.lower() not in ["success", "completed", "valid"]:
+            status_lower = status.lower() if status else ""
+            if status_lower not in ["success", "completed", "valid"]:
                 logger.info(f"{gateway} payment {payment_id} not successful: {status}")
+                db.add(PaymentEvent(
+                    gateway=gateway,
+                    event_type="webhook",
+                    status="ignored",
+                    message=f"status={status}",
+                    payload=json.dumps(payload)
+                ))
+                await db.commit()
                 return False
 
             # Check idempotency
@@ -406,6 +453,10 @@ class PaymentService:
                 logger.info(f"{gateway} payment {payment_id} already processed")
                 return True
 
+            config_res = await db.execute(select(AdminConfig).limit(1))
+            config = config_res.scalar_one_or_none()
+            net_amount, fee = self._apply_gateway_fee(amount, config)
+
             # Update user balance
             stmt = select(User).where(User.user_id == user_id).with_for_update()
             result = await db.execute(stmt)
@@ -415,7 +466,7 @@ class PaymentService:
                 logger.error(f"User not found for {gateway} payment: {user_id}")
                 return False
 
-            user.balance_bdt += amount
+            user.balance_bdt += net_amount
 
             # Log transaction
             transaction = Transaction(
@@ -423,26 +474,60 @@ class PaymentService:
                 land_id=None,
                 seller_id=user_id,
                 buyer_id=user_id,
-                amount_bdt=amount,
+                amount_bdt=net_amount,
                 transaction_type="topup",
                 gateway_name=gateway,
                 gateway_transaction_id=payment_id,
                 status=PaymentStatus.COMPLETED,
                 metadata=json.dumps({
                     "webhook_received_at": datetime.utcnow().isoformat(),
-                    "raw_payload": payload
+                    "raw_payload": payload,
+                    "fee_charged_bdt": fee,
+                    "fee_mode": config.gateway_fee_mode if config else "absorb",
                 })
             )
             db.add(transaction)
+            db.add(PaymentEvent(
+                gateway=gateway,
+                event_type="webhook",
+                status="success",
+                message=f"credit {net_amount} fee {fee}",
+                payload=json.dumps(payload)
+            ))
 
             await db.commit()
-            logger.info(f"{gateway} payment processed: {payment_id}, amount: {amount} BDT")
+
+            logger.info(f"{gateway} payment processed: {payment_id}, amount: {net_amount} BDT")
             return True
 
         except Exception as e:
             logger.error(f"Error processing {gateway} webhook: {e}")
             await db.rollback()
+            db.add(PaymentEvent(
+                gateway=gateway,
+                event_type="webhook",
+                status="error",
+                message=str(e)[:250],
+                payload=json.dumps(payload) if payload else None
+            ))
+            await db.commit()
             return False
+
+    @staticmethod
+    def _apply_gateway_fee(amount: int, config: Optional[AdminConfig]) -> tuple[int, int]:
+        if not config:
+            return amount, 0
+
+        fee_percent = max(config.gateway_fee_percent or 0, 0)
+        fee_flat = max(config.gateway_fee_flat_bdt or 0, 0)
+        fee = int(amount * fee_percent / 100) + fee_flat
+        fee = max(fee, 0)
+
+        if config.gateway_fee_mode == "pass_through":
+            net = max(amount - fee, 0)
+        else:
+            net = amount
+        return net, fee
 
 
 # Singleton instance

@@ -6,9 +6,6 @@ while ! pg_isready -h postgres -p 5432 -U "${DB_USER:-virtualworld}" > /dev/null
   sleep 1
 done
 
-# Apply migrations
-alembic upgrade head
-
 # Initialize database with admin user and config, no extra output
 python init_db.py
 

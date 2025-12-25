@@ -10,9 +10,11 @@ from sqlalchemy import select
 import logging
 import secrets
 from datetime import datetime
+import re
 
 from app.db.session import get_db
 from app.models.user import User
+from app.models.admin_config import AdminConfig
 from app.schemas.user_schema import UserCreate, UserLogin, UserResponse, TokenResponse
 from app.services.auth_service import auth_service
 from app.services.cache_service import cache_service
@@ -23,6 +25,62 @@ from app.services.websocket_service import connection_manager
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/auth", tags=["authentication"])
+
+
+async def _get_security_settings(db: AsyncSession):
+    result = await db.execute(select(AdminConfig).limit(1))
+    config = result.scalar_one_or_none()
+
+    access_minutes = config.access_token_expire_minutes if config else settings.jwt_access_token_expire_minutes
+    refresh_days = config.refresh_token_expire_days if config else settings.jwt_refresh_token_expire_days
+
+    password_policy = {
+        "min_length": config.password_min_length if config else settings.password_min_length,
+        "require_uppercase": config.password_require_uppercase if config else True,
+        "require_lowercase": config.password_require_lowercase if config else True,
+        "require_number": config.password_require_number if config else True,
+        "require_special": config.password_require_special if config else True,
+    }
+
+    login_policy = {
+        "max_attempts": config.login_max_attempts if config else settings.max_login_attempts,
+        "lockout_duration_minutes": config.lockout_duration_minutes if config else settings.lockout_duration_minutes,
+        "max_sessions_per_user": config.max_sessions_per_user if config else 1,
+    }
+
+    return access_minutes, refresh_days, password_policy, login_policy
+
+
+def _validate_password_policy(password: str, policy: dict):
+    if len(password) < policy.get("min_length", 0):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Password must be at least {policy['min_length']} characters"
+        )
+
+    if policy.get("require_uppercase") and not re.search(r"[A-Z]", password):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Password must include at least one uppercase letter"
+        )
+
+    if policy.get("require_lowercase") and not re.search(r"[a-z]", password):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Password must include at least one lowercase letter"
+        )
+
+    if policy.get("require_number") and not re.search(r"[0-9]", password):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Password must include at least one number"
+        )
+
+    if policy.get("require_special") and not re.search(r"[^A-Za-z0-9]", password):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Password must include at least one special character"
+        )
 
 
 @router.post("/register", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
@@ -63,6 +121,9 @@ async def register(
             status_code=status.HTTP_409_CONFLICT,
             detail="Username already taken"
         )
+
+    _, _, password_policy, _ = await _get_security_settings(db)
+    _validate_password_policy(user_data.password, password_policy)
 
     # Create new user
     user = User(
@@ -107,6 +168,8 @@ async def login(
 
     The refresh token is stored in a secure, HTTP-only cookie.
     """
+    access_minutes, refresh_days, _, login_policy = await _get_security_settings(db)
+
     # Find user by email
     result = await db.execute(
         select(User).where(User.email == user_data.email)
@@ -130,7 +193,10 @@ async def login(
 
     # Verify password
     if not user.verify_password(user_data.password):
-        user.add_failed_login()
+        user.add_failed_login(
+            max_attempts=login_policy["max_attempts"],
+            lockout_minutes=login_policy["lockout_duration_minutes"],
+        )
         await db.commit()
         logger.warning(f"Failed login attempt for user: {user.username}")
         raise HTTPException(
@@ -146,7 +212,7 @@ async def login(
     previous_session = await cache_service.get(f"session:{user.user_id}")
     previous_session_terminated = False
 
-    if previous_session and connection_manager.has_active_connections(str(user.user_id)):
+    if login_policy["max_sessions_per_user"] <= 1 and previous_session and connection_manager.has_active_connections(str(user.user_id)):
         forced = await connection_manager.force_logout_user(
             str(user.user_id),
             reason="Another device signed in with this account"
@@ -160,13 +226,19 @@ async def login(
                 detail="Another device is already using this account. Please log out there first."
             )
 
+    access_minutes, refresh_days, _, _ = await _get_security_settings(db)
+    access_expires_seconds = access_minutes * 60
+    refresh_ttl_seconds = refresh_days * 24 * 60 * 60
+    session_ttl = max(refresh_ttl_seconds, CACHE_TTLS["session"])
+
     # Generate tokens with session binding
     session_id = secrets.token_urlsafe(32)
     access_token = auth_service.create_access_token(
         user_id=str(user.user_id),
         email=user.email,
         role=user.role.value,
-        additional_claims={"session_id": session_id}
+        additional_claims={"session_id": session_id},
+        expires_minutes=access_minutes,
     )
     refresh_token = auth_service.create_refresh_token()
 
@@ -174,7 +246,7 @@ async def login(
     await cache_service.set(
         f"refresh_token:{user.user_id}",
         refresh_token,
-        ttl=CACHE_TTLS["refresh_token"]
+        ttl=refresh_ttl_seconds
     )
 
     # Store session in Redis
@@ -187,7 +259,7 @@ async def login(
             "role": user.role.value,
             "created_at": datetime.utcnow().isoformat()
         },
-        ttl=CACHE_TTLS["session"]
+        ttl=session_ttl
     )
 
     logger.info(f"User logged in: {user.username} ({user.user_id})")
@@ -196,7 +268,7 @@ async def login(
     token_response = TokenResponse(
         access_token=access_token,
         token_type="Bearer",
-        expires_in=settings.jwt_access_token_expire_minutes * 60,
+        expires_in=access_expires_seconds,
         user=UserResponse.model_validate(user),
         previous_session_terminated=previous_session_terminated
     )
@@ -208,7 +280,7 @@ async def login(
     json_response.set_cookie(
         key="refresh_token",
         value=refresh_token,
-        max_age=CACHE_TTLS["refresh_token"],
+        max_age=refresh_ttl_seconds,
         httponly=True,
         secure=True,  # HTTPS only in production
         samesite="strict"
@@ -281,12 +353,17 @@ async def refresh_token(
             detail="Active session not found"
         )
 
+    access_minutes, refresh_days, _, _ = await _get_security_settings(db)
+    access_expires_seconds = access_minutes * 60
+    refresh_ttl_seconds = refresh_days * 24 * 60 * 60
+
     # Generate new tokens bound to existing session
     new_access_token = auth_service.create_access_token(
         user_id=str(user.user_id),
         email=user.email,
         role=user.role.value,
-        additional_claims={"session_id": session_data["session_id"]}
+        additional_claims={"session_id": session_data["session_id"]},
+        expires_minutes=access_minutes,
     )
     new_refresh_token = auth_service.create_refresh_token()
 
@@ -294,7 +371,13 @@ async def refresh_token(
     await cache_service.set(
         f"refresh_token:{user.user_id}",
         new_refresh_token,
-        ttl=CACHE_TTLS["refresh_token"]
+        ttl=refresh_ttl_seconds
+    )
+
+    await cache_service.set(
+        f"session:{user.user_id}",
+        session_data,
+        ttl=max(refresh_ttl_seconds, CACHE_TTLS["session"])
     )
 
     logger.info(f"Token refreshed for user: {user.username}")
@@ -303,7 +386,7 @@ async def refresh_token(
     token_response = TokenResponse(
         access_token=new_access_token,
         token_type="Bearer",
-        expires_in=settings.jwt_access_token_expire_minutes * 60,
+        expires_in=access_expires_seconds,
         user=UserResponse.model_validate(user)
     )
 
@@ -313,7 +396,7 @@ async def refresh_token(
     json_response.set_cookie(
         key="refresh_token",
         value=new_refresh_token,
-        max_age=CACHE_TTLS["refresh_token"],
+        max_age=refresh_ttl_seconds,
         httponly=True,
         secure=True,
         samesite="strict"

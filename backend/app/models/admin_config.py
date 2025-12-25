@@ -3,7 +3,7 @@ Admin Config model
 World generation and platform configuration
 """
 
-from sqlalchemy import Column, Integer, Float, ForeignKey, CheckConstraint, Boolean
+from sqlalchemy import Column, Integer, Float, ForeignKey, CheckConstraint, Boolean, String
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
 import uuid
@@ -122,6 +122,26 @@ class AdminConfig(BaseModel):
         nullable=False
     )
 
+    # Auth & Session
+    login_max_attempts = Column(
+        Integer,
+        default=5,
+        nullable=False,
+        comment="Maximum failed login attempts before lockout"
+    )
+    lockout_duration_minutes = Column(
+        Integer,
+        default=15,
+        nullable=False,
+        comment="Account lockout duration in minutes after max failed attempts"
+    )
+    max_sessions_per_user = Column(
+        Integer,
+        default=1,
+        nullable=False,
+        comment="Maximum concurrent sessions allowed per user"
+    )
+
     # Pricing Configuration
     base_land_price_bdt = Column(
         Integer,
@@ -208,6 +228,48 @@ class AdminConfig(BaseModel):
         default=2.0,
         nullable=False,
         comment="Platform fee percent for amounts above tier 2"
+    )
+    listing_creation_fee_bdt = Column(
+        Integer,
+        default=0,
+        nullable=False,
+        comment="Fee charged when creating a listing"
+    )
+    premium_listing_fee_bdt = Column(
+        Integer,
+        default=0,
+        nullable=False,
+        comment="Fee for premium/promoted listing placement"
+    )
+    success_fee_mode = Column(
+        String(16),
+        default="percent",
+        nullable=False,
+        comment="Success fee mode: percent or flat"
+    )
+    success_fee_percent = Column(
+        Float,
+        default=2.0,
+        nullable=False,
+        comment="Success fee percent when mode=percent"
+    )
+    success_fee_flat_bdt = Column(
+        Integer,
+        default=0,
+        nullable=False,
+        comment="Success fee flat amount when mode=flat"
+    )
+    max_price_deviation_percent = Column(
+        Float,
+        default=25.0,
+        nullable=False,
+        comment="Max allowed price deviation vs reference before flag"
+    )
+    parcel_size_limit = Column(
+        Integer,
+        default=0,
+        nullable=False,
+        comment="Maximum parcel size allowed (0=unlimited)"
     )
     biome_trade_fee_percent = Column(
         Float,
@@ -324,6 +386,296 @@ class AdminConfig(BaseModel):
         default=10,
         nullable=False
     )
+    max_lands_per_listing = Column(
+        Integer,
+        default=50,
+        nullable=False,
+        comment="Maximum number of land tiles allowed per listing"
+    )
+    max_listing_duration_days = Column(
+        Integer,
+        default=30,
+        nullable=False,
+        comment="Maximum listing duration for auctions in days"
+    )
+    listing_cooldown_minutes = Column(
+        Integer,
+        default=5,
+        nullable=False,
+        comment="Cooldown between listings per seller"
+    )
+    min_reserve_price_percent = Column(
+        Integer,
+        default=50,
+        nullable=False,
+        comment="Minimum reserve price as percent of starting price"
+    )
+    # Auction Anti-Sniping
+    anti_sniping_enabled = Column(
+        Boolean,
+        default=True,
+        nullable=False,
+        comment="Enable anti-sniping auto-extend near auction end"
+    )
+    anti_sniping_extend_minutes = Column(
+        Integer,
+        default=5,
+        nullable=False,
+        comment="Minutes to extend when anti-sniping triggers"
+    )
+    anti_sniping_threshold_minutes = Column(
+        Integer,
+        default=3,
+        nullable=False,
+        comment="If time remaining is below this threshold, extend"
+    )
+    # Payment Gateway Toggles & Limits
+    enable_bkash = Column(
+        Boolean,
+        default=True,
+        nullable=False
+    )
+    enable_nagad = Column(
+        Boolean,
+        default=True,
+        nullable=False
+    )
+    enable_rocket = Column(
+        Boolean,
+        default=False,
+        nullable=False
+    )
+    enable_sslcommerz = Column(
+        Boolean,
+        default=True,
+        nullable=False
+    )
+    bkash_mode = Column(
+        String(10),
+        default="test",
+        nullable=False
+    )
+    nagad_mode = Column(
+        String(10),
+        default="test",
+        nullable=False
+    )
+    rocket_mode = Column(
+        String(10),
+        default="test",
+        nullable=False
+    )
+    sslcommerz_mode = Column(
+        String(10),
+        default="test",
+        nullable=False
+    )
+    topup_min_bdt = Column(
+        Integer,
+        default=100,
+        nullable=False
+    )
+    topup_max_bdt = Column(
+        Integer,
+        default=100000,
+        nullable=False
+    )
+    topup_daily_limit_bdt = Column(
+        Integer,
+        default=200000,
+        nullable=False
+    )
+    topup_monthly_limit_bdt = Column(
+        Integer,
+        default=1000000,
+        nullable=False
+    )
+    enable_email = Column(
+        Boolean,
+        default=False,
+        nullable=False,
+        comment="Enable outbound email system"
+    )
+    smtp_host = Column(
+        String(255),
+        nullable=True,
+        comment="SMTP server host"
+    )
+    smtp_port = Column(
+        Integer,
+        default=587,
+        nullable=False,
+        comment="SMTP server port"
+    )
+    smtp_username = Column(
+        String(255),
+        nullable=True,
+        comment="SMTP username"
+    )
+    smtp_password = Column(
+        String(255),
+        nullable=True,
+        comment="SMTP password (stored hashed or encrypted externally)"
+    )
+    smtp_use_tls = Column(
+        Boolean,
+        default=True,
+        nullable=False,
+        comment="Use STARTTLS"
+    )
+    smtp_use_ssl = Column(
+        Boolean,
+        default=False,
+        nullable=False,
+        comment="Use SSL/TLS socket"
+    )
+    default_from_email = Column(
+        String(255),
+        nullable=True,
+        comment="Default From email address"
+    )
+    email_rate_limit_per_hour = Column(
+        Integer,
+        default=200,
+        nullable=False,
+        comment="Max emails per user per hour"
+    )
+    email_template_theme = Column(
+        String(64),
+        default="default",
+        nullable=False,
+        comment="Email template theme identifier"
+    )
+    enable_push_notifications = Column(
+        Boolean,
+        default=False,
+        nullable=False,
+        comment="Enable push notifications"
+    )
+    push_system_enabled = Column(
+        Boolean,
+        default=True,
+        nullable=False,
+        comment="Enable system/transactional push notifications"
+    )
+    push_marketing_enabled = Column(
+        Boolean,
+        default=False,
+        nullable=False,
+        comment="Enable marketing/promotional push notifications"
+    )
+    push_daily_limit = Column(
+        Integer,
+        default=50,
+        nullable=False,
+        comment="Max push notifications per user per day"
+    )
+    push_quiet_hours_start = Column(
+        Integer,
+        default=0,
+        nullable=False,
+        comment="Quiet hours start (0-23)"
+    )
+    push_quiet_hours_end = Column(
+        Integer,
+        default=0,
+        nullable=False,
+        comment="Quiet hours end (0-23)"
+    )
+    push_webhook_url = Column(
+        String(512),
+        nullable=True,
+        comment="Webhook/endpoint for push notification provider"
+    )
+    chat_max_length = Column(
+        Integer,
+        default=500,
+        nullable=False,
+        comment="Maximum chat message length"
+    )
+    chat_profanity_filter_enabled = Column(
+        Boolean,
+        default=False,
+        nullable=False,
+        comment="Enable profanity filtering"
+    )
+    chat_block_keywords = Column(
+        String(1024),
+        nullable=True,
+        comment="Comma-separated keywords to block"
+    )
+    chat_retention_days = Column(
+        Integer,
+        default=30,
+        nullable=False,
+        comment="Retention period for chat messages"
+    )
+    chat_pm_enabled = Column(
+        Boolean,
+        default=True,
+        nullable=False,
+        comment="Allow private messages"
+    )
+    chat_group_max_members = Column(
+        Integer,
+        default=50,
+        nullable=False,
+        comment="Maximum members in a chat group"
+    )
+    announcement_allow_high_priority = Column(
+        Boolean,
+        default=False,
+        nullable=False,
+        comment="Allow high-priority announcements"
+    )
+    announcement_max_priority = Column(
+        Integer,
+        default=3,
+        nullable=False,
+        comment="Max priority level allowed (numeric)"
+    )
+    announcement_rate_limit_per_hour = Column(
+        Integer,
+        default=20,
+        nullable=False,
+        comment="Max announcements per hour per admin"
+    )
+    log_level = Column(
+        String(20),
+        default="INFO",
+        nullable=False,
+        comment="Global application log level"
+    )
+    log_retention_days = Column(
+        Integer,
+        default=30,
+        nullable=False,
+        comment="Desired log retention in days (policy indicator)"
+    )
+    chunk_cache_ttl_seconds = Column(
+        Integer,
+        default=3600,
+        nullable=False,
+        comment="TTL for chunk cache entries"
+    )
+    payment_alert_window_minutes = Column(
+        Integer,
+        default=60,
+        nullable=False,
+        comment="Time window (minutes) for evaluating payment alerts"
+    )
+    payment_alert_failure_threshold = Column(
+        Integer,
+        default=3,
+        nullable=False,
+        comment="Number of failed/errored webhooks in window to trigger alert"
+    )
+    payment_reconcile_tolerance = Column(
+        Integer,
+        default=0,
+        nullable=False,
+        comment="Allowed delta between success events and recorded top-ups in window"
+    )
     # Rate Limiting Controls
     api_requests_per_minute = Column(
         Integer,
@@ -348,6 +700,99 @@ class AdminConfig(BaseModel):
         default=120,
         nullable=False,
         comment="Biome trade operations per minute per user"
+    )
+
+    # Fraud Detection Thresholds
+    wash_trading_min_trades_window = Column(
+        Integer,
+        default=10,
+        nullable=False,
+        comment="Minimum trades in 24h window to trigger wash trading flag"
+    )
+    wash_trading_min_volume_percent = Column(
+        Float,
+        default=30.0,
+        nullable=False,
+        comment="Min percent of trades back-and-forth (sell then buy same biome within 1h)"
+    )
+    related_account_min_transactions = Column(
+        Integer,
+        default=5,
+        nullable=False,
+        comment="Min transactions between accounts to flag as related"
+    )
+    related_account_max_price_variance_percent = Column(
+        Float,
+        default=2.0,
+        nullable=False,
+        comment="Max price variance in related account transactions to trigger flag"
+    )
+    price_deviation_auto_reject_percent = Column(
+        Float,
+        default=50.0,
+        nullable=False,
+        comment="Price deviation % threshold for auto-reject transaction (0 to disable)"
+    )
+
+    access_token_expire_minutes = Column(
+        Integer,
+        default=60,
+        nullable=False,
+        comment="Access token expiry in minutes"
+    )
+    refresh_token_expire_days = Column(
+        Integer,
+        default=7,
+        nullable=False,
+        comment="Refresh token expiry in days"
+    )
+    password_min_length = Column(
+        Integer,
+        default=12,
+        nullable=False,
+        comment="Minimum password length"
+    )
+    password_require_uppercase = Column(
+        Boolean,
+        default=True,
+        nullable=False,
+        comment="Password must include an uppercase letter"
+    )
+    password_require_lowercase = Column(
+        Boolean,
+        default=True,
+        nullable=False,
+        comment="Password must include a lowercase letter"
+    )
+    password_require_number = Column(
+        Boolean,
+        default=True,
+        nullable=False,
+        comment="Password must include a number"
+    )
+    password_require_special = Column(
+        Boolean,
+        default=True,
+        nullable=False,
+        comment="Password must include a special character"
+    )
+    gateway_fee_mode = Column(
+        String(16),
+        default="absorb",
+        nullable=False,
+        comment="How gateway fees are handled: absorb or pass_through"
+    )
+    gateway_fee_percent = Column(
+        Float,
+        default=1.5,
+        nullable=False,
+        comment="Percent fee applied by gateway"
+    )
+    gateway_fee_flat_bdt = Column(
+        Integer,
+        default=0,
+        nullable=False,
+        comment="Flat fee in BDT applied by gateway"
     )
     # Auction Duration Limits
     auction_min_duration_hours = Column(
@@ -423,6 +868,19 @@ class AdminConfig(BaseModel):
 
     def get_biome_multiplier(self, biome: str) -> float:
         """
+            "chat": {
+                "max_length": self.chat_max_length,
+                "profanity_filter_enabled": self.chat_profanity_filter_enabled,
+                "block_keywords": self.chat_block_keywords,
+                "retention_days": self.chat_retention_days,
+                "pm_enabled": self.chat_pm_enabled,
+                "group_max_members": self.chat_group_max_members,
+            },
+            "announcements": {
+                "allow_high_priority": self.announcement_allow_high_priority,
+                "max_priority": self.announcement_max_priority,
+                "rate_limit_per_hour": self.announcement_rate_limit_per_hour,
+            },
         Get price multiplier for a biome.
 
         Args:
@@ -506,6 +964,17 @@ class AdminConfig(BaseModel):
                     "threshold_bdt": self.fee_tier_2_threshold,
                     "percent": self.fee_tier_2_percent
                 },
+            "listing_fees": {
+                "creation_bdt": self.listing_creation_fee_bdt,
+                "premium_bdt": self.premium_listing_fee_bdt,
+                "success_fee_mode": self.success_fee_mode,
+                "success_fee_percent": self.success_fee_percent,
+                "success_fee_flat_bdt": self.success_fee_flat_bdt,
+            },
+            "price_controls": {
+                "max_price_deviation_percent": self.max_price_deviation_percent,
+                "parcel_size_limit": self.parcel_size_limit,
+            },
                 "tier_3": {
                     "threshold_bdt": self.fee_tier_3_threshold,
                     "percent": self.fee_tier_3_percent
@@ -537,6 +1006,98 @@ class AdminConfig(BaseModel):
                 "marketplace_actions_per_hour": self.marketplace_actions_per_hour,
                 "chat_messages_per_minute": self.chat_messages_per_minute,
                 "biome_trades_per_minute": self.biome_trades_per_minute
+            },
+            "fraud_detection": {
+                "wash_trading_min_trades_window": self.wash_trading_min_trades_window,
+                "wash_trading_min_volume_percent": self.wash_trading_min_volume_percent,
+                "related_account_min_transactions": self.related_account_min_transactions,
+                "related_account_max_price_variance_percent": self.related_account_max_price_variance_percent,
+                "price_deviation_auto_reject_percent": self.price_deviation_auto_reject_percent,
+            },
+            "auth": {
+                "access_token_expire_minutes": self.access_token_expire_minutes,
+                "refresh_token_expire_days": self.refresh_token_expire_days,
+                "login_max_attempts": self.login_max_attempts,
+                "lockout_duration_minutes": self.lockout_duration_minutes,
+                "max_sessions_per_user": self.max_sessions_per_user,
+            },
+            "password_policy": {
+                "min_length": self.password_min_length,
+                "require_uppercase": self.password_require_uppercase,
+                "require_lowercase": self.password_require_lowercase,
+                "require_number": self.password_require_number,
+                "require_special": self.password_require_special,
+            },
+            "listing_limits": {
+                "max_lands_per_listing": self.max_lands_per_listing,
+                "max_listing_duration_days": self.max_listing_duration_days,
+                "listing_cooldown_minutes": self.listing_cooldown_minutes,
+                "min_reserve_price_percent": self.min_reserve_price_percent,
+            },
+            "auction_antisinping": {
+                "enabled": self.anti_sniping_enabled,
+                "extend_minutes": self.anti_sniping_extend_minutes,
+                "threshold_minutes": self.anti_sniping_threshold_minutes,
+            },
+            "payments": {
+                "gateways": {
+                    "bkash": {"enabled": self.enable_bkash, "mode": self.bkash_mode},
+                    "nagad": {"enabled": self.enable_nagad, "mode": self.nagad_mode},
+                    "rocket": {"enabled": self.enable_rocket, "mode": self.rocket_mode},
+                    "sslcommerz": {"enabled": self.enable_sslcommerz, "mode": self.sslcommerz_mode},
+                },
+                "fees": {
+                    "mode": self.gateway_fee_mode,
+                    "percent": self.gateway_fee_percent,
+                    "flat_bdt": self.gateway_fee_flat_bdt,
+                },
+                "limits": {
+                    "min_bdt": self.topup_min_bdt,
+                    "max_bdt": self.topup_max_bdt,
+                    "daily_limit_bdt": self.topup_daily_limit_bdt,
+                    "monthly_limit_bdt": self.topup_monthly_limit_bdt,
+                },
+                "monitoring": {
+                    "alert_window_minutes": self.payment_alert_window_minutes,
+                    "failure_threshold": self.payment_alert_failure_threshold,
+                    "reconcile_tolerance": self.payment_reconcile_tolerance,
+                },
+            },
+            "email": {
+                "enabled": self.enable_email,
+                "smtp": {
+                    "host": self.smtp_host,
+                    "port": self.smtp_port,
+                    "username": self.smtp_username,
+                    "use_tls": self.smtp_use_tls,
+                    "use_ssl": self.smtp_use_ssl,
+                },
+                "defaults": {
+                    "from_email": self.default_from_email,
+                    "template_theme": self.email_template_theme,
+                },
+                "rate_limit_per_hour": self.email_rate_limit_per_hour,
+                "password_set": bool(self.smtp_password),
+            },
+            "notifications": {
+                "push": {
+                    "enabled": self.enable_push_notifications,
+                    "system_enabled": self.push_system_enabled,
+                    "marketing_enabled": self.push_marketing_enabled,
+                    "daily_limit": self.push_daily_limit,
+                    "quiet_hours": {
+                        "start_hour": self.push_quiet_hours_start,
+                        "end_hour": self.push_quiet_hours_end,
+                    },
+                    "webhook_url_set": bool(self.push_webhook_url),
+                },
+            },
+            "logging": {
+                "level": self.log_level,
+                "retention_days": self.log_retention_days,
+            },
+            "cache": {
+                "chunk_ttl_seconds": self.chunk_cache_ttl_seconds,
             },
             "updated_at": self.updated_at.isoformat() if self.updated_at else None
         }

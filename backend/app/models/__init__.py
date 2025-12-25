@@ -13,6 +13,7 @@ from app.models.chat import ChatSession, Message
 from app.models.land_chat_access import LandChatAccess
 from app.models.audit_log import AuditLog, AuditEventCategory
 from app.models.admin_config import AdminConfig
+from app.models.ip_access_control import IPBlacklist, IPWhitelist
 from app.models.biome_market import BiomeMarket
 from app.models.biome_holding import BiomeHolding
 from app.models.biome_price_history import BiomePriceHistory
@@ -45,6 +46,9 @@ __all__ = [
     "AuditEventCategory",
     # Config
     "AdminConfig",
+    # IP Access Control
+    "IPBlacklist",
+    "IPWhitelist",
     # Biome trading
     "BiomeMarket",
     "BiomeHolding",

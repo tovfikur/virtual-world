@@ -3,14 +3,16 @@ Biome Market Endpoints
 API routes for biome trading, portfolio, and market data
 """
 
-from fastapi import APIRouter, Depends, HTTPException, status, Query
+from fastapi import APIRouter, Depends, HTTPException, status, Query, Request
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select
 from typing import Optional
 import logging
 import uuid
 
 from app.db.session import get_db
 from app.models.land import Biome
+from app.models.admin_config import AdminConfig
 from app.schemas.biome_trading_schema import (
     BiomeMarketResponse,
     AllBiomeMarketsResponse,
@@ -29,10 +31,46 @@ from app.services.biome_market_service import biome_market_service
 from app.services.biome_trading_service import biome_trading_service
 from app.services.attention_tracking_service import attention_tracking_service
 from app.services.websocket_service import connection_manager
+from app.services.rate_limit_service import rate_limit_service
 from datetime import datetime
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/biome-market", tags=["biome-market"])
+
+
+def _rate_limit_identifier(request: Optional[Request], current_user: Optional[dict]) -> str:
+    if current_user and current_user.get("sub"):
+        return str(current_user["sub"])
+    if request and request.client:
+        return request.client.host
+    return "anonymous"
+
+
+async def _enforce_biome_trade_rate_limit(db: AsyncSession, request: Request, current_user: Optional[dict]):
+    cfg_res = await db.execute(select(AdminConfig).limit(1))
+    config = cfg_res.scalar_one_or_none()
+    limit = config.biome_trades_per_minute if config else None
+    if not limit:
+        return
+
+    identifier = _rate_limit_identifier(request, current_user)
+    result = await rate_limit_service.check(
+        bucket="biome_trades",
+        identifier=identifier,
+        limit=limit,
+        window_seconds=60,
+    )
+
+    if result and not result.allowed:
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail="Biome trade rate limit exceeded",
+            headers={
+                "X-RateLimit-Limit": str(result.limit),
+                "X-RateLimit-Remaining": str(result.remaining),
+                "X-RateLimit-Reset": str(result.reset_epoch),
+            },
+        )
 
 
 # =============================================================================
@@ -160,7 +198,8 @@ async def get_price_history(
 async def buy_shares(
     buy_request: BuySharesRequest,
     current_user: dict = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
+    request: Request = None
 ):
     """
     Buy biome shares with BDT balance.
@@ -178,6 +217,8 @@ async def buy_shares(
         )
 
     try:
+        await _enforce_biome_trade_rate_limit(db, request, current_user)
+
         transaction = await biome_trading_service.buy_shares(
             db=db,
             user_id=user_uuid,
@@ -206,7 +247,8 @@ async def buy_shares(
 async def sell_shares(
     sell_request: SellSharesRequest,
     current_user: dict = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
+    request: Request = None
 ):
     """
     Sell biome shares for BDT.
@@ -225,6 +267,8 @@ async def sell_shares(
         )
 
     try:
+        await _enforce_biome_trade_rate_limit(db, request, current_user)
+
         transaction = await biome_trading_service.sell_shares(
             db=db,
             user_id=user_uuid,

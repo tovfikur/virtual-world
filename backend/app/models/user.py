@@ -221,18 +221,12 @@ class User(BaseModel):
             return False
         return datetime.utcnow() < self.locked_until
 
-    def add_failed_login(self) -> None:
-        """
-        Increment failed login counter and lock account if threshold exceeded.
-        Account is locked for 15 minutes after 5 failed attempts.
-        """
-        from app.config import settings
+    def add_failed_login(self, max_attempts: int, lockout_minutes: int) -> None:
+        """Increment failed login counter and lock account using provided thresholds."""
         self.failed_login_attempts += 1
 
-        if self.failed_login_attempts >= settings.max_login_attempts:
-            self.locked_until = datetime.utcnow() + timedelta(
-                minutes=settings.lockout_duration_minutes
-            )
+        if self.failed_login_attempts >= max_attempts:
+            self.locked_until = datetime.utcnow() + timedelta(minutes=lockout_minutes)
 
     def reset_login_attempts(self) -> None:
         """

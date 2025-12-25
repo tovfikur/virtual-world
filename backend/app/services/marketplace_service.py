@@ -88,13 +88,37 @@ class MarketplaceService:
         if not parcel_service.validate_connectivity(land_coords):
             raise ValueError("Lands must be connected (edge-adjacent, no diagonal-only connections)")
 
+        # Load admin config for listing constraints
+        cfg_res = await db.execute(select(AdminConfig).limit(1))
+        config = cfg_res.scalar_one_or_none()
+
+        max_lands_per_listing = config.max_lands_per_listing if config else 50
+        listing_cooldown_minutes = config.listing_cooldown_minutes if config else 5
+        max_listing_duration_days = config.max_listing_duration_days if config else 30
+        min_reserve_price_percent = config.min_reserve_price_percent if config else 50
+
+        if len(lands) > max_lands_per_listing:
+            raise ValueError(f"Listings are limited to {max_lands_per_listing} lands")
+
+        # Enforce seller cooldown between listings
+        if listing_cooldown_minutes:
+            latest_listing = await db.scalar(
+                select(Listing.created_at)
+                .where(Listing.seller_id == seller_id)
+                .order_by(Listing.created_at.desc())
+            )
+            if latest_listing:
+                elapsed = datetime.utcnow() - latest_listing
+                if elapsed.total_seconds() < listing_cooldown_minutes * 60:
+                    remaining = int(listing_cooldown_minutes * 60 - elapsed.total_seconds())
+                    raise ValueError(f"Please wait {remaining} seconds before creating another listing")
+
         # Validate auction duration against admin-configured limits
         if listing_type in [ListingType.AUCTION, ListingType.AUCTION_WITH_BUYNOW]:
-            # Fetch AdminConfig
-            cfg_res = await db.execute(select(AdminConfig).limit(1))
-            config = cfg_res.scalar_one_or_none()
             min_hours = int(config.auction_min_duration_hours) if config else 1
             max_hours = int(config.auction_max_duration_hours) if config else 168
+            if max_listing_duration_days:
+                max_hours = min(max_hours, int(max_listing_duration_days * 24))
 
             if duration_hours is None:
                 duration_hours = max(min_hours, 24)  # default to 24h within bounds
@@ -107,6 +131,14 @@ class MarketplaceService:
         ends_at = None
         if listing_type in [ListingType.AUCTION, ListingType.AUCTION_WITH_BUYNOW]:
             ends_at = datetime.utcnow() + timedelta(hours=duration_hours)
+
+            # Reserve price enforcement relative to starting price
+            if reserve_price_bdt is not None and min_reserve_price_percent:
+                min_reserve = int((starting_price_bdt or 0) * (min_reserve_price_percent / 100))
+                if reserve_price_bdt < min_reserve:
+                    raise ValueError(
+                        f"Reserve price must be at least {min_reserve_price_percent}% of starting price ({min_reserve} BDT)"
+                    )
 
         # Create listing
         listing = Listing(
@@ -183,8 +215,12 @@ class MarketplaceService:
         if listing.type == ListingType.FIXED_PRICE:
             raise ValueError("Cannot bid on fixed price listings")
 
+        # Fetch AdminConfig for bid increment and limits
+        cfg_res = await db.execute(select(AdminConfig).limit(1))
+        config = cfg_res.scalar_one_or_none()
+
         # Check if auction has ended
-        if listing.ends_at and listing.ends_at < datetime.utcnow():
+        if listing.auction_end_time and listing.auction_end_time < datetime.utcnow():
             raise ValueError("Auction has ended")
 
         # Cannot bid on own listing
@@ -192,9 +228,6 @@ class MarketplaceService:
             raise ValueError("Cannot bid on your own listing")
 
         # Validate bid amount
-        # Fetch AdminConfig for minimum bid increment
-        cfg_res = await db.execute(select(AdminConfig).limit(1))
-        config = cfg_res.scalar_one_or_none()
         increment = int(config.auction_bid_increment) if config and config.auction_bid_increment is not None else 1
         current_price = listing.current_price_bdt if listing.current_price_bdt is not None else (listing.price_bdt or 0)
         min_bid = current_price + increment
@@ -228,13 +261,18 @@ class MarketplaceService:
         listing.highest_bidder_id = bidder_id
 
         # Auto-extend if bid placed near end time
-        if listing.ends_at and listing.auto_extend_minutes:
-            time_remaining = (listing.ends_at - datetime.utcnow()).total_seconds() / 60
-            if time_remaining < listing.auto_extend_minutes:
-                listing.ends_at = datetime.utcnow() + timedelta(
-                    minutes=listing.auto_extend_minutes
+        if listing.auction_end_time:
+            time_remaining = (listing.auction_end_time - datetime.utcnow()).total_seconds() / 60
+
+            anti_sniping_enabled = bool(config.anti_sniping_enabled) if config else False
+            extend_minutes = int(config.anti_sniping_extend_minutes) if config and config.anti_sniping_extend_minutes is not None else listing.auto_extend_minutes
+            threshold_minutes = int(config.anti_sniping_threshold_minutes) if config and config.anti_sniping_threshold_minutes is not None else listing.auto_extend_minutes
+
+            if anti_sniping_enabled and time_remaining < threshold_minutes:
+                listing.auction_end_time = datetime.utcnow() + timedelta(minutes=extend_minutes)
+                logger.info(
+                    f"Auction anti-sniping extend: {listing_id} (+{extend_minutes}m, threshold {threshold_minutes}m)"
                 )
-                logger.info(f"Auction auto-extended: {listing_id}")
 
         await db.commit()
         await db.refresh(bid)

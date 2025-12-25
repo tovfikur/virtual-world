@@ -34,6 +34,11 @@ async def create_default_admin():
     # Create async engine
     engine = create_async_engine(str(settings.database_url), echo=False)
 
+    # Create all tables from models (SQLAlchemy-based schema initialization)
+    from app.db.base import Base
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
+
     # Create async session
     async_session = sessionmaker(
         engine, class_=AsyncSession, expire_on_commit=False

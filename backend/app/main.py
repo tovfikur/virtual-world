@@ -11,6 +11,9 @@ from fastapi.exceptions import RequestValidationError
 import logging
 import time
 from contextlib import asynccontextmanager
+from datetime import datetime, timedelta
+
+from sqlalchemy import select
 
 from app.config import settings
 from app.db.session import init_db, close_db
@@ -18,6 +21,9 @@ from app.services.cache_service import cache_service
 from app.services.biome_market_worker import biome_market_worker
 from app.services.biome_market_service import biome_market_service
 from app.db.session import AsyncSessionLocal
+from app.models.admin_config import AdminConfig
+from app.services.ip_access_service import ip_access_service
+from app.services.rate_limit_service import rate_limit_service
 
 # Setup logging (only if not already configured)
 if not logging.getLogger().handlers:
@@ -26,6 +32,35 @@ if not logging.getLogger().handlers:
         format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
     )
 logger = logging.getLogger(__name__)
+
+
+_rate_limit_cache = {"expires": datetime.min, "value": None}
+
+
+async def _get_api_rate_limit_per_minute() -> int:
+    """Fetch api_requests_per_minute from AdminConfig with short-lived caching."""
+    now = datetime.utcnow()
+    cached_value = _rate_limit_cache["value"]
+    if cached_value is not None and now < _rate_limit_cache["expires"]:
+        return cached_value
+
+    async with AsyncSessionLocal() as db:
+        result = await db.execute(select(AdminConfig))
+        config = result.scalar_one_or_none()
+        limit = getattr(config, "api_requests_per_minute", None) if config else None
+
+    _rate_limit_cache["value"] = limit
+    _rate_limit_cache["expires"] = now + timedelta(seconds=30)
+    return limit
+
+
+def _rate_limit_identifier(request: Request) -> str:
+    """Identify requester using header override, else client IP."""
+    return (
+        request.headers.get("X-User-Id")
+        or request.headers.get("X-User-ID")
+        or (request.client.host if request.client else "anonymous")
+    )
     
 
 @asynccontextmanager
@@ -119,6 +154,65 @@ app.add_middleware(
 #     GZIPMiddleware,
 #     minimum_size=1000
 # )
+
+
+# IP access control middleware (stub with cache-backed checks)
+@app.middleware("http")
+async def ip_access_middleware(request: Request, call_next):
+    client_ip = request.client.host if request.client else "unknown"
+
+    try:
+        if await ip_access_service.is_blocked(client_ip):
+            return JSONResponse(
+                status_code=status.HTTP_403_FORBIDDEN,
+                content={"detail": "Access from this IP is blocked"}
+            )
+    except Exception as exc:
+        logger.error(f"IP access middleware error for {client_ip}: {exc}")
+
+    return await call_next(request)
+
+
+@app.middleware("http")
+async def api_rate_limit_middleware(request: Request, call_next):
+    """Global API rate limiting using per-minute bucket."""
+    path = request.url.path
+    if path in {"/health", "/api/health", "/api/openapi.json"} or path.startswith("/api/docs"):
+        return await call_next(request)
+
+    limit = await _get_api_rate_limit_per_minute()
+    if limit is None or limit <= 0:
+        return await call_next(request)
+
+    identifier = _rate_limit_identifier(request)
+    result = await rate_limit_service.check(
+        bucket="api_requests_per_minute",
+        identifier=identifier,
+        limit=limit,
+        window_seconds=60,
+    )
+
+    if result and not result.allowed:
+        retry_after = max(result.reset_epoch - int(time.time()), 0)
+        return JSONResponse(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            content={"detail": "Rate limit exceeded"},
+            headers={
+                "Retry-After": str(retry_after),
+                "X-RateLimit-Limit": str(result.limit),
+                "X-RateLimit-Remaining": str(result.remaining),
+                "X-RateLimit-Reset": str(result.reset_epoch),
+            },
+        )
+
+    response = await call_next(request)
+
+    if result:
+        response.headers["X-RateLimit-Limit"] = str(result.limit)
+        response.headers["X-RateLimit-Remaining"] = str(result.remaining)
+        response.headers["X-RateLimit-Reset"] = str(result.reset_epoch)
+
+    return response
 
 
 # Request logging middleware

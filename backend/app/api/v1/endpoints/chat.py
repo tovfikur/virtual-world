@@ -3,7 +3,7 @@ Chat REST Endpoints
 HTTP endpoints for chat history and management
 """
 
-from fastapi import APIRouter, Depends, HTTPException, status, Query
+from fastapi import APIRouter, Depends, HTTPException, status, Query, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from typing import Optional, List
@@ -19,9 +19,49 @@ from app.models.land import Land
 from app.dependencies import get_current_user
 from app.services.chat_service import chat_service
 from app.services.websocket_service import connection_manager
+from app.models.admin_config import AdminConfig
+from app.services.rate_limit_service import rate_limit_service
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/chat", tags=["chat"])
+
+
+def _rate_limit_identifier(request: Request, current_user: Optional[dict]) -> str:
+    if current_user and current_user.get("sub"):
+        return str(current_user["sub"])
+    if request.client:
+        return request.client.host
+    return "anonymous"
+
+
+async def _enforce_chat_rate_limit(
+    db: AsyncSession,
+    request: Request,
+    current_user: Optional[dict]
+):
+    cfg_res = await db.execute(select(AdminConfig).limit(1))
+    config = cfg_res.scalar_one_or_none()
+    limit = config.chat_messages_per_minute if config else None
+    if not limit:
+        return
+
+    identifier = _rate_limit_identifier(request, current_user)
+    result = await rate_limit_service.check(
+        bucket="chat",
+        identifier=identifier,
+        limit=limit,
+        window_seconds=60
+    )
+    if result and not result.allowed:
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail="Chat rate limit exceeded",
+            headers={
+                "X-RateLimit-Limit": str(result.limit),
+                "X-RateLimit-Remaining": str(result.remaining),
+                "X-RateLimit-Reset": str(result.reset_epoch),
+            },
+        )
 
 
 @router.get("/sessions")
@@ -136,7 +176,8 @@ async def send_chat_message(
     session_id: str,
     content: str = Query(..., min_length=1, max_length=2000),
     current_user: dict = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
+    request: Request = None
 ):
     """
     Send a message to a chat session (REST endpoint).
@@ -154,6 +195,8 @@ async def send_chat_message(
         )
 
     try:
+        await _enforce_chat_rate_limit(db, request, current_user)
+
         message = await chat_service.send_message(
             db=db,
             session_id=session_uuid,

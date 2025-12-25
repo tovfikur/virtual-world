@@ -5,7 +5,9 @@ Handle payment gateway webhooks and callbacks
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Header, status
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select, func
 from typing import Optional
+from datetime import datetime, timedelta
 import json
 import logging
 
@@ -13,6 +15,8 @@ from app.db.session import get_db
 from app.services.payment_service import payment_service, PaymentGateway
 from app.services.cache_service import cache_service
 from app.dependencies import get_current_user
+from app.models.admin_config import AdminConfig
+from app.models.transaction import Transaction, TransactionType, TransactionStatus
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/payments", tags=["payments"])
@@ -335,7 +339,8 @@ async def initiate_payment(
     gateway: str,
     amount_bdt: int,
     current_user: dict = Depends(get_current_user),
-    idempotency_key: Optional[str] = Header(None, alias="X-Idempotency-Key")
+    idempotency_key: Optional[str] = Header(None, alias="X-Idempotency-Key"),
+    db: AsyncSession = Depends(get_db)
 ):
     """
     Initiate payment with a gateway
@@ -349,16 +354,99 @@ async def initiate_payment(
             detail="X-Idempotency-Key header is required"
         )
 
-    if amount_bdt < 100:
+    # Load payment configuration
+    cfg_res = await db.execute(select(AdminConfig).limit(1))
+    config = cfg_res.scalar_one_or_none()
+    if not config:
+        raise HTTPException(status_code=503, detail="Payment configuration missing")
+
+    gateway_lower = gateway.lower()
+    gateway_map = {
+        PaymentGateway.BKASH: (config.enable_bkash, config.bkash_mode),
+        PaymentGateway.NAGAD: (config.enable_nagad, config.nagad_mode),
+        PaymentGateway.ROCKET: (config.enable_rocket, config.rocket_mode),
+        PaymentGateway.SSLCOMMERZ: (config.enable_sslcommerz, config.sslcommerz_mode),
+    }
+
+    # Resolve gateway enum
+    if gateway_lower == PaymentGateway.BKASH:
+        gateway_enum = PaymentGateway.BKASH
+    elif gateway_lower == PaymentGateway.NAGAD:
+        gateway_enum = PaymentGateway.NAGAD
+    elif gateway_lower == PaymentGateway.ROCKET:
+        gateway_enum = PaymentGateway.ROCKET
+    elif gateway_lower == PaymentGateway.SSLCOMMERZ:
+        gateway_enum = PaymentGateway.SSLCOMMERZ
+    else:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Minimum top-up amount is 100 BDT"
+            detail=f"Unsupported gateway: {gateway}"
         )
 
-    if amount_bdt > 100000:
+    enabled, mode = gateway_map[gateway_enum]
+    if not enabled:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Maximum top-up amount is 100,000 BDT"
+            detail=f"{gateway_enum.value} payments are disabled"
+        )
+    if mode not in {"test", "live"}:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Gateway mode must be configured as 'test' or 'live'"
+        )
+
+    # Limits
+    min_amount = config.topup_min_bdt or 0
+    max_amount = config.topup_max_bdt or 0
+    daily_limit = config.topup_daily_limit_bdt or 0
+    monthly_limit = config.topup_monthly_limit_bdt or 0
+
+    if amount_bdt < min_amount:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Minimum top-up amount is {min_amount} BDT"
+        )
+
+    if max_amount and amount_bdt > max_amount:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Maximum top-up amount is {max_amount} BDT"
+        )
+
+    user_id = current_user["sub"]
+
+    # Enforce daily/monthly aggregates
+    today_start = datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
+    month_window_start = datetime.utcnow() - timedelta(days=30)
+
+    daily_sum = await db.scalar(
+        select(func.coalesce(func.sum(Transaction.amount_bdt), 0)).where(
+            Transaction.buyer_id == user_id,
+            Transaction.transaction_type == TransactionType.TOPUP,
+            Transaction.status == TransactionStatus.COMPLETED,
+            Transaction.created_at >= today_start,
+        )
+    )
+
+    monthly_sum = await db.scalar(
+        select(func.coalesce(func.sum(Transaction.amount_bdt), 0)).where(
+            Transaction.buyer_id == user_id,
+            Transaction.transaction_type == TransactionType.TOPUP,
+            Transaction.status == TransactionStatus.COMPLETED,
+            Transaction.created_at >= month_window_start,
+        )
+    )
+
+    if daily_limit and (daily_sum + amount_bdt) > daily_limit:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Daily top-up limit exceeded (limit {daily_limit} BDT)"
+        )
+
+    if monthly_limit and (monthly_sum + amount_bdt) > monthly_limit:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Monthly top-up limit exceeded (limit {monthly_limit} BDT)"
         )
 
     # Check idempotency cache
@@ -368,34 +456,26 @@ async def initiate_payment(
         logger.info(f"Returning cached payment response for key: {idempotency_key}")
         return json.loads(cached)
 
-    user_id = current_user["sub"]
     reference_id = f"{user_id}_{idempotency_key}"
 
     # Initiate payment based on gateway
-    gateway_lower = gateway.lower()
-
-    if gateway_lower == PaymentGateway.BKASH:
+    if gateway_enum == PaymentGateway.BKASH:
         result = await payment_service.initiate_bkash_payment(
             user_id, amount_bdt, reference_id
         )
-    elif gateway_lower == PaymentGateway.NAGAD:
+    elif gateway_enum == PaymentGateway.NAGAD:
         result = await payment_service.initiate_nagad_payment(
             user_id, amount_bdt, reference_id
         )
-    elif gateway_lower == PaymentGateway.ROCKET:
+    elif gateway_enum == PaymentGateway.ROCKET:
         result = await payment_service.initiate_rocket_payment(
             user_id, amount_bdt, reference_id
         )
-    elif gateway_lower == PaymentGateway.SSLCOMMERZ:
+    elif gateway_enum == PaymentGateway.SSLCOMMERZ:
         user_email = current_user.get("email", "user@example.com")
         user_phone = current_user.get("phone", "01700000000")
         result = await payment_service.initiate_sslcommerz_payment(
             user_id, amount_bdt, reference_id, user_email, user_phone
-        )
-    else:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Unsupported gateway: {gateway}"
         )
 
     if not result.get("success"):

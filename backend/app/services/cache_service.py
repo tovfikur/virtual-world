@@ -161,6 +161,37 @@ class CacheService:
             logger.error(f"Cache delete error for key '{key}': {e}")
             return False
 
+    async def delete_by_prefix(self, prefix: str, batch_size: int = 500) -> int:
+        """
+        Delete all keys matching a prefix.
+
+        Args:
+            prefix: Prefix to match (without wildcard)
+            batch_size: Number of keys to scan per iteration
+
+        Returns:
+            int: Number of keys deleted
+        """
+        if not self.client:
+            return 0
+
+        pattern = f"{prefix}*"
+        cursor = "0"
+        deleted = 0
+
+        try:
+            while True:
+                cursor, keys = await self.client.scan(cursor=cursor, match=pattern, count=batch_size)
+                if keys:
+                    deleted += await self.client.delete(*keys)
+                if cursor == 0 or cursor == "0":
+                    break
+            logger.info(f"Cache delete_by_prefix prefix={prefix} deleted={deleted}")
+            return deleted
+        except Exception as e:
+            logger.error(f"Cache delete_by_prefix error for prefix '{prefix}': {e}")
+            return deleted
+
     async def exists(self, key: str) -> bool:
         """
         Check if key exists in cache.
@@ -429,6 +460,24 @@ class CacheService:
             "hit_rate_percent": round(hit_rate, 2),
             "memory": memory
         }
+
+    async def flush_all(self) -> bool:
+        """
+        Flush the entire Redis database.
+
+        Returns:
+            bool: True if successful
+        """
+        if not self.client:
+            return False
+
+        try:
+            await self.client.flushdb()
+            logger.warning("Cache flushdb executed by admin")
+            return True
+        except Exception as e:
+            logger.error(f"Cache flush_all error: {e}")
+            return False
 
 
 # Global cache service instance

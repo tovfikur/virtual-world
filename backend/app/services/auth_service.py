@@ -47,7 +47,8 @@ class AuthService:
         user_id: str,
         email: str,
         role: str,
-        additional_claims: Optional[Dict] = None
+        additional_claims: Optional[Dict] = None,
+        expires_minutes: Optional[int] = None
     ) -> str:
         """
         Create short-lived JWT access token.
@@ -71,7 +72,8 @@ class AuthService:
             ```
         """
         now = datetime.utcnow()
-        expires = now + timedelta(minutes=self.access_token_expire_minutes)
+        expire_minutes = expires_minutes or self.access_token_expire_minutes
+        expires = now + timedelta(minutes=expire_minutes)
 
         payload = {
             "sub": user_id,
