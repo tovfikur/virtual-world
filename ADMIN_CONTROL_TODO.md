@@ -2,7 +2,7 @@
 
 Statuses: ✅ Done · 🔄 In Progress · ⏳ Not Started
 
-## Completed (58)
+## Completed (60)
 
 - ✅ Biome trade fee configuration (AdminConfig + API + services)
 - ✅ Market volatility control (max price move per cycle)
@@ -62,17 +62,17 @@ Statuses: ✅ Done · 🔄 In Progress · ⏳ Not Started
 - ✅ Query performance telemetry (key table timings)
 - ✅ Fraud detection thresholds (wash trading, related accounts, price deviation auto-reject)
 - ✅ Biome market initialization (initial cash, shares, starting price, update frequency, algorithm version)
+- ✅ Attention-weight algorithm controls (version + 5 parameter fields)
+- ✅ Market manipulation detection thresholds (price spikes, order clustering, pump-and-dump)
 
 ## In Progress (0)
 
 - None right now.
 
-## Not Started / Pending (~68)
+## Not Started / Pending (~67)
 
 ### Biome Trading & Market Stability
 
-- ⏳ Attention-weight algorithm controls
-- ⏳ Market manipulation detection thresholds
 - ⏳ Emergency market reset
 
 ### World Generation
