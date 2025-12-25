@@ -15,13 +15,10 @@ from app.models.biome_market import BiomeMarket
 from app.models.biome_price_history import BiomePriceHistory
 from app.models.attention_score import AttentionScore
 from app.models.land import Biome
+from app.models.admin_config import AdminConfig
 from app.services.attention_tracking_service import attention_tracking_service
 
 logger = logging.getLogger(__name__)
-
-# Market safeguards
-MAX_PRICE_MOVE_PER_CYCLE = 0.05  # 5% per redistribution cycle
-MAX_SINGLE_TRANSACTION_PERCENT = 0.10  # 10% of market cap per transaction
 
 
 class BiomeMarketService:
@@ -132,13 +129,22 @@ class BiomeMarketService:
             logger.warning("No markets found for redistribution")
             return {"redistributed": False, "reason": "no_markets"}
 
+        # Get admin config for redistribution settings
+        config_result = await db.execute(select(AdminConfig))
+        config = config_result.scalar_one()
+
+        # Check if prices are frozen
+        if config.biome_prices_frozen:
+            logger.info("Biome prices are frozen, skipping redistribution")
+            return {"redistributed": False, "reason": "prices_frozen"}
+
         # Calculate total market cash (TMC)
         total_market_cash = sum(market.market_cash_bdt for market in markets)
 
-        # Calculate redistribution pool (25% of TMC)
-        pool = total_market_cash // 4
+        # Calculate redistribution pool using config percentage
+        pool = int(total_market_cash * (config.redistribution_pool_percent / 100))
 
-        logger.info(f"Starting redistribution - TMC: {total_market_cash}, Pool: {pool}")
+        logger.info(f"Starting redistribution - TMC: {total_market_cash}, Pool: {pool} ({config.redistribution_pool_percent}%)")
 
         # Get total attention per biome
         biome_attention = {}
@@ -266,9 +272,13 @@ class BiomeMarketService:
         Returns:
             Dict with validation result and warnings
         """
+        # Get admin config for transaction limits
+        config_result = await db.execute(select(AdminConfig))
+        config = config_result.scalar_one()
+
         market = await BiomeMarketService.get_market(db, biome)
         market_cap = market.market_cash_bdt
-        max_transaction = int(market_cap * MAX_SINGLE_TRANSACTION_PERCENT)
+        max_transaction = int(market_cap * (config.max_transaction_percent / 100))
         
         result = {
             "valid": True,
@@ -317,9 +327,13 @@ class BiomeMarketService:
         Returns:
             Dict with validation result and warnings
         """
+        # Get admin config for price movement limits
+        config_result = await db.execute(select(AdminConfig))
+        config = config_result.scalar_one()
+
         price_change_ratio = (new_price - old_price) / old_price if old_price > 0 else 0
         price_change_percent = abs(price_change_ratio) * 100
-        max_move_percent = MAX_PRICE_MOVE_PER_CYCLE * 100
+        max_move_percent = config.max_price_move_percent
         
         result = {
             "valid": True,
@@ -334,7 +348,7 @@ class BiomeMarketService:
         if price_change_percent > max_move_percent:
             result["valid"] = False
             result["warnings"].append(
-                f"Price movement ({price_change_percent:.2f}%) exceeds 5% per-cycle limit"
+                f"Price movement ({price_change_percent:.2f}%) exceeds {max_move_percent}% per-cycle limit"
             )
             logger.warning(
                 f"Excessive price movement for {biome.value}: "
