@@ -15,12 +15,10 @@ from app.models.biome_holding import BiomeHolding
 from app.models.transaction import Transaction, TransactionType, TransactionStatus
 from app.models.user import User
 from app.models.land import Biome
+from app.models.admin_config import AdminConfig
 from app.services.biome_market_service import biome_market_service
 
 logger = logging.getLogger(__name__)
-
-# Platform fee for biome trading (2%)
-BIOME_TRADE_FEE_PERCENT = 2.0
 
 
 class BiomeTradingService:
@@ -61,10 +59,18 @@ class BiomeTradingService:
         if user.balance_bdt < amount_bdt:
             raise ValueError(f"Insufficient balance: {user.balance_bdt} < {amount_bdt}")
 
+        # Get admin config for fee percentage
+        config_result = await db.execute(select(AdminConfig))
+        config = config_result.scalar_one()
+
         # Validate transaction size against market safeguards
         validation = await biome_market_service.validate_transaction_size(db, biome, amount_bdt)
         if not validation["valid"]:
             raise ValueError(f"Transaction size exceeds limit: {validation['warnings'][0]}")
+
+        # Check if biome trading is paused
+        if config.biome_trading_paused:
+            raise ValueError("Biome trading is currently paused")
 
         # Get market
         market = await biome_market_service.get_market(db, biome)
@@ -72,8 +78,8 @@ class BiomeTradingService:
         # Calculate shares to buy
         shares = amount_bdt / market.share_price_bdt
 
-        # Calculate platform fee (2%)
-        platform_fee = int(amount_bdt * (BIOME_TRADE_FEE_PERCENT / 100))
+        # Calculate platform fee using config
+        platform_fee = int(amount_bdt * (config.biome_trade_fee_percent / 100))
         total_deduction = amount_bdt + platform_fee
 
         # Check balance including fee
@@ -168,14 +174,22 @@ class BiomeTradingService:
         if not holding or holding.shares < shares:
             raise ValueError(f"Insufficient shares: {holding.shares if holding else 0} < {shares}")
 
+        # Get admin config for fee percentage
+        config_result = await db.execute(select(AdminConfig))
+        config = config_result.scalar_one()
+
+        # Check if biome trading is paused
+        if config.biome_trading_paused:
+            raise ValueError("Biome trading is currently paused")
+
         # Get market
         market = await biome_market_service.get_market(db, biome)
 
         # Calculate sale amount
         total_amount = int(shares * market.share_price_bdt)
 
-        # Calculate platform fee on proceeds (2%)
-        platform_fee = int(total_amount * (BIOME_TRADE_FEE_PERCENT / 100))
+        # Calculate platform fee on proceeds using config
+        platform_fee = int(total_amount * (config.biome_trade_fee_percent / 100))
         net_proceeds = total_amount - platform_fee
 
         # Calculate realized gain

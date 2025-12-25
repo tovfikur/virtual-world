@@ -862,6 +862,7 @@ async def export_transactions(
 
 class EconomicSettingsUpdate(BaseModel):
     transaction_fee_percent: Optional[float] = None
+    biome_trade_fee_percent: Optional[float] = None
     base_land_price_bdt: Optional[int] = None
     forest_multiplier: Optional[float] = None
     grassland_multiplier: Optional[float] = None
@@ -871,6 +872,12 @@ class EconomicSettingsUpdate(BaseModel):
     max_land_price_bdt: Optional[int] = None
     min_land_price_bdt: Optional[int] = None
     enable_land_trading: Optional[bool] = None
+    # Biome Market Controls
+    max_price_move_percent: Optional[float] = None
+    max_transaction_percent: Optional[float] = None
+    redistribution_pool_percent: Optional[float] = None
+    biome_trading_paused: Optional[bool] = None
+    biome_prices_frozen: Optional[bool] = None
 
 
 @router.get("/config/economy")
@@ -888,6 +895,7 @@ async def get_economic_settings(
 
         return {
             "transaction_fee_percent": config.transaction_fee_percent,
+            "biome_trade_fee_percent": config.biome_trade_fee_percent,
             "base_land_price_bdt": config.base_land_price_bdt,
             "biome_multipliers": {
                 "forest": config.forest_multiplier,
@@ -898,7 +906,14 @@ async def get_economic_settings(
             },
             "max_land_price_bdt": config.max_land_price_bdt,
             "min_land_price_bdt": config.min_land_price_bdt,
-            "enable_land_trading": config.enable_land_trading
+            "enable_land_trading": config.enable_land_trading,
+            "biome_market_controls": {
+                "max_price_move_percent": config.max_price_move_percent,
+                "max_transaction_percent": config.max_transaction_percent,
+                "redistribution_pool_percent": config.redistribution_pool_percent,
+                "biome_trading_paused": config.biome_trading_paused,
+                "biome_prices_frozen": config.biome_prices_frozen
+            }
         }
 
     except HTTPException:
@@ -929,6 +944,9 @@ async def update_economic_settings(
         if settings.transaction_fee_percent is not None:
             config.transaction_fee_percent = settings.transaction_fee_percent
 
+        if settings.biome_trade_fee_percent is not None:
+            config.biome_trade_fee_percent = settings.biome_trade_fee_percent
+
         if settings.base_land_price_bdt is not None:
             config.base_land_price_bdt = settings.base_land_price_bdt
 
@@ -955,6 +973,22 @@ async def update_economic_settings(
 
         if settings.enable_land_trading is not None:
             config.enable_land_trading = settings.enable_land_trading
+
+        # Biome Market Controls
+        if settings.max_price_move_percent is not None:
+            config.max_price_move_percent = settings.max_price_move_percent
+
+        if settings.max_transaction_percent is not None:
+            config.max_transaction_percent = settings.max_transaction_percent
+
+        if settings.redistribution_pool_percent is not None:
+            config.redistribution_pool_percent = settings.redistribution_pool_percent
+
+        if settings.biome_trading_paused is not None:
+            config.biome_trading_paused = settings.biome_trading_paused
+
+        if settings.biome_prices_frozen is not None:
+            config.biome_prices_frozen = settings.biome_prices_frozen
 
         config.updated_at = datetime.utcnow()
         await db.commit()

@@ -160,6 +160,44 @@ class AdminConfig(BaseModel):
         default=5.0,
         nullable=False
     )
+    biome_trade_fee_percent = Column(
+        Float,
+        default=2.0,
+        nullable=False,
+        comment="Platform fee for biome share trading (separate from marketplace)"
+    )
+
+    # Biome Market Controls
+    max_price_move_percent = Column(
+        Float,
+        default=5.0,
+        nullable=False,
+        comment="Maximum price movement per redistribution cycle"
+    )
+    max_transaction_percent = Column(
+        Float,
+        default=10.0,
+        nullable=False,
+        comment="Maximum single transaction as % of market cap"
+    )
+    redistribution_pool_percent = Column(
+        Float,
+        default=25.0,
+        nullable=False,
+        comment="Percentage of total market cash to redistribute"
+    )
+    biome_trading_paused = Column(
+        Boolean,
+        default=False,
+        nullable=False,
+        comment="Emergency pause for all biome trading"
+    )
+    biome_prices_frozen = Column(
+        Boolean,
+        default=False,
+        nullable=False,
+        comment="Freeze biome prices (no redistribution)"
+    )
 
     # Feature Toggles
     enable_land_trading = Column(
@@ -324,5 +362,13 @@ class AdminConfig(BaseModel):
                 "snow": self.snow_multiplier
             },
             "transaction_fee_percent": self.transaction_fee_percent,
+            "biome_trade_fee_percent": self.biome_trade_fee_percent,
+            "biome_market_controls": {
+                "max_price_move_percent": self.max_price_move_percent,
+                "max_transaction_percent": self.max_transaction_percent,
+                "redistribution_pool_percent": self.redistribution_pool_percent,
+                "biome_trading_paused": self.biome_trading_paused,
+                "biome_prices_frozen": self.biome_prices_frozen
+            },
             "updated_at": self.updated_at.isoformat() if self.updated_at else None
         }
