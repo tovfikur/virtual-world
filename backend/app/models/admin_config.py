@@ -324,6 +324,31 @@ class AdminConfig(BaseModel):
         default=10,
         nullable=False
     )
+    # Rate Limiting Controls
+    api_requests_per_minute = Column(
+        Integer,
+        default=120,
+        nullable=False,
+        comment="General API requests per minute per user"
+    )
+    marketplace_actions_per_hour = Column(
+        Integer,
+        default=200,
+        nullable=False,
+        comment="Marketplace actions (create listing/bid/buy) per hour per user"
+    )
+    chat_messages_per_minute = Column(
+        Integer,
+        default=60,
+        nullable=False,
+        comment="Chat messages per minute per user"
+    )
+    biome_trades_per_minute = Column(
+        Integer,
+        default=120,
+        nullable=False,
+        comment="Biome trade operations per minute per user"
+    )
     # Auction Duration Limits
     auction_min_duration_hours = Column(
         Integer,
@@ -506,6 +531,12 @@ class AdminConfig(BaseModel):
             "auction_limits": {
                 "min_duration_hours": self.auction_min_duration_hours,
                 "max_duration_hours": self.auction_max_duration_hours
+            },
+            "rate_limits": {
+                "api_requests_per_minute": self.api_requests_per_minute,
+                "marketplace_actions_per_hour": self.marketplace_actions_per_hour,
+                "chat_messages_per_minute": self.chat_messages_per_minute,
+                "biome_trades_per_minute": self.biome_trades_per_minute
             },
             "updated_at": self.updated_at.isoformat() if self.updated_at else None
         }

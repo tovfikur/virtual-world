@@ -895,6 +895,11 @@ class EconomicSettingsUpdate(BaseModel):
     fee_tier_2_percent: Optional[float] = None
     fee_tier_3_threshold: Optional[int] = None
     fee_tier_3_percent: Optional[float] = None
+    # Rate Limits
+    api_requests_per_minute: Optional[int] = None
+    marketplace_actions_per_hour: Optional[int] = None
+    chat_messages_per_minute: Optional[int] = None
+    biome_trades_per_minute: Optional[int] = None
     # Auction Duration Limits
     auction_min_duration_hours: Optional[int] = None
     auction_max_duration_hours: Optional[int] = None
@@ -1056,6 +1061,16 @@ async def update_economic_settings(
             config.auction_min_duration_hours = settings.auction_min_duration_hours
         if settings.auction_max_duration_hours is not None:
             config.auction_max_duration_hours = settings.auction_max_duration_hours
+
+        # Rate Limits
+        if settings.api_requests_per_minute is not None:
+            config.api_requests_per_minute = settings.api_requests_per_minute
+        if settings.marketplace_actions_per_hour is not None:
+            config.marketplace_actions_per_hour = settings.marketplace_actions_per_hour
+        if settings.chat_messages_per_minute is not None:
+            config.chat_messages_per_minute = settings.chat_messages_per_minute
+        if settings.biome_trades_per_minute is not None:
+            config.biome_trades_per_minute = settings.biome_trades_per_minute
 
 
         config.updated_at = datetime.utcnow()
