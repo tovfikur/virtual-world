@@ -342,6 +342,38 @@ class AdminConfig(BaseModel):
         comment="Attention-weight algorithm version (v1_uniform, v1_volume_weighted, etc)"
     )
 
+    # Attention-Weight Algorithm Parameters
+    attention_weight_recency_decay = Column(
+        Float,
+        default=0.95,
+        nullable=False,
+        comment="Decay factor for recency in attention weight (0-1, higher=less decay)"
+    )
+    attention_weight_volume_factor = Column(
+        Float,
+        default=0.5,
+        nullable=False,
+        comment="Weight factor for transaction volume in attention calculation (0-1)"
+    )
+    attention_weight_momentum_threshold = Column(
+        Float,
+        default=1.05,
+        nullable=False,
+        comment="Price momentum threshold for attention boost (> 1.0 = upward momentum)"
+    )
+    attention_weight_volatility_window_minutes = Column(
+        Integer,
+        default=60,
+        nullable=False,
+        comment="Time window for calculating volatility (minutes)"
+    )
+    attention_weight_update_interval_seconds = Column(
+        Integer,
+        default=30,
+        nullable=False,
+        comment="Frequency of attention weight recalculation (seconds)"
+    )
+
     # Biome Land Base Prices (BDT per land)
     plains_base_price = Column(
         Float,
@@ -1026,6 +1058,14 @@ class AdminConfig(BaseModel):
                 "initial_share_price_bdt": self.biome_initial_share_price_bdt,
                 "price_update_frequency_seconds": self.biome_price_update_frequency_seconds,
                 "attention_weight_algorithm_version": self.attention_weight_algorithm_version,
+            },
+            "attention_weight_algorithm": {
+                "version": self.attention_weight_algorithm_version,
+                "recency_decay": self.attention_weight_recency_decay,
+                "volume_factor": self.attention_weight_volume_factor,
+                "momentum_threshold": self.attention_weight_momentum_threshold,
+                "volatility_window_minutes": self.attention_weight_volatility_window_minutes,
+                "update_interval_seconds": self.attention_weight_update_interval_seconds,
             },
             "biome_land_base_prices": {
                 "plains": self.plains_base_price,

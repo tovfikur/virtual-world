@@ -1428,6 +1428,14 @@ class EconomicSettingsUpdate(BaseModel):
     biome_initial_share_price_bdt: Optional[float] = None
     biome_price_update_frequency_seconds: Optional[int] = None
     attention_weight_algorithm_version: Optional[str] = None
+    
+    # Attention-Weight Algorithm Parameters
+    attention_weight_recency_decay: Optional[float] = None
+    attention_weight_volume_factor: Optional[float] = None
+    attention_weight_momentum_threshold: Optional[float] = None
+    attention_weight_volatility_window_minutes: Optional[int] = None
+    attention_weight_update_interval_seconds: Optional[int] = None
+    
     # Auction Duration Limits
     auction_min_duration_hours: Optional[int] = None
     auction_max_duration_hours: Optional[int] = None
@@ -1686,6 +1694,32 @@ async def update_economic_settings(
             if settings.attention_weight_algorithm_version not in allowed:
                 raise HTTPException(status_code=400, detail=f"attention_weight_algorithm_version must be one of {allowed}")
             config.attention_weight_algorithm_version = settings.attention_weight_algorithm_version
+
+        # Attention-Weight Algorithm Parameters
+        if settings.attention_weight_recency_decay is not None:
+            if settings.attention_weight_recency_decay < 0 or settings.attention_weight_recency_decay > 1:
+                raise HTTPException(status_code=400, detail="attention_weight_recency_decay must be 0-1 (0=maximum decay, 1=no decay)")
+            config.attention_weight_recency_decay = settings.attention_weight_recency_decay
+
+        if settings.attention_weight_volume_factor is not None:
+            if settings.attention_weight_volume_factor < 0 or settings.attention_weight_volume_factor > 1:
+                raise HTTPException(status_code=400, detail="attention_weight_volume_factor must be 0-1")
+            config.attention_weight_volume_factor = settings.attention_weight_volume_factor
+
+        if settings.attention_weight_momentum_threshold is not None:
+            if settings.attention_weight_momentum_threshold < 0.5:
+                raise HTTPException(status_code=400, detail="attention_weight_momentum_threshold must be >= 0.5")
+            config.attention_weight_momentum_threshold = settings.attention_weight_momentum_threshold
+
+        if settings.attention_weight_volatility_window_minutes is not None:
+            if settings.attention_weight_volatility_window_minutes < 1:
+                raise HTTPException(status_code=400, detail="attention_weight_volatility_window_minutes must be >= 1")
+            config.attention_weight_volatility_window_minutes = settings.attention_weight_volatility_window_minutes
+
+        if settings.attention_weight_update_interval_seconds is not None:
+            if settings.attention_weight_update_interval_seconds < 10:
+                raise HTTPException(status_code=400, detail="attention_weight_update_interval_seconds must be >= 10 (10 seconds minimum)")
+            config.attention_weight_update_interval_seconds = settings.attention_weight_update_interval_seconds
 
         config.updated_at = datetime.utcnow()
 
