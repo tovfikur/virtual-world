@@ -316,6 +316,32 @@ class AdminConfig(BaseModel):
         comment="Price multiplier for rare lands (2.0 = 2x base price)"
     )
 
+    # Fraud Enforcement Controls
+    wash_trading_enforcement_enabled = Column(
+        Boolean,
+        default=False,
+        nullable=False,
+        comment="If true, enforce wash trading detection by blocking flagged transactions"
+    )
+    related_account_enforcement_enabled = Column(
+        Boolean,
+        default=False,
+        nullable=False,
+        comment="If true, enforce related account linkage detection by blocking suspicious transfers"
+    )
+    price_deviation_auto_reject_enabled = Column(
+        Boolean,
+        default=True,
+        nullable=False,
+        comment="If true, auto-reject listings/transactions exceeding price deviation threshold"
+    )
+    fraud_temp_suspend_minutes = Column(
+        Integer,
+        default=0,
+        nullable=False,
+        comment="If >0, temporarily suspend users involved in enforced fraud events for N minutes"
+    )
+
     # Platform Fees
     transaction_fee_percent = Column(
         Float,
@@ -1342,6 +1368,12 @@ class AdminConfig(BaseModel):
                 "redistribution_gini_target": self.market_reset_redistribution_gini_target,
                 "require_confirmation": self.market_reset_require_confirmation,
                 "cooldown_minutes": self.market_reset_cooldown_minutes,
+            },
+            "fraud_enforcement": {
+                "wash_trading_enforcement_enabled": self.wash_trading_enforcement_enabled,
+                "related_account_enforcement_enabled": self.related_account_enforcement_enabled,
+                "price_deviation_auto_reject_enabled": self.price_deviation_auto_reject_enabled,
+                "fraud_temp_suspend_minutes": self.fraud_temp_suspend_minutes,
             },
             "land_pricing_formula": {
                 "formula": self.land_pricing_formula,

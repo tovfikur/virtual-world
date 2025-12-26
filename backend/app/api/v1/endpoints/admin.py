@@ -1491,6 +1491,12 @@ class EconomicSettingsUpdate(BaseModel):
     exploration_rare_land_spawn_rate: Optional[float] = None
     exploration_rare_land_bonus_multiplier: Optional[float] = None
 
+    # Fraud Enforcement Controls
+    wash_trading_enforcement_enabled: Optional[bool] = None
+    related_account_enforcement_enabled: Optional[bool] = None
+    price_deviation_auto_reject_enabled: Optional[bool] = None
+    fraud_temp_suspend_minutes: Optional[int] = None
+
 
 class WorldSettingsUpdate(BaseModel):
     world_seed: Optional[int] = None
@@ -1938,6 +1944,21 @@ async def update_economic_settings(
             if settings.exploration_rare_land_bonus_multiplier < 1:
                 raise HTTPException(status_code=400, detail="exploration_rare_land_bonus_multiplier must be >= 1")
             config.exploration_rare_land_bonus_multiplier = settings.exploration_rare_land_bonus_multiplier
+
+        # Fraud Enforcement Controls
+        if settings.wash_trading_enforcement_enabled is not None:
+            config.wash_trading_enforcement_enabled = settings.wash_trading_enforcement_enabled
+
+        if settings.related_account_enforcement_enabled is not None:
+            config.related_account_enforcement_enabled = settings.related_account_enforcement_enabled
+
+        if settings.price_deviation_auto_reject_enabled is not None:
+            config.price_deviation_auto_reject_enabled = settings.price_deviation_auto_reject_enabled
+
+        if settings.fraud_temp_suspend_minutes is not None:
+            if settings.fraud_temp_suspend_minutes < 0:
+                raise HTTPException(status_code=400, detail="fraud_temp_suspend_minutes must be non-negative")
+            config.fraud_temp_suspend_minutes = settings.fraud_temp_suspend_minutes
 
         config.updated_at = datetime.utcnow()
 
