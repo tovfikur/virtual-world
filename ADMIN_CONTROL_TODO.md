@@ -2,7 +2,7 @@
 
 Statuses: ✅ Done · 🔄 In Progress · ⏳ Not Started
 
-## Completed (66)
+## Completed (69)
 
 - ✅ Biome trade fee configuration (AdminConfig + API + services)
 - ✅ Market volatility control (max price move per cycle)
@@ -70,12 +70,15 @@ Statuses: ✅ Done · 🔄 In Progress · ⏳ Not Started
 - ✅ Parcel rules toggles (connectivity, diagonal allowed, min/max size)
 - ✅ Ownership limits (max lands per user/biome, contiguous size, cooldown)
 - ✅ Exploration incentives (first-discover bonus, rare land spawn rate, bonus multipliers)
+- ✅ Wash trading detection enforcement (toggle + optional temp suspend)
+- ✅ Related account linkage detection enforcement (toggle)
+- ✅ Auto-reject transaction rules based on price deviation (toggle)
 
 ## In Progress (0)
 
 - None right now.
 
-## Not Started / Pending (~61)
+## Not Started / Pending (~58)
 
 ### Biome Trading & Market Stability
 
@@ -106,9 +109,7 @@ Statuses: ✅ Done · 🔄 In Progress · ⏳ Not Started
 
 ### Payment & Fraud
 
-- ⏳ Wash trading detection enforcement (flag & monitor)
-- ⏳ Related account linkage detection enforcement
-- ⏳ Auto-reject transaction rules based on price deviation
+// COMPLETED IN THIS PASS
 
 ### Misc Governance
 
