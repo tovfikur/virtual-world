@@ -1484,6 +1484,12 @@ class EconomicSettingsUpdate(BaseModel):
     max_lands_per_biome_per_user: Optional[int] = None
     max_contiguous_lands: Optional[int] = None
     ownership_cooldown_minutes: Optional[int] = None
+    
+    # Exploration Incentives
+    exploration_first_discover_enabled: Optional[bool] = None
+    exploration_first_discover_bonus_bdt: Optional[int] = None
+    exploration_rare_land_spawn_rate: Optional[float] = None
+    exploration_rare_land_bonus_multiplier: Optional[float] = None
 
 
 class WorldSettingsUpdate(BaseModel):
@@ -1913,6 +1919,25 @@ async def update_economic_settings(
             if settings.ownership_cooldown_minutes < 0:
                 raise HTTPException(status_code=400, detail="ownership_cooldown_minutes must be non-negative")
             config.ownership_cooldown_minutes = settings.ownership_cooldown_minutes
+
+        # Exploration Incentives
+        if settings.exploration_first_discover_enabled is not None:
+            config.exploration_first_discover_enabled = settings.exploration_first_discover_enabled
+
+        if settings.exploration_first_discover_bonus_bdt is not None:
+            if settings.exploration_first_discover_bonus_bdt < 0:
+                raise HTTPException(status_code=400, detail="exploration_first_discover_bonus_bdt must be non-negative")
+            config.exploration_first_discover_bonus_bdt = settings.exploration_first_discover_bonus_bdt
+
+        if settings.exploration_rare_land_spawn_rate is not None:
+            if settings.exploration_rare_land_spawn_rate < 0 or settings.exploration_rare_land_spawn_rate > 1:
+                raise HTTPException(status_code=400, detail="exploration_rare_land_spawn_rate must be 0-1 (probability)")
+            config.exploration_rare_land_spawn_rate = settings.exploration_rare_land_spawn_rate
+
+        if settings.exploration_rare_land_bonus_multiplier is not None:
+            if settings.exploration_rare_land_bonus_multiplier < 1:
+                raise HTTPException(status_code=400, detail="exploration_rare_land_bonus_multiplier must be >= 1")
+            config.exploration_rare_land_bonus_multiplier = settings.exploration_rare_land_bonus_multiplier
 
         config.updated_at = datetime.utcnow()
 

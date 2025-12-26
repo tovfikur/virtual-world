@@ -290,6 +290,32 @@ class AdminConfig(BaseModel):
         comment="Cooldown between land purchases (0=disabled)"
     )
 
+    # Exploration Incentives
+    exploration_first_discover_enabled = Column(
+        Boolean,
+        default=True,
+        nullable=False,
+        comment="Enable bonus rewards for first discovery of new chunks"
+    )
+    exploration_first_discover_bonus_bdt = Column(
+        Integer,
+        default=50,
+        nullable=False,
+        comment="BDT reward for first chunk discovery"
+    )
+    exploration_rare_land_spawn_rate = Column(
+        Float,
+        default=0.01,
+        nullable=False,
+        comment="Chance (0-1) for rare/special land to spawn in unexplored chunks"
+    )
+    exploration_rare_land_bonus_multiplier = Column(
+        Float,
+        default=2.0,
+        nullable=False,
+        comment="Price multiplier for rare lands (2.0 = 2x base price)"
+    )
+
     # Platform Fees
     transaction_fee_percent = Column(
         Float,
@@ -1340,6 +1366,12 @@ class AdminConfig(BaseModel):
                 "max_lands_per_biome_per_user": self.max_lands_per_biome_per_user,
                 "max_contiguous_lands": self.max_contiguous_lands,
                 "cooldown_minutes": self.ownership_cooldown_minutes,
+            },
+            "exploration_incentives": {
+                "first_discover_enabled": self.exploration_first_discover_enabled,
+                "first_discover_bonus_bdt": self.exploration_first_discover_bonus_bdt,
+                "rare_land_spawn_rate": self.exploration_rare_land_spawn_rate,
+                "rare_land_bonus_multiplier": self.exploration_rare_land_bonus_multiplier,
             },
             "auth": {
                 "access_token_expire_minutes": self.access_token_expire_minutes,

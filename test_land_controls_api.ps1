@@ -6,8 +6,8 @@ Write-Host "=== Admin Controls API Test: Land Pricing & Mechanics ===" -Foregrou
 # 1. Get admin token
 Write-Host "[1/7] Logging in as admin..." -ForegroundColor Yellow
 $loginResponse = Invoke-RestMethod -Uri "$baseUrl/auth/login" -Method Post -ContentType "application/json" -Body (@{
-    email = "testadmin@test.com"
-    password = "Admin@12345678"
+    email = "admin2@test.com"
+    password = "Admin@123456789"
 } | ConvertTo-Json)
 $token = $loginResponse.access_token
 Write-Host "  Token obtained" -ForegroundColor Green
