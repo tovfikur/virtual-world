@@ -369,8 +369,11 @@ async def root():
 from fastapi.staticfiles import StaticFiles
 from pathlib import Path
 
-uploads_path = Path("backend/uploads")
+# Use absolute path for Docker compatibility
+base_dir = Path(__file__).resolve().parent.parent  # backend/ root
+uploads_path = base_dir / "uploads"
 uploads_path.mkdir(parents=True, exist_ok=True)
+logger.info(f"Static uploads directory: {uploads_path}")
 app.mount("/uploads", StaticFiles(directory=str(uploads_path)), name="uploads")
 
 

@@ -12,8 +12,9 @@ from fastapi import UploadFile
 
 logger = logging.getLogger(__name__)
 
-# File upload configuration
-UPLOAD_DIR = Path("backend/uploads")
+# File upload configuration - use absolute paths for Docker compatibility
+BASE_DIR = Path(__file__).resolve().parent.parent.parent  # backend/ root
+UPLOAD_DIR = BASE_DIR / "uploads"
 AVATAR_DIR = UPLOAD_DIR / "avatars"
 MAX_AVATAR_SIZE = 5 * 1024 * 1024  # 5MB
 ALLOWED_AVATAR_TYPES = {"image/png", "image/jpeg", "image/jpg"}
