@@ -96,6 +96,13 @@ export const usersAPI = {
 
   updateUser: (userId, data) => api.put(`/users/${userId}`, data),
 
+  updateProfile: (userId, data) => api.put(`/users/${userId}/profile`, data),
+
+  uploadAvatar: (userId, formData) =>
+    api.post(`/users/${userId}/avatar`, formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    }),
+
   getBalance: (userId) => api.get(`/users/${userId}/balance`),
 
   initiateTopup: (userId, amountBdt, gateway) =>
@@ -107,6 +114,12 @@ export const usersAPI = {
     api.get(`/users/${userId}/lands`, { params: { page, limit } }),
 
   getUserStats: (userId) => api.get(`/users/${userId}/stats`),
+
+  getTransactions: (userId, page = 1, limit = 20) =>
+    api.get(`/users/${userId}/transactions`, { params: { page, limit } }),
+
+  createTransaction: (userId, data) =>
+    api.post(`/users/${userId}/transactions`, data),
 };
 
 // ============================================

@@ -365,6 +365,15 @@ async def root():
     }
 
 
+# Static files for uploads
+from fastapi.staticfiles import StaticFiles
+from pathlib import Path
+
+uploads_path = Path("backend/uploads")
+uploads_path.mkdir(parents=True, exist_ok=True)
+app.mount("/uploads", StaticFiles(directory=str(uploads_path)), name="uploads")
+
+
 # Import and include API routers
 from app.api.v1.router import api_router
 app.include_router(api_router, prefix=settings.api_prefix)

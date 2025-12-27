@@ -76,6 +76,15 @@ class User(BaseModel):
     # Profile
     avatar_url = Column(String, nullable=True)
     bio = Column(String, nullable=True)
+    is_banned = Column(
+        Boolean,
+        default=False,
+        nullable=False
+    )
+    ban_reason = Column(
+        String,
+        nullable=True
+    )
 
     # Financial
     balance_bdt = Column(
@@ -286,6 +295,8 @@ class User(BaseModel):
             "balance_bdt": self.balance_bdt,
             "avatar_url": self.avatar_url,
             "bio": self.bio,
+            "is_banned": self.is_banned,
+            "ban_reason": self.ban_reason,
             "verified": self.verified,
             "created_at": self.created_at.isoformat() if self.created_at else None,
             "updated_at": self.updated_at.isoformat() if self.updated_at else None

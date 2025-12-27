@@ -3,7 +3,7 @@ User endpoints
 Profile management, balance operations, and user data
 """
 
-from fastapi import APIRouter, Depends, HTTPException, status, Query
+from fastapi import APIRouter, Depends, HTTPException, status, Query, File, UploadFile
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func
 import logging
@@ -362,5 +362,219 @@ async def get_user_stats(
             "transactions_as_buyer": transactions_as_buyer,
             "transactions_as_seller": transactions_as_seller,
             "total_transactions": transactions_as_buyer + transactions_as_seller
+        }
+    }
+
+
+@router.put("/{user_id}/profile", response_model=UserResponse)
+async def update_profile(
+    user_id: str,
+    update_data: dict,
+    current_user: dict = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Update user profile (avatar, bio, etc).
+
+    Users can only update their own profile unless they are admin.
+    Accepts: avatar_url, bio
+    """
+    # Check permission
+    if current_user["sub"] != user_id and current_user.get("role") != UserRole.ADMIN.value:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You can only update your own profile"
+        )
+
+    try:
+        user_uuid = uuid.UUID(user_id)
+    except ValueError:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid user ID format"
+        )
+
+    result = await db.execute(
+        select(User).where(User.user_id == user_uuid)
+    )
+    user = result.scalar_one_or_none()
+
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="User not found"
+        )
+
+    # Only allow updating specific fields
+    allowed_fields = {"avatar_url", "bio"}
+    update_fields = {k: v for k, v in update_data.items() if k in allowed_fields and v is not None}
+
+    for field, value in update_fields.items():
+        setattr(user, field, value)
+
+    await db.commit()
+    await db.refresh(user)
+
+    # Invalidate cache
+    await cache_service.delete(f"user:{user_id}")
+
+    logger.info(f"User profile updated: {user_id}")
+
+    return UserResponse.model_validate(user)
+
+
+@router.post("/{user_id}/avatar")
+async def upload_avatar(
+    user_id: str,
+    file: UploadFile = File(...),
+    current_user: dict = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Upload user avatar image.
+
+    Accepts: PNG, JPEG (max 5MB)
+    Returns: {avatar_url: string, user: UserResponse}
+    """
+    from app.services.file_upload_service import file_upload_service
+
+    # Check permission
+    if current_user["sub"] != user_id and current_user.get("role") != UserRole.ADMIN.value:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You can only update your own avatar"
+        )
+
+    try:
+        user_uuid = uuid.UUID(user_id)
+    except ValueError:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid user ID format"
+        )
+
+    result = await db.execute(
+        select(User).where(User.user_id == user_uuid)
+    )
+    user = result.scalar_one_or_none()
+
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="User not found"
+        )
+
+    try:
+        # Upload avatar
+        avatar_url = await file_upload_service.upload_avatar(file, user_id)
+
+        # Delete old avatar if exists
+        if user.avatar_url:
+            file_upload_service.delete_avatar(user.avatar_url)
+
+        # Update user
+        user.avatar_url = avatar_url
+        await db.commit()
+        await db.refresh(user)
+
+        # Invalidate cache
+        await cache_service.delete(f"user:{user_id}")
+
+        logger.info(f"Avatar uploaded for user {user_id}: {avatar_url}")
+
+        return {"avatar_url": avatar_url, "user": UserResponse.model_validate(user)}
+
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e)
+        )
+    except Exception as e:
+        logger.error(f"Avatar upload failed for {user_id}: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to upload avatar"
+        )
+
+
+@router.get("/{user_id}/transactions")
+async def get_user_transactions(
+    user_id: str,
+    page: int = Query(1, ge=1),
+    limit: int = Query(20, ge=1, le=100),
+    current_user: dict = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Get transaction history for a user.
+
+    Users can view their own transactions.
+    Admins can view any user's transactions.
+
+    Returns: Paginated list of transactions (as buyer and seller)
+    """
+    from app.models.transaction import Transaction
+
+    # Check permission
+    if current_user["sub"] != user_id and current_user.get("role") != UserRole.ADMIN.value:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You can only view your own transactions"
+        )
+
+    try:
+        user_uuid = uuid.UUID(user_id)
+    except ValueError:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid user ID format"
+        )
+
+    # Verify user exists
+    result = await db.execute(
+        select(User).where(User.user_id == user_uuid)
+    )
+    user = result.scalar_one_or_none()
+
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="User not found"
+        )
+
+    # Get transactions where user is buyer OR seller
+    # Combine both queries
+    offset = (page - 1) * limit
+
+    result = await db.execute(
+        select(Transaction)
+        .where(
+            (Transaction.buyer_id == user_uuid) | (Transaction.seller_id == user_uuid)
+        )
+        .order_by(Transaction.created_at.desc())
+        .offset(offset)
+        .limit(limit)
+    )
+    transactions = result.scalars().all()
+
+    # Get total count
+    count_result = await db.execute(
+        select(func.count(Transaction.transaction_id))
+        .where(
+            (Transaction.buyer_id == user_uuid) | (Transaction.seller_id == user_uuid)
+        )
+    )
+    total = count_result.scalar()
+
+    return {
+        "user_id": str(user_uuid),
+        "transactions": [t.to_dict() for t in transactions],
+        "pagination": {
+            "page": page,
+            "limit": limit,
+            "total": total,
+            "pages": (total + limit - 1) // limit,
+            "has_next": page * limit < total,
+            "has_prev": page > 1
         }
     }

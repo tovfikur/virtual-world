@@ -69,6 +69,8 @@ class UserResponse(BaseModel):
     balance_bdt: int
     avatar_url: Optional[str] = None
     bio: Optional[str] = None
+    is_banned: bool = False
+    ban_reason: Optional[str] = None
     verified: bool
     created_at: datetime
     updated_at: datetime
@@ -87,6 +89,8 @@ class UserResponse(BaseModel):
                 "balance_bdt": 50000,
                 "avatar_url": "https://example.com/avatar.jpg",
                 "bio": "Virtual land enthusiast",
+                "is_banned": False,
+                "ban_reason": None,
                 "verified": True,
                 "created_at": "2025-01-15T10:20:30Z",
                 "updated_at": "2025-01-15T10:20:30Z"

@@ -8,6 +8,7 @@ import { useNavigate } from 'react-router-dom';
 import { usersAPI } from '../services/api';
 import useAuthStore from '../stores/authStore';
 import useWorldStore from '../stores/worldStore';
+import UserProfileCard from '../components/UserProfileCard';
 import toast from 'react-hot-toast';
 
 function ProfilePage() {
@@ -196,11 +197,22 @@ function ProfilePage() {
 
   return (
     <div className="min-h-screen bg-gray-900 text-white">
-      {/* Header */}
+      {/* Profile Card */}
       <div className="bg-gray-800 border-b border-gray-700 p-4 md:p-6">
         <div className="max-w-7xl mx-auto">
-          <h1 className="text-2xl md:text-3xl font-bold mb-2">{user.username}</h1>
-          <p className="text-sm md:text-base text-gray-400">{user.email}</p>
+          <UserProfileCard
+            user={user}
+            isOwnProfile={true}
+            isAdmin={user?.role === 'admin'}
+            onUpdate={(updatedUser) => {
+              // Update auth store with new user data
+              console.log('Profile updated:', updatedUser);
+              // Reload profile data to ensure consistency
+              if (user) {
+                loadProfileData();
+              }
+            }}
+          />
         </div>
       </div>
 
