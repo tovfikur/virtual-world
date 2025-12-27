@@ -878,6 +878,24 @@ class AdminConfig(BaseModel):
         nullable=False,
         comment="TTL for chunk cache entries"
     )
+    chunk_cache_invalidation_scheduling_enabled = Column(
+        Boolean,
+        default=False,
+        nullable=False,
+        comment="Enable automatic chunk cache invalidation scheduling"
+    )
+    chunk_cache_invalidation_interval_minutes = Column(
+        Integer,
+        default=60,
+        nullable=False,
+        comment="How often to run cache invalidation (minutes)"
+    )
+    chunk_cache_invalidation_max_age_minutes = Column(
+        Integer,
+        default=1440,
+        nullable=False,
+        comment="Invalidate chunks older than N minutes (0=no age limit)"
+    )
     payment_alert_window_minutes = Column(
         Integer,
         default=60,
@@ -1514,6 +1532,9 @@ class AdminConfig(BaseModel):
             },
             "cache": {
                 "chunk_ttl_seconds": self.chunk_cache_ttl_seconds,
+                "invalidation_scheduling_enabled": self.chunk_cache_invalidation_scheduling_enabled,
+                "invalidation_interval_minutes": self.chunk_cache_invalidation_interval_minutes,
+                "invalidation_max_age_minutes": self.chunk_cache_invalidation_max_age_minutes,
             },
             "updated_at": self.updated_at.isoformat() if self.updated_at else None
         }

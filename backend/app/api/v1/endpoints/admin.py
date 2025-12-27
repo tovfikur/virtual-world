@@ -1518,6 +1518,9 @@ class WorldSettingsUpdate(BaseModel):
 
 class CacheSettingsUpdate(BaseModel):
     chunk_cache_ttl_seconds: Optional[int] = None
+    chunk_cache_invalidation_scheduling_enabled: Optional[bool] = None
+    chunk_cache_invalidation_interval_minutes: Optional[int] = None
+    chunk_cache_invalidation_max_age_minutes: Optional[int] = None
 
 
 @router.get("/config/economy")
@@ -2155,6 +2158,19 @@ async def update_cache_settings(
             raise HTTPException(status_code=400, detail="chunk_cache_ttl_seconds must be positive")
         config.chunk_cache_ttl_seconds = settings.chunk_cache_ttl_seconds
         CACHE_TTLS["chunk"] = settings.chunk_cache_ttl_seconds
+
+    if settings.chunk_cache_invalidation_scheduling_enabled is not None:
+        config.chunk_cache_invalidation_scheduling_enabled = settings.chunk_cache_invalidation_scheduling_enabled
+
+    if settings.chunk_cache_invalidation_interval_minutes is not None:
+        if settings.chunk_cache_invalidation_interval_minutes < 1:
+            raise HTTPException(status_code=400, detail="chunk_cache_invalidation_interval_minutes must be >= 1")
+        config.chunk_cache_invalidation_interval_minutes = settings.chunk_cache_invalidation_interval_minutes
+
+    if settings.chunk_cache_invalidation_max_age_minutes is not None:
+        if settings.chunk_cache_invalidation_max_age_minutes < 0:
+            raise HTTPException(status_code=400, detail="chunk_cache_invalidation_max_age_minutes must be non-negative")
+        config.chunk_cache_invalidation_max_age_minutes = settings.chunk_cache_invalidation_max_age_minutes
 
     config.updated_at = datetime.utcnow()
     db.add(create_audit_log(
