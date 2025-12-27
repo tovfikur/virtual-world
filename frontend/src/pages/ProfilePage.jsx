@@ -9,6 +9,7 @@ import { usersAPI } from '../services/api';
 import useAuthStore from '../stores/authStore';
 import useWorldStore from '../stores/worldStore';
 import UserProfileCard from '../components/UserProfileCard';
+import TransactionHistory from '../components/TransactionHistory';
 import toast from 'react-hot-toast';
 
 function ProfilePage() {
@@ -244,6 +245,11 @@ function ProfilePage() {
               {stats?.transactions_as_buyer || 0} buys, {stats?.transactions_as_seller || 0} sales
             </p>
           </div>
+        </div>
+
+        {/* Transaction History */}
+        <div className="mt-6 md:mt-8">
+          <TransactionHistory userId={user.user_id} />
         </div>
 
         {/* Owned Lands */}
