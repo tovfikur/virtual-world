@@ -3,22 +3,34 @@
  * User registration form with validation
  */
 
-import { useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
-import toast from 'react-hot-toast';
-import useAuthStore from '../stores/authStore';
+import { useState } from "react";
+import { Link, useNavigate } from "react-router-dom";
+import toast from "react-hot-toast";
+import useAuthStore from "../stores/authStore";
 
 function RegisterPage() {
-  const [username, setUsername] = useState('');
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [confirmPassword, setConfirmPassword] = useState('');
+  const [username, setUsername] = useState("");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
   const { register, isLoading, error } = useAuthStore();
   const navigate = useNavigate();
 
   const validatePassword = () => {
-    if (password.length < 6) {
-      return 'Password must be at least 6 characters';
+    if (password.length < 12) {
+      return "Password must be at least 12 characters";
+    }
+    if (!/[A-Z]/.test(password)) {
+      return "Password must include at least one uppercase letter";
+    }
+    if (!/[a-z]/.test(password)) {
+      return "Password must include at least one lowercase letter";
+    }
+    if (!/[0-9]/.test(password)) {
+      return "Password must include at least one number";
+    }
+    if (!/[!@#$%^&*]/.test(password)) {
+      return "Password must include at least one special character (!@#$%^&*)";
     }
     return null;
   };
@@ -28,7 +40,7 @@ function RegisterPage() {
 
     // Validation
     if (password !== confirmPassword) {
-      toast.error('Passwords do not match');
+      toast.error("Passwords do not match");
       return;
     }
 
@@ -41,10 +53,10 @@ function RegisterPage() {
     const result = await register(username, email, password);
 
     if (result.success) {
-      toast.success('Account created! Welcome to Virtual Land World!');
-      navigate('/world');
+      toast.success("Account created! Welcome to Virtual Land World!");
+      navigate("/world");
     } else {
-      toast.error(result.error || 'Registration failed');
+      toast.error(result.error || "Registration failed");
     }
   };
 
@@ -103,7 +115,7 @@ function RegisterPage() {
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 className="w-full px-4 py-2 bg-gray-700 text-white rounded-lg border border-gray-600 focus:border-blue-500 focus:outline-none"
-                placeholder="At least 6 characters"
+                placeholder="At least 12 characters, include A/a/0-9/!@#$%^&*"
                 required
               />
             </div>
@@ -131,7 +143,11 @@ function RegisterPage() {
             <div className="bg-blue-900/30 border border-blue-700 text-blue-200 px-4 py-3 rounded-lg text-sm">
               <p className="font-semibold mb-1">Password Requirements:</p>
               <ul className="list-disc list-inside space-y-1">
-                <li>At least 6 characters</li>
+                <li>At least 12 characters</li>
+                <li>At least one uppercase letter (A–Z)</li>
+                <li>At least one lowercase letter (a–z)</li>
+                <li>At least one number (0–9)</li>
+                <li>At least one special character (!@#$%^&*)</li>
               </ul>
             </div>
 
@@ -140,13 +156,13 @@ function RegisterPage() {
               disabled={isLoading}
               className="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-3 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              {isLoading ? 'Creating account...' : 'Create Account'}
+              {isLoading ? "Creating account..." : "Create Account"}
             </button>
           </form>
 
           <div className="mt-6 text-center">
             <p className="text-gray-400">
-              Already have an account?{' '}
+              Already have an account?{" "}
               <Link
                 to="/login"
                 className="text-blue-400 hover:text-blue-300 font-medium"

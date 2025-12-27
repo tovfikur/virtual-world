@@ -68,9 +68,7 @@ const snapToTileCenter = (value) => {
 };
 
 const nearlyEqual = (a, b, epsilon = 1e-3) =>
-  typeof a === "number" &&
-  typeof b === "number" &&
-  Math.abs(a - b) <= epsilon;
+  typeof a === "number" && typeof b === "number" && Math.abs(a - b) <= epsilon;
 
 const tileKey = (x, y) => `${Math.floor(x)}_${Math.floor(y)}`;
 
@@ -203,12 +201,7 @@ const calculateFootstepPan = (dx, dy) => {
   return clamp(dx / planarDistance, -1, 1);
 };
 
-const createSampleBuffer = (
-  audioCtx,
-  data,
-  sourceRate,
-  gain = 1
-) => {
+const createSampleBuffer = (audioCtx, data, sourceRate, gain = 1) => {
   if (!audioCtx || !Array.isArray(data) || data.length === 0) {
     return null;
   }
@@ -231,7 +224,10 @@ const createSampleBuffer = (
   return buffer;
 };
 
-const createFootstepBuffer = (audioCtx, profile = FOOTSTEP_PROFILES.default) => {
+const createFootstepBuffer = (
+  audioCtx,
+  profile = FOOTSTEP_PROFILES.default
+) => {
   const settings = { ...FOOTSTEP_PROFILES.default, ...profile };
   const {
     duration,
@@ -285,16 +281,12 @@ const createFootstepBuffer = (audioCtx, profile = FOOTSTEP_PROFILES.default) => 
     const envelope = attack * decay;
 
     const tone =
-      Math.sin(2 * Math.PI * toneFreq * (i / sampleRate)) *
-      (0.5 + brightness);
+      Math.sin(2 * Math.PI * toneFreq * (i / sampleRate)) * (0.5 + brightness);
     const texture =
-      Math.sin(2 * Math.PI * textureFreq * (i / sampleRate)) *
-      noiseLevel *
-      0.3;
+      Math.sin(2 * Math.PI * textureFreq * (i / sampleRate)) * noiseLevel * 0.3;
     const noise = (Math.random() * 2 - 1) * noiseLevel;
 
-    const isStoneProfile =
-      stoneClack > 0 || gritLevel > 0 || stoneEdge > 0;
+    const isStoneProfile = stoneClack > 0 || gritLevel > 0 || stoneEdge > 0;
     const baseSample = tone + texture + noise;
     let sample = isStoneProfile ? 0 : baseSample;
 
@@ -321,27 +313,18 @@ const createFootstepBuffer = (audioCtx, profile = FOOTSTEP_PROFILES.default) => 
 
       // Sharp click
       const clickEnv = Math.exp(-240 * t);
-      const click = Math.sin(
-        2 * Math.PI * toneFreq * 3.4 * timeNorm
-      );
+      const click = Math.sin(2 * Math.PI * toneFreq * 3.4 * timeNorm);
 
       // Body clack (lower pitched, slightly later)
       const clackEnv = Math.exp(-110 * Math.abs(t - 0.1));
-      const clack = Math.sin(
-        2 * Math.PI * toneFreq * 0.95 * timeNorm
-      );
+      const clack = Math.sin(2 * Math.PI * toneFreq * 0.95 * timeNorm);
 
       // Gritty echo
       const gritEnv = Math.exp(-90 * t);
-      const grit =
-        (Math.random() * 2 - 1) *
-        gritLevel *
-        gritEnv;
+      const grit = (Math.random() * 2 - 1) * gritLevel * gritEnv;
 
       let stoneSample =
-        click * clickEnv * 0.65 +
-        clack * clackEnv * 0.55 +
-        grit;
+        click * clickEnv * 0.65 + clack * clackEnv * 0.55 + grit;
 
       if (stoneEdge > 0) {
         const edgeEnv = Math.exp(-150 * Math.abs(t - 0.05));
@@ -553,13 +536,17 @@ function WorldRenderer() {
     window.addEventListener("keydown", unlockAudio);
     return () => {
       window.removeEventListener("pointerdown", unlockAudio);
-    window.removeEventListener("keydown", unlockAudio);
+      window.removeEventListener("keydown", unlockAudio);
     };
   }, [ensureAudioContext]);
 
   const playFootstepSound = useCallback(
     (worldX, worldY, options = {}) => {
-      const { profileKey: requestedProfile = "default", usePanning = true, volume = 1 } = options;
+      const {
+        profileKey: requestedProfile = "default",
+        usePanning = true,
+        volume = 1,
+      } = options;
       if (!Number.isFinite(worldX) || !Number.isFinite(worldY)) {
         return;
       }
@@ -576,17 +563,16 @@ function WorldRenderer() {
 
       let bufferEntry = footstepBuffersRef.current.get(resolvedProfile);
       if (!bufferEntry) {
-        bufferEntry = createFootstepBuffer(
-          audioCtx,
-          profileDefinition
-        );
+        bufferEntry = createFootstepBuffer(audioCtx, profileDefinition);
         footstepBuffersRef.current.set(resolvedProfile, bufferEntry);
       }
       const pickBuffer = () => {
         if (Array.isArray(bufferEntry)) {
           if (bufferEntry.length === 0) return null;
           const index = Math.floor(Math.random() * bufferEntry.length);
-          return bufferEntry[Math.max(0, Math.min(index, bufferEntry.length - 1))];
+          return bufferEntry[
+            Math.max(0, Math.min(index, bufferEntry.length - 1))
+          ];
         }
         return bufferEntry;
       };
@@ -736,10 +722,7 @@ function WorldRenderer() {
   const updatePlayerGraphicsPosition = useCallback(() => {
     if (!playerContainerRef.current) return;
     const { x, y } = playerPositionRef.current;
-    playerContainerRef.current.position.set(
-      x * LAND_SIZE,
-      y * LAND_SIZE
-    );
+    playerContainerRef.current.position.set(x * LAND_SIZE, y * LAND_SIZE);
   }, []);
 
   const drawOccupancyIcon = useCallback((indicator, data) => {
@@ -871,33 +854,36 @@ function WorldRenderer() {
     [getOrCreateOccupancyIndicator]
   );
 
-  const startStep = useCallback((dx, dy) => {
-    if (dx === 0 && dy === 0) return;
+  const startStep = useCallback(
+    (dx, dy) => {
+      if (dx === 0 && dy === 0) return;
 
-    const startX = playerPositionRef.current.x;
-    const startY = playerPositionRef.current.y;
-    const endX = startX + dx;
-    const endY = startY + dy;
+      const startX = playerPositionRef.current.x;
+      const startY = playerPositionRef.current.y;
+      const endX = startX + dx;
+      const endY = startY + dy;
 
-    playerStepRef.current = {
-      active: true,
-      startX,
-      startY,
-      endX,
-      endY,
-      elapsed: 0,
-      duration: TILE_STEP_DURATION,
-    };
-    const profileKey = getBiomeProfileForCoords(endX, endY);
-    playFootstepSound(endX, endY, {
-      usePanning: false,
-      profileKey,
-    });
-    if (pendingCenterOnMoveRef.current) {
-      autoCenterRef.current = true;
-      pendingCenterOnMoveRef.current = false;
-    }
-  }, [getBiomeProfileForCoords, playFootstepSound]);
+      playerStepRef.current = {
+        active: true,
+        startX,
+        startY,
+        endX,
+        endY,
+        elapsed: 0,
+        duration: TILE_STEP_DURATION,
+      };
+      const profileKey = getBiomeProfileForCoords(endX, endY);
+      playFootstepSound(endX, endY, {
+        usePanning: false,
+        profileKey,
+      });
+      if (pendingCenterOnMoveRef.current) {
+        autoCenterRef.current = true;
+        pendingCenterOnMoveRef.current = false;
+      }
+    },
+    [getBiomeProfileForCoords, playFootstepSound]
+  );
 
   const getInputDirection = useCallback(() => {
     const { x, y } = movementDirectionRef.current;
@@ -1029,10 +1015,7 @@ function WorldRenderer() {
     (tileX, tileY, options = {}) => {
       const { centerCamera = true } = options;
       if (!playerInitializedRef.current) return;
-      if (
-        !Number.isFinite(tileX) ||
-        !Number.isFinite(tileY)
-      ) {
+      if (!Number.isFinite(tileX) || !Number.isFinite(tileY)) {
         return;
       }
 
@@ -1090,7 +1073,6 @@ function WorldRenderer() {
       playFootstepSound,
     ]
   );
-
 
   const removeRemotePlayer = useCallback((playerId) => {
     const entry = remotePlayersRef.current.get(playerId);
@@ -1179,15 +1161,15 @@ function WorldRenderer() {
       if (!playerId || playerId === user?.user_id) {
         return;
       }
-       if (!worldContainerRef.current) {
-         pendingRemoteUpdatesRef.current.set(playerId, {
-           username,
-           x,
-           y,
-           timestamp: Date.now(),
-         });
-         return;
-       }
+      if (!worldContainerRef.current) {
+        pendingRemoteUpdatesRef.current.set(playerId, {
+          username,
+          x,
+          y,
+          timestamp: Date.now(),
+        });
+        return;
+      }
       const entry = getOrCreateRemotePlayer(playerId, username);
       if (!entry) return;
       entry.username = username || entry.username;
@@ -1271,7 +1253,10 @@ function WorldRenderer() {
         endX: targetX,
         endY: targetY,
         elapsed: 0,
-        duration: Math.max(distance * TILE_STEP_DURATION, TILE_STEP_DURATION * 0.5),
+        duration: Math.max(
+          distance * TILE_STEP_DURATION,
+          TILE_STEP_DURATION * 0.5
+        ),
       };
       playFootstepSound(targetX, targetY, {
         profileKey: biomeProfileKey,
@@ -1369,11 +1354,7 @@ function WorldRenderer() {
         }
       }
     },
-    [
-      applyTouchDirection,
-      computePadVector,
-      syncPlayerToCamera,
-    ]
+    [applyTouchDirection, computePadVector, syncPlayerToCamera]
   );
 
   const handleTouchPadPointerMove = useCallback(
@@ -1410,8 +1391,7 @@ function WorldRenderer() {
     const coarsePointer =
       typeof window.matchMedia === "function" &&
       window.matchMedia("(pointer:coarse)").matches;
-    const agent =
-      typeof navigator !== "undefined" ? navigator.userAgent : "";
+    const agent = typeof navigator !== "undefined" ? navigator.userAgent : "";
     const mobileAgent = /Mobi|Android|iPhone|iPad|iPod|Tablet/i.test(agent);
 
     setIsTouchDevice(Boolean(hasTouchPoints && (coarsePointer || mobileAgent)));
@@ -1542,10 +1522,7 @@ function WorldRenderer() {
     };
 
     const unsubscribeLocation = wsService.on("player_location", handleLocation);
-    const unsubscribePresence = wsService.on(
-      "presence_update",
-      handlePresence
-    );
+    const unsubscribePresence = wsService.on("presence_update", handlePresence);
 
     return () => {
       if (typeof unsubscribeLocation === "function") {
@@ -1701,6 +1678,22 @@ function WorldRenderer() {
     [applyHighlightToGraphic, resetOwnerHighlight, drawOwnershipBorders, user]
   );
 
+  // Handle player teleport event (from Jump to Square feature)
+  useEffect(() => {
+    const handlePlayerTeleport = (event) => {
+      const { x, y } = event.detail;
+      if (Number.isFinite(x) && Number.isFinite(y)) {
+        jumpPlayerToTile(x, y, { centerCamera: true });
+      }
+    };
+
+    window.addEventListener("playerTeleport", handlePlayerTeleport);
+
+    return () => {
+      window.removeEventListener("playerTeleport", handlePlayerTeleport);
+    };
+  }, [jumpPlayerToTile]);
+
   useEffect(() => {
     const handleKeyDown = (ev) => {
       if (ev.key === "Control" || ev.key === "Meta")
@@ -1743,8 +1736,7 @@ function WorldRenderer() {
     };
 
     const handleKeyDown = (event) => {
-      const key =
-        event.key.length === 1 ? event.key.toLowerCase() : event.key;
+      const key = event.key.length === 1 ? event.key.toLowerCase() : event.key;
       const dir = keyMap[key];
       if (!dir || isTyping(event.target)) return;
 
@@ -1765,8 +1757,7 @@ function WorldRenderer() {
     };
 
     const handleKeyUp = (event) => {
-      const key =
-        event.key.length === 1 ? event.key.toLowerCase() : event.key;
+      const key = event.key.length === 1 ? event.key.toLowerCase() : event.key;
       const dir = keyMap[key];
       if (!dir || isTyping(event.target)) return;
 
@@ -1907,7 +1898,9 @@ function WorldRenderer() {
         const response = await landsAPI.getOwnerCoordinates(ownerId, 5000);
         const ownerLands = response.data?.lands || [];
         const ownerUsername =
-          response.data?.owner_username || ownerLands[0]?.owner_username || null;
+          response.data?.owner_username ||
+          ownerLands[0]?.owner_username ||
+          null;
 
         ownerLandCacheRef.current.set(ownerId, {
           lands: ownerLands,
@@ -2288,7 +2281,6 @@ function WorldRenderer() {
           applyHighlightToGraphic(landKey);
         }
 
-
         // === Interactivity ===
         g.interactive = true;
         // Don't force the canvas cursor to a hand/pointer on desktop ?
@@ -2480,50 +2472,65 @@ function WorldRenderer() {
     });
     badgeGraphicsRef.current.clear();
 
-    // Redraw badges for all lands with messages
-    Object.entries(unreadMessagesByLand).forEach(([landId, messageCounts]) => {
-      chunks.forEach((chunkData, chunkId) => {
-        const land = chunkData.lands.find((l) => l.land_id === landId);
-        if (!land) {
-          return;
-        }
-
-        const isOwner =
-          Boolean(user?.user_id) && land.owner_id === user?.user_id;
-        const badgeColor = getMessageBadgeColor(messageCounts, { isOwner });
-        if (!badgeColor) {
-          return;
-        }
-
-        const chunkContainer = landGraphicsRef.current.get(chunkId);
-        if (!chunkContainer) {
-          return;
-        }
-
-        const baseX = land.x * LAND_SIZE;
-        const baseY = land.y * LAND_SIZE;
-
-        const badge = new PIXI.Graphics();
-        const badgeSize = LAND_SIZE * 0.3;
-        const badgeX = badgeSize / 2 + LAND_SIZE - badgeSize - 2;
-        const badgeY = badgeSize / 2 + 2;
-
-        badge.beginFill(badgeColor);
-        badge.drawCircle(0, 0, badgeSize / 2);
-        badge.endFill();
-
-        badge.lineStyle(1, 0xffffff, 1);
-        badge.drawCircle(0, 0, badgeSize / 2);
-        badge.lineStyle(0);
-
-        badge.x = baseX + badgeX;
-        badge.y = baseY + badgeY;
-
-        chunkContainer.addChild(badge);
-        badgeGraphicsRef.current.set(landId, { badge, chunkId });
-      });
-    });
-
+    // Redraw badges for all lands with messages
+
+    Object.entries(unreadMessagesByLand).forEach(([landId, messageCounts]) => {
+      chunks.forEach((chunkData, chunkId) => {
+        const land = chunkData.lands.find((l) => l.land_id === landId);
+
+        if (!land) {
+          return;
+        }
+
+        const isOwner =
+          Boolean(user?.user_id) && land.owner_id === user?.user_id;
+
+        const badgeColor = getMessageBadgeColor(messageCounts, { isOwner });
+
+        if (!badgeColor) {
+          return;
+        }
+
+        const chunkContainer = landGraphicsRef.current.get(chunkId);
+
+        if (!chunkContainer) {
+          return;
+        }
+
+        const baseX = land.x * LAND_SIZE;
+
+        const baseY = land.y * LAND_SIZE;
+
+        const badge = new PIXI.Graphics();
+
+        const badgeSize = LAND_SIZE * 0.3;
+
+        const badgeX = badgeSize / 2 + LAND_SIZE - badgeSize - 2;
+
+        const badgeY = badgeSize / 2 + 2;
+
+        badge.beginFill(badgeColor);
+
+        badge.drawCircle(0, 0, badgeSize / 2);
+
+        badge.endFill();
+
+        badge.lineStyle(1, 0xffffff, 1);
+
+        badge.drawCircle(0, 0, badgeSize / 2);
+
+        badge.lineStyle(0);
+
+        badge.x = baseX + badgeX;
+
+        badge.y = baseY + badgeY;
+
+        chunkContainer.addChild(badge);
+
+        badgeGraphicsRef.current.set(landId, { badge, chunkId });
+      });
+    });
+
     console.log(`✓ Updated ${badgeGraphicsRef.current.size} badges`);
   }, [unreadMessagesByLand, chunks, user?.user_id]);
 
@@ -2567,10 +2574,8 @@ function WorldRenderer() {
       if (step.active) {
         step.elapsed += deltaSeconds;
         const progress = Math.min(step.elapsed / step.duration, 1);
-        const newX =
-          step.startX + (step.endX - step.startX) * progress;
-        const newY =
-          step.startY + (step.endY - step.startY) * progress;
+        const newX = step.startX + (step.endX - step.startX) * progress;
+        const newY = step.startY + (step.endY - step.startY) * progress;
         playerPositionRef.current = { x: newX, y: newY };
         updatePlayerGraphicsPosition();
         followCamera(newX, newY, deltaSeconds);
@@ -2649,11 +2654,9 @@ function WorldRenderer() {
               entry.rightLeg.y = entry.rightLeg.baseY;
             }
           } else {
-            entry.animationPhase +=
-              deltaSeconds * WALK_FREQUENCY * Math.PI * 2;
+            entry.animationPhase += deltaSeconds * WALK_FREQUENCY * Math.PI * 2;
             if (leg) {
-              const swing =
-                Math.sin(entry.animationPhase) * swingAmplitude;
+              const swing = Math.sin(entry.animationPhase) * swingAmplitude;
               entry.leftLeg.y = entry.leftLeg.baseY + swing;
               entry.rightLeg.y = entry.rightLeg.baseY - swing;
             }
@@ -2672,12 +2675,11 @@ function WorldRenderer() {
       const trackOccupant = (worldX, worldY, color, isPlayer = false) => {
         if (typeof worldX !== "number" || typeof worldY !== "number") return;
         const key = tileKey(worldX, worldY);
-        const entry =
-          occupancyData.get(key) || {
-            count: 0,
-            colors: [],
-            containsPlayer: false,
-          };
+        const entry = occupancyData.get(key) || {
+          count: 0,
+          colors: [],
+          containsPlayer: false,
+        };
         entry.count += 1;
         if (
           Number.isFinite(color) &&

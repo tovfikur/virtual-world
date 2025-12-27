@@ -28,7 +28,6 @@ from app.models.chat import ChatSession
 from app.models.chat import Message
 from app.models.audit_log import AuditLog, AuditEventCategory
 from app.models.admin_config import AdminConfig
-from app.models.ban import Ban
 from app.models.announcement import Announcement
 from app.models.report import Report
 from app.services.cache_service import cache_service
@@ -61,25 +60,6 @@ def create_audit_log(
         action=action,
         details=details
     )
-
-
-BASE_DIR = Path(__file__).resolve().parents[4]
-
-
-def _run_alembic(args: list[str]) -> tuple[bool, str, str]:
-    """Run alembic command synchronously and capture output."""
-    cmd = ["alembic", "-c", str(BASE_DIR / "alembic.ini"), *args]
-    try:
-        result = subprocess.run(
-            cmd,
-            cwd=str(BASE_DIR),
-            capture_output=True,
-            text=True,
-            check=False,
-        )
-        return result.returncode == 0, result.stdout, result.stderr
-    except Exception as e:
-        return False, "", str(e)
 
 
 def _get_db_dump_params() -> dict:
@@ -261,8 +241,9 @@ async def get_dashboard_stats(
         total_listings = await db.scalar(select(func.count(Listing.listing_id)))
 
         # Active listings
+        from app.models.listing import ListingStatus as _ListingStatus
         active_listings = await db.scalar(
-            select(func.count(Listing.listing_id)).where(Listing.status == "active")
+            select(func.count(Listing.listing_id)).where(Listing.status == _ListingStatus.ACTIVE)
         )
 
         # Total transactions
@@ -961,16 +942,23 @@ async def update_user(
 ):
     """Update user details (admin only)"""
     try:
+        from app.models.transaction import Transaction, TransactionType, TransactionStatus
+        
         user = await db.get(User, user_id)
         if not user:
             raise HTTPException(status_code=404, detail="User not found")
 
-        # Update fields
+        # Track balance change for transaction creation
+        balance_delta = None
+        if update_data.balance_bdt is not None:
+            old_balance = user.balance_bdt or 0
+            new_balance = update_data.balance_bdt
+            balance_delta = new_balance - old_balance
+            user.balance_bdt = new_balance
+
+        # Update other fields
         if update_data.role is not None:
             user.role = update_data.role
-
-        if update_data.balance_bdt is not None:
-            user.balance_bdt = update_data.balance_bdt
 
         if update_data.is_active is not None:
             # Assuming User model has is_active field
@@ -979,6 +967,24 @@ async def update_user(
         user.updated_at = datetime.utcnow()
         await db.commit()
         await db.refresh(user)
+
+        # Create transaction record if balance was adjusted
+        if balance_delta is not None and balance_delta != 0:
+            transaction = Transaction(
+                buyer_id=user_id,
+                seller_id=None,
+                land_id=None,
+                listing_id=None,
+                transaction_type=TransactionType.TOPUP,
+                amount_bdt=abs(balance_delta),
+                currency="BDT",
+                status=TransactionStatus.COMPLETED,
+                platform_fee_bdt=0,
+                gateway_fee_bdt=0,
+                gateway_name="ADMIN_ADJUSTMENT"
+            )
+            db.add(transaction)
+            await db.commit()
 
         # Log action
         audit_log = create_audit_log(
@@ -1024,13 +1030,13 @@ async def get_system_health(
         db_healthy = True
         try:
             await db.execute(select(1))
-        except:
+        except Exception:
             db_healthy = False
 
         # Redis health
         redis_healthy = await cache_service.is_healthy()
 
-        # Get cache stats
+        # Cache stats placeholder
         cache_stats = {
             "hit_rate": "N/A",  # Implement if Redis provides stats
             "memory_usage": "N/A"
@@ -1122,18 +1128,26 @@ async def get_audit_logs(
 async def get_marketplace_listings(
     page: int = Query(default=1, ge=1),
     limit: int = Query(default=50, ge=1, le=100),
-    status: Optional[str] = None,
+    listing_status: Optional[str] = None,
     search: Optional[str] = None,
     db: AsyncSession = Depends(get_db),
     admin: dict = Depends(require_admin)
 ):
     """Get all marketplace listings with filters"""
     try:
-        query = select(Listing).join(User, Listing.seller_id == User.user_id)
+        from sqlalchemy.orm import selectinload
+        query = select(Listing).options(selectinload(Listing.listing_lands)).join(User, Listing.seller_id == User.user_id)
 
         # Apply filters
-        if status:
-            query = query.where(Listing.status == status)
+        if listing_status:
+            # Accept string status values matching enum names/values
+            try:
+                from app.models.listing import ListingStatus as _LS
+                status_enum = _LS[listing_status.upper()] if listing_status.upper() in _LS.__members__ else _LS(listing_status)
+                query = query.where(Listing.status == status_enum)
+            except Exception:
+                # Fallback: compare to raw value, assuming DB stores enum values as strings
+                query = query.where(Listing.status == listing_status)
 
         if search:
             query = query.where(
@@ -1154,14 +1168,23 @@ async def get_marketplace_listings(
         return {
             "data": [
                 {
-                    "listing_id": l.listing_id,
-                    "land_id": l.land_id,
-                    "seller_id": l.seller_id,
+                    "listing_id": str(l.listing_id),
+                    # Legacy compatibility: single land_id if available
+                    "land_id": str(l.listing_lands[0].land_id) if getattr(l, "listing_lands", None) and l.listing_lands else None,
+                    # Parcel-aware list of land IDs
+                    "land_ids": [str(ll.land_id) for ll in (l.listing_lands or [])],
+                    "seller_id": str(l.seller_id),
                     "price_bdt": l.price_bdt,
-                    "listing_type": l.listing_type,
-                    "status": l.status,
-                    "created_at": l.created_at.isoformat(),
-                    "expires_at": l.expires_at.isoformat() if l.expires_at else None
+                    # Keep legacy key name but map to new field
+                    "listing_type": l.type.value if hasattr(l, "type") else None,
+                    "status": l.status.value if hasattr(l, "status") else None,
+                    "created_at": l.created_at.isoformat() if getattr(l, "created_at", None) else None,
+                    # Map to auction_end_time for auctions
+                    "expires_at": l.auction_end_time.isoformat() if getattr(l, "auction_end_time", None) else None,
+                    # Optional buy-now price for UI
+                    "buy_now_price_bdt": getattr(l, "buy_now_price_bdt", None),
+                    # Parcel size hint
+                    "parcel_size": len(l.listing_lands or [])
                 }
                 for l in listings
             ],
@@ -1175,8 +1198,9 @@ async def get_marketplace_listings(
 
     except Exception as e:
         logger.error(f"Error getting marketplace listings: {e}")
+        from fastapi import status as http_status
         raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            status_code=http_status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to fetch marketplace listings"
         )
 
@@ -1195,8 +1219,10 @@ async def remove_listing(
             raise HTTPException(status_code=404, detail="Listing not found")
 
         # Update listing status
-        listing.status = "removed"
-        listing.updated_at = datetime.utcnow()
+        from app.models.listing import ListingStatus as _ListingStatus
+        from datetime import datetime, timezone
+        listing.status = _ListingStatus.CANCELLED
+        listing.updated_at = datetime.now(timezone.utc)
 
         # Log action
         audit_log = create_audit_log(
@@ -1222,8 +1248,9 @@ async def remove_listing(
     except Exception as e:
         logger.error(f"Error removing listing: {e}")
         await db.rollback()
+        from fastapi import status as http_status
         raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            status_code=http_status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to remove listing"
         )
 
@@ -1232,7 +1259,7 @@ async def remove_listing(
 async def get_transactions(
     page: int = Query(default=1, ge=1),
     limit: int = Query(default=50, ge=1, le=100),
-    status: Optional[str] = None,
+    tx_status: Optional[str] = None,
     search: Optional[str] = None,
     db: AsyncSession = Depends(get_db),
     admin: dict = Depends(require_admin)
@@ -1242,8 +1269,14 @@ async def get_transactions(
         query = select(Transaction)
 
         # Apply filters
-        if status:
-            query = query.where(Transaction.status == status)
+        if tx_status:
+            # Accept string status values matching enum names/values
+            try:
+                from app.models.transaction import TransactionStatus as _TS
+                ts_enum = _TS[tx_status.upper()] if tx_status.upper() in _TS.__members__ else _TS(tx_status)
+                query = query.where(Transaction.status == ts_enum)
+            except Exception:
+                query = query.where(Transaction.status == tx_status)
 
         if search:
             # Search by buyer or seller username
@@ -1265,13 +1298,17 @@ async def get_transactions(
         return {
             "data": [
                 {
-                    "transaction_id": t.transaction_id,
-                    "buyer_id": t.buyer_id,
-                    "seller_id": t.seller_id,
-                    "land_id": t.land_id,
+                    "transaction_id": str(t.transaction_id),
+                    "buyer_id": str(t.buyer_id),
+                    "seller_id": str(t.seller_id) if t.seller_id else None,
+                    "land_id": str(t.land_id) if t.land_id else None,
+                    "listing_id": str(t.listing_id) if getattr(t, "listing_id", None) else None,
+                    "transaction_type": t.transaction_type.value if hasattr(t, "transaction_type") else None,
                     "amount_bdt": t.amount_bdt,
-                    "status": t.status,
-                    "created_at": t.created_at.isoformat()
+                    "currency": getattr(t, "currency", None),
+                    "status": t.status.value if hasattr(t, "status") else None,
+                    "created_at": t.created_at.isoformat() if getattr(t, "created_at", None) else None,
+                    "completed_at": t.completed_at.isoformat() if getattr(t, "completed_at", None) else None
                 }
                 for t in transactions
             ],
@@ -1285,8 +1322,9 @@ async def get_transactions(
 
     except Exception as e:
         logger.error(f"Error getting transactions: {e}")
+        from fastapi import status as http_status
         raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            status_code=http_status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to fetch transactions"
         )
 
@@ -4694,7 +4732,7 @@ async def mute_user(
 async def get_reports(
     page: int = Query(default=1, ge=1),
     limit: int = Query(default=50, ge=1, le=100),
-    status: Optional[str] = None,
+    report_status: Optional[str] = None,
     resource_type: Optional[str] = None,
     db: AsyncSession = Depends(get_db),
     admin: dict = Depends(require_admin)
@@ -4704,8 +4742,8 @@ async def get_reports(
         query = select(Report)
 
         # Apply filters
-        if status:
-            query = query.where(Report.status == status)
+        if report_status:
+            query = query.where(Report.status == report_status)
 
         if resource_type:
             query = query.where(Report.resource_type == resource_type)
@@ -4747,8 +4785,9 @@ async def get_reports(
 
     except Exception as e:
         logger.error(f"Error getting reports: {e}")
+        from fastapi import status as http_status
         raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            status_code=http_status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to fetch reports"
         )
 

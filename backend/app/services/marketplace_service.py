@@ -5,7 +5,7 @@ Handles listing creation, bidding, and auction finalization
 
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, and_, or_, func
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Optional, List, Dict
 import uuid
 import logging
@@ -108,7 +108,8 @@ class MarketplaceService:
                 .order_by(Listing.created_at.desc())
             )
             if latest_listing:
-                elapsed = datetime.utcnow() - latest_listing
+                now_utc = datetime.now(timezone.utc)
+                elapsed = now_utc - latest_listing
                 if elapsed.total_seconds() < listing_cooldown_minutes * 60:
                     remaining = int(listing_cooldown_minutes * 60 - elapsed.total_seconds())
                     raise ValueError(f"Please wait {remaining} seconds before creating another listing")
@@ -130,7 +131,7 @@ class MarketplaceService:
         # Calculate end time for auctions
         ends_at = None
         if listing_type in [ListingType.AUCTION, ListingType.AUCTION_WITH_BUYNOW]:
-            ends_at = datetime.utcnow() + timedelta(hours=duration_hours)
+            ends_at = datetime.now(timezone.utc) + timedelta(hours=duration_hours)
 
             # Reserve price enforcement relative to starting price
             if reserve_price_bdt is not None and min_reserve_price_percent:
@@ -220,7 +221,7 @@ class MarketplaceService:
         config = cfg_res.scalar_one_or_none()
 
         # Check if auction has ended
-        if listing.auction_end_time and listing.auction_end_time < datetime.utcnow():
+        if listing.auction_end_time and listing.auction_end_time < datetime.now(timezone.utc):
             raise ValueError("Auction has ended")
 
         # Cannot bid on own listing
@@ -262,14 +263,14 @@ class MarketplaceService:
 
         # Auto-extend if bid placed near end time
         if listing.auction_end_time:
-            time_remaining = (listing.auction_end_time - datetime.utcnow()).total_seconds() / 60
+            time_remaining = (listing.auction_end_time - datetime.now(timezone.utc)).total_seconds() / 60
 
             anti_sniping_enabled = bool(config.anti_sniping_enabled) if config else False
             extend_minutes = int(config.anti_sniping_extend_minutes) if config and config.anti_sniping_extend_minutes is not None else listing.auto_extend_minutes
             threshold_minutes = int(config.anti_sniping_threshold_minutes) if config and config.anti_sniping_threshold_minutes is not None else listing.auto_extend_minutes
 
             if anti_sniping_enabled and time_remaining < threshold_minutes:
-                listing.auction_end_time = datetime.utcnow() + timedelta(minutes=extend_minutes)
+                listing.auction_end_time = datetime.now(timezone.utc) + timedelta(minutes=extend_minutes)
                 logger.info(
                     f"Auction anti-sniping extend: {listing_id} (+{extend_minutes}m, threshold {threshold_minutes}m)"
                 )

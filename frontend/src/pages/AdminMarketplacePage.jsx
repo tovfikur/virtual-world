@@ -441,7 +441,9 @@ function AdminMarketplacePage() {
                           {txn.buyer_id.substring(0, 8)}...
                         </td>
                         <td className="px-6 py-4 text-sm text-gray-300">
-                          {txn.seller_id.substring(0, 8)}...
+                          {txn.seller_id
+                            ? txn.seller_id.substring(0, 8) + "..."
+                            : "N/A"}
                         </td>
                         <td className="px-6 py-4 text-sm text-gray-300 font-semibold">
                           {txn.amount_bdt.toLocaleString()}
@@ -449,16 +451,19 @@ function AdminMarketplacePage() {
                         <td className="px-6 py-4 text-sm">
                           <span
                             className={`px-2 py-1 rounded text-xs font-semibold ${
-                              txn.status === "completed"
+                              (txn.status || "").toLowerCase() === "completed"
                                 ? "bg-green-900 text-green-200"
-                                : txn.status === "pending"
+                                : (txn.status || "").toLowerCase() === "pending"
                                 ? "bg-yellow-900 text-yellow-200"
-                                : txn.status === "refunded"
+                                : (txn.status || "").toLowerCase() ===
+                                  "refunded"
                                 ? "bg-blue-900 text-blue-200"
                                 : "bg-red-900 text-red-200"
                             }`}
                           >
-                            {txn.status}
+                            {typeof txn.status === "string"
+                              ? txn.status
+                              : txn.status?.toString?.() || "UNKNOWN"}
                           </span>
                         </td>
                         <td className="px-6 py-4 text-sm text-gray-400">

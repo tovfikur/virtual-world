@@ -67,7 +67,7 @@ async def get_user(
     user_dict = user.to_dict()
     await cache_service.set(cache_key, user_dict, ttl=CACHE_TTLS["user_profile"])
 
-    return UserResponse.model_validate(user)
+    return UserResponse.model_validate(user.to_dict())
 
 
 @router.put("/{user_id}", response_model=UserResponse)
@@ -122,7 +122,7 @@ async def update_user(
 
     logger.info(f"User profile updated: {user_id}")
 
-    return UserResponse.model_validate(user)
+    return UserResponse.model_validate(user.to_dict())
 
 
 @router.get("/{user_id}/balance")
@@ -420,7 +420,7 @@ async def update_profile(
 
     logger.info(f"User profile updated: {user_id}")
 
-    return UserResponse.model_validate(user)
+    return UserResponse.model_validate(user.to_dict())
 
 
 @router.post("/{user_id}/avatar")
@@ -482,7 +482,7 @@ async def upload_avatar(
 
         logger.info(f"Avatar uploaded for user {user_id}: {avatar_url}")
 
-        return {"avatar_url": avatar_url, "user": UserResponse.model_validate(user)}
+        return {"avatar_url": avatar_url, "user": UserResponse.model_validate(user.to_dict())}
 
     except ValueError as e:
         raise HTTPException(

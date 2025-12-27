@@ -917,7 +917,7 @@ class AdminConfig(BaseModel):
     # Rate Limiting Controls
     api_requests_per_minute = Column(
         Integer,
-        default=120,
+        default=600,
         nullable=False,
         comment="General API requests per minute per user"
     )

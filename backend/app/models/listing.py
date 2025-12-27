@@ -8,7 +8,7 @@ from sqlalchemy.dialects.postgresql import UUID, ARRAY
 from sqlalchemy.orm import relationship
 import uuid
 from enum import Enum as PyEnum
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 from app.db.base import BaseModel
 
@@ -130,7 +130,7 @@ class Listing(BaseModel):
             return False
         if not self.auction_end_time:
             return False
-        return datetime.utcnow() < self.auction_end_time
+        return datetime.now(timezone.utc) < self.auction_end_time
 
     def extend_auction(self) -> None:
         """
@@ -164,7 +164,7 @@ class Listing(BaseModel):
             final_price: Final sale price
         """
         self.status = ListingStatus.SOLD
-        self.sold_at = datetime.utcnow()
+        self.sold_at = datetime.now(timezone.utc)
 
     def mark_expired(self) -> None:
         """Mark listing as expired (for auctions that didn't sell)."""

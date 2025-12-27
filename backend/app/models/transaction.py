@@ -66,7 +66,7 @@ class Transaction(BaseModel):
         Index("idx_transactions_buyer", "buyer_id", "created_at"),
         Index("idx_transactions_status", "status"),
         Index("idx_transactions_created_at", "created_at"),
-        CheckConstraint("amount_bdt > 0", name="check_positive_amount"),
+        CheckConstraint("amount_bdt >= 0", name="check_nonnegative_amount"),
     )
 
     # Primary Key

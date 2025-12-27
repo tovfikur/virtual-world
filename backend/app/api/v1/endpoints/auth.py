@@ -142,14 +142,25 @@ async def register(
     try:
         allocated_lands = await land_allocation_service.allocate_starter_land(db, user)
         if allocated_lands:
-            logger.info(f"Allocated {len(allocated_lands)} land units to new user {user.username}")
+            logger.info(f"Allocated {len(allocated_lands)} land units to new user")
         else:
-            logger.warning(f"Failed to allocate starter land to {user.username}")
+            logger.warning("Failed to allocate starter land to new user")
     except Exception as e:
-        logger.error(f"Error allocating starter land to {user.username}: {e}")
+        # Ensure session is usable after an allocation failure
+        try:
+            await db.rollback()
+        except Exception:
+            pass
+        logger.error(f"Error allocating starter land: {e}")
         # Don't fail registration if land allocation fails
+    # Ensure user attributes are loaded before serialization
+    try:
+        await db.refresh(user)
+    except Exception:
+        pass
 
-    return UserResponse.model_validate(user)
+    from fastapi.responses import JSONResponse
+    return JSONResponse(content=user.to_dict(), status_code=status.HTTP_201_CREATED)
 
 
 @router.post("/login", response_model=TokenResponse)
@@ -269,7 +280,7 @@ async def login(
         access_token=access_token,
         token_type="Bearer",
         expires_in=access_expires_seconds,
-        user=UserResponse.model_validate(user),
+        user=UserResponse.model_validate(user.to_dict()),
         previous_session_terminated=previous_session_terminated
     )
 
@@ -387,7 +398,7 @@ async def refresh_token(
         access_token=new_access_token,
         token_type="Bearer",
         expires_in=access_expires_seconds,
-        user=UserResponse.model_validate(user)
+        user=UserResponse.model_validate(user.to_dict())
     )
 
     json_response = JSONResponse(
@@ -456,4 +467,4 @@ async def get_current_user_info(
             detail="User not found"
         )
 
-    return UserResponse.model_validate(user)
+    return UserResponse.model_validate(user.to_dict())

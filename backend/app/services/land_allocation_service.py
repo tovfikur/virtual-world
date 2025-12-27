@@ -327,6 +327,28 @@ class LandAllocationService:
         # Bulk insert lands
         db.add_all(lands)
         await db.commit()
+        
+        # Create a transaction record for starter allocation (zero-amount)
+        try:
+            from app.models.transaction import Transaction, TransactionType, TransactionStatus
+            primary_land_id = lands[0].land_id if lands else None
+            allocation_txn = Transaction(
+                land_id=primary_land_id,
+                buyer_id=user.user_id,
+                seller_id=None,
+                listing_id=None,
+                transaction_type=TransactionType.TRANSFER,
+                amount_bdt=0,
+                currency="BDT",
+                status=TransactionStatus.COMPLETED,
+                platform_fee_bdt=0,
+                gateway_fee_bdt=0,
+                gateway_name="STARTER_ALLOCATION"
+            )
+            db.add(allocation_txn)
+            await db.commit()
+        except Exception as e:
+            logger.error(f"Failed to record starter allocation transaction: {e}")
 
         logger.info(f"Allocated {len(lands)} land units to user {user.username} at ({start_x}, {start_y})")
 

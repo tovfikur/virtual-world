@@ -177,7 +177,13 @@ async def ip_access_middleware(request: Request, call_next):
 async def api_rate_limit_middleware(request: Request, call_next):
     """Global API rate limiting using per-minute bucket."""
     path = request.url.path
-    if path in {"/health", "/api/health", "/api/openapi.json"} or path.startswith("/api/docs"):
+    # Exempt health checks, docs, and high-frequency read-only world endpoints
+    exempt_paths = {
+        "/health", "/api/health", "/api/openapi.json",
+        "/api/v1/ws/online-users",  # Presence polling
+    }
+    exempt_prefixes = ("/api/docs", "/api/v1/lands/coordinates/", "/api/v1/ws/")
+    if path in exempt_paths or any(path.startswith(prefix) for prefix in exempt_prefixes):
         return await call_next(request)
 
     limit = await _get_api_rate_limit_per_minute()

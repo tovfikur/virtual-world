@@ -11,6 +11,7 @@ import HUD from "../components/HUD";
 import ChatBox from "../components/ChatBox";
 import LandInfoPanel from "../components/LandInfoPanel";
 import MultiLandActionsPanel from "../components/MultiLandActionsPanel";
+import JumpToSquareModal from "../components/JumpToSquareModal";
 
 function WorldPage() {
   const { user } = useAuthStore();
@@ -36,6 +37,7 @@ function WorldPage() {
   const [showChat, setShowChat] = useState(true);
   const [showLandInfo, setShowLandInfo] = useState(false);
   const [isPanelExpanded, setIsPanelExpanded] = useState(false);
+  const [showJumpModal, setShowJumpModal] = useState(false);
   const handledFocusIdRef = useRef(null);
   const selectedCoordsLabel = selectedLand
     ? `(${selectedLand.x ?? selectedLand.coordinates?.x ?? "?"}, ${
@@ -114,6 +116,26 @@ function WorldPage() {
       });
     }
   }, [focusTarget, setCamera, setSelectedLand]);
+
+  const handleJump = async (coords) => {
+    try {
+      // Move camera to the target location
+      setCamera(coords.x, coords.y, coords.z || 1);
+
+      // Dispatch custom event to move player character to target coordinates
+      window.dispatchEvent(
+        new CustomEvent("playerTeleport", {
+          detail: { x: coords.x, y: coords.y },
+        })
+      );
+
+      // Try to select the land at that coordinate if available
+      // This will be handled by the WorldRenderer's selection logic
+    } catch (error) {
+      console.error("Error jumping to coordinates:", error);
+      throw error;
+    }
+  };
 
   return (
     <div className="relative w-screen h-screen overflow-hidden bg-gray-900">
@@ -241,6 +263,29 @@ function WorldPage() {
           </button>
 
           <button
+            onClick={() => setShowJumpModal(true)}
+            className="bg-purple-600 hover:bg-purple-500 text-white p-2 md:px-4 md:py-2 rounded-lg shadow-lg border border-purple-400 transition-colors flex items-center justify-center gap-2"
+            title="Jump to specific coordinates"
+          >
+            <svg
+              className="w-5 h-5"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M13 10V3L4 14h7v7l9-11h-7z"
+              />
+            </svg>
+            <span className="hidden md:inline font-semibold whitespace-nowrap">
+              Jump
+            </span>
+          </button>
+
+          <button
             onClick={() => toggleMultiPanelExpanded()}
             className="bg-yellow-600 hover:bg-yellow-500 text-white p-2 md:px-4 md:py-2 rounded-lg shadow-md border border-yellow-400 transition-colors flex items-center justify-center gap-2 text-sm"
             title="Toggle Multi-Select Panel"
@@ -271,6 +316,14 @@ function WorldPage() {
       {/* Multi-Land Actions Panel - Bottom Center */}
       <MultiLandActionsPanel />
 
+      {/* Jump to Square Modal */}
+      {showJumpModal && (
+        <JumpToSquareModal
+          onJump={handleJump}
+          onClose={() => setShowJumpModal(false)}
+        />
+      )}
+
       {/* Controls Help - Bottom Right */}
       <div className="hidden md:block absolute bottom-4 right-4 z-10 bg-gray-800/80 backdrop-blur-sm text-white px-4 py-3 rounded-lg shadow-lg border border-gray-600 text-sm">
         <div className="font-semibold mb-2">Controls:</div>
@@ -290,6 +343,10 @@ function WorldPage() {
           <div>
             <kbd className="px-2 py-1 bg-gray-700 rounded">Scroll</kbd> - Zoom
             in/out
+          </div>
+          <div>
+            <kbd className="px-2 py-1 bg-gray-700 rounded">Jump Button</kbd> -
+            Go to coordinates
           </div>
         </div>
       </div>

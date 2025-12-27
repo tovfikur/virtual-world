@@ -7,6 +7,7 @@ from typing import Optional
 from datetime import datetime
 from uuid import UUID
 import re
+from app.config import settings
 
 
 class UserCreate(BaseModel):
@@ -14,7 +15,7 @@ class UserCreate(BaseModel):
 
     username: str = Field(..., min_length=3, max_length=32)
     email: EmailStr
-    password: str = Field(..., min_length=6)
+    password: str = Field(..., min_length=settings.password_min_length)
     country_code: str = Field(default="BD", max_length=2)
 
     @field_validator('username')
@@ -28,9 +29,18 @@ class UserCreate(BaseModel):
     @field_validator('password')
     @classmethod
     def validate_password(cls, v: str) -> str:
-        """Validate password length."""
-        if len(v) < 6:
-            raise ValueError('Password must be at least 6 characters')
+        """Validate password meets security policy."""
+        min_len = settings.password_min_length
+        if len(v) < min_len:
+            raise ValueError(f'Password must be at least {min_len} characters')
+        if not re.search(r"[A-Z]", v):
+            raise ValueError('Password must include at least one uppercase letter')
+        if not re.search(r"[a-z]", v):
+            raise ValueError('Password must include at least one lowercase letter')
+        if not re.search(r"[0-9]", v):
+            raise ValueError('Password must include at least one number')
+        if not re.search(r"[^A-Za-z0-9]", v):
+            raise ValueError('Password must include at least one special character')
         return v
 
     class Config:
@@ -38,7 +48,7 @@ class UserCreate(BaseModel):
             "example": {
                 "username": "john_doe",
                 "email": "john@example.com",
-                "password": "mypass123",
+                "password": "DemoPassword123!",
                 "country_code": "BD"
             }
         }
@@ -54,7 +64,7 @@ class UserLogin(BaseModel):
         json_schema_extra = {
             "example": {
                 "email": "john@example.com",
-                "password": "mypass123"
+                "password": "DemoPassword123!"
             }
         }
 
@@ -154,12 +164,21 @@ class PasswordChange(BaseModel):
     """Schema for changing password."""
 
     old_password: str
-    new_password: str = Field(..., min_length=6)
+    new_password: str = Field(..., min_length=settings.password_min_length)
 
     @field_validator('new_password')
     @classmethod
     def validate_new_password(cls, v: str) -> str:
-        """Validate new password length."""
-        if len(v) < 6:
-            raise ValueError('Password must be at least 6 characters')
+        """Validate new password meets security policy."""
+        min_len = settings.password_min_length
+        if len(v) < min_len:
+            raise ValueError(f'Password must be at least {min_len} characters')
+        if not re.search(r"[A-Z]", v):
+            raise ValueError('Password must include at least one uppercase letter')
+        if not re.search(r"[a-z]", v):
+            raise ValueError('Password must include at least one lowercase letter')
+        if not re.search(r"[0-9]", v):
+            raise ValueError('Password must include at least one number')
+        if not re.search(r"[^A-Za-z0-9]", v):
+            raise ValueError('Password must include at least one special character')
         return v

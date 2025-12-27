@@ -921,6 +921,25 @@ async def claim_land(
     await db.commit()
     await db.refresh(new_land)
 
+    # Record transaction for purchase of unclaimed land
+    from app.models.transaction import Transaction, TransactionType, TransactionStatus
+    purchase_txn = Transaction(
+        land_id=new_land.land_id,
+        buyer_id=user_id,
+        seller_id=None,
+        listing_id=None,
+        transaction_type=TransactionType.FIXED_PRICE,
+        amount_bdt=claim_data.price_base_bdt,
+        currency="BDT",
+        status=TransactionStatus.COMPLETED,
+        platform_fee_bdt=0,
+        gateway_fee_bdt=0,
+        gateway_name="BALANCE"
+    )
+    db.add(purchase_txn)
+    await db.commit()
+    await db.refresh(purchase_txn)
+
     # Invalidate caches
     await cache_service.delete(f"user_lands:{user_id}")
 
