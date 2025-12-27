@@ -338,6 +338,11 @@ export const adminAPI = {
 
   updateEconomicSettings: (data) => api.patch("/admin/config/economy", data),
 
+  getTestingDebugSettings: () => api.get("/admin/config/economy"),
+
+  updateTestingDebugSettings: (data) =>
+    api.patch("/admin/config/testing-debug", data),
+
   // Land Management
   getLandAnalytics: () => api.get("/admin/lands/analytics"),
 
@@ -406,6 +411,46 @@ export const adminAPI = {
   getAllBans: (params) => api.get("/admin/security/bans", { params }),
 
   getSecurityLogs: (params) => api.get("/admin/security/logs", { params }),
+
+  // Cache Management
+  clearCacheAll: () => api.post("/admin/cache/clear"),
+  clearCacheByPrefix: (prefix) =>
+    api.post("/admin/cache/clear-prefix", null, { params: { prefix } }),
+
+  // Log Level
+  getLogLevel: () => api.get("/admin/config/log-level"),
+  setLogLevel: (level) => api.patch("/admin/config/log-level", { level }),
+
+  // IP Controls
+  getIpBlocks: (params) => api.get("/admin/security/ip-blocks", { params }),
+  addIpBlock: (ipAddress, reason, expiresMinutes = null) =>
+    api.post("/admin/security/ip-blocks", {
+      ip_address: ipAddress,
+      reason,
+      expires_minutes: expiresMinutes,
+    }),
+  removeIpBlock: (blockId) =>
+    api.delete(`/admin/security/ip-blocks/${blockId}`),
+
+  getIpWhitelist: (params) =>
+    api.get("/admin/security/ip-whitelist", { params }),
+  addIpWhitelist: (ipAddress, note) =>
+    api.post("/admin/security/ip-whitelist", { ip_address: ipAddress, note }),
+  removeIpWhitelist: (entryId) =>
+    api.delete(`/admin/security/ip-whitelist/${entryId}`),
+
+  // Maintenance & Operations
+  dbVacuum: (target = "database") => api.post("/admin/db/vacuum", { target }),
+  dbAnalyze: (target = "database") => api.post("/admin/db/analyze", { target }),
+  dbBackup: (note = "manual") => api.post("/admin/db/backup", { note }),
+  dbRestore: (backupId) =>
+    api.post("/admin/db/restore", { backup_id: backupId }),
+  dbReindex: (scope = { type: "database" }) =>
+    api.post("/admin/db/reindex", scope),
+
+  migrationsRunPending: () => api.post("/admin/migrations/run-pending"),
+  migrationsRollbackLast: () => api.post("/admin/migrations/rollback-last"),
+  migrationsHistory: () => api.get("/admin/migrations/history"),
 };
 
 export default api;

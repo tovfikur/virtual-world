@@ -2,7 +2,7 @@
 
 Statuses: ✅ Done · 🔄 In Progress · ⏳ Not Started
 
-## Completed (72)
+## Completed (76)
 
 - ✅ Biome trade fee configuration (AdminConfig + API + services)
 - ✅ Market volatility control (max price move per cycle)
@@ -76,12 +76,13 @@ Statuses: ✅ Done · 🔄 In Progress · ⏳ Not Started
 - ✅ Auto-reject transaction rules based on price deviation (toggle)
 - ✅ Admin audit logging coverage (20+ endpoints with create_audit_log)
 - ✅ Confirmation/preview flows for high-risk actions (market reset, user ban, fraud enforcement)
+- ✅ Testing & Debugging controls (test data generation, feature flags/A-B testing, debug tools, performance testing) fully exposed in admin GUI and operational
 
 ## In Progress (0)
 
 - None right now.
 
-## Not Started / Pending (~55)
+## Not Started / Pending (~51)
 
 ### Biome Trading & Market Stability
 
@@ -105,10 +106,7 @@ Statuses: ✅ Done · 🔄 In Progress · ⏳ Not Started
 
 ### Testing & Debugging
 
-- ⏳ Test data generation (users, lands, listings, market activity)
-- ⏳ Feature flags / A/B testing controls
-- ⏳ Debugging tools (session inspect, Redis inspect, WS connections)
-- ⏳ Performance/load testing triggers
+- COMPLETED
 
 ### Payment & Fraud
 
@@ -122,3 +120,4 @@ Statuses: ✅ Done · 🔄 In Progress · ⏳ Not Started
 
 - Completed items are already backed by migrations, services, and admin API endpoints.
 - Remaining items will be implemented sequentially with migrations, service logic, and admin API exposure.
+- GUI coverage aligned this pass: Security/Auth (token lifetimes, password policy, login limits, session caps), Payments (gateways, top-up, fee mode/percent/flat), Notifications & Email (push toggles, quiet hours, daily limits; email enable/rate + SMTP), Logs & Cache (log level selector; clear all/by prefix), IP Controls (block/whitelist list/add/remove), Maintenance (VACUUM/ANALYZE/REINDEX, backups, migrations), Analytics (revenue/users dashboards with day filters). Further panels pending for deeper reporting slices and any remaining governance dashboards.

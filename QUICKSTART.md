@@ -1,6 +1,44 @@
 # Virtual Land World - Quick Start Guide
 
+> Important: This project runs via Docker Compose. Use the Docker setup below; do not install Postgres/Redis/Python services natively for this project.
+
 ## 🚀 Getting Started
+
+### Docker-First Setup (Required)
+
+This is the supported way to run the stack locally.
+
+```bash
+# From the repository root
+docker compose pull
+docker compose build
+docker compose up -d
+
+# Check health and logs
+docker compose ps
+docker compose logs -f backend
+```
+
+Access services:
+
+- Backend API: http://localhost:8000 (Swagger: http://localhost:8000/api/docs)
+- Frontend UI: http://localhost/
+
+To stop:
+
+```bash
+docker compose down
+```
+
+To clean volumes (Postgres/Redis data):
+
+```bash
+docker compose down -v
+```
+
+Optional: create a `.env` at repo root to override compose env vars (e.g., `DB_USER`, `DB_PASSWORD`, `JWT_SECRET_KEY`).
+
+---
 
 This guide will help you set up and run the Virtual Land World backend that has been implemented so far.
 
@@ -10,14 +48,16 @@ This guide will help you set up and run the Virtual Land World backend that has 
 
 Before you begin, ensure you have the following installed:
 
-- **Python 3.11+** - [Download](https://www.python.org/downloads/)
-- **PostgreSQL 14+** - [Download](https://www.postgresql.org/download/)
-- **Redis 7+** - [Download](https://redis.io/download/)
+- **Docker Desktop** (includes Docker Compose)
 - **Git** (optional) - For version control
+
+Note: Native installs of Python/PostgreSQL/Redis are not required for running this project.
 
 ---
 
-## Installation Steps
+## Installation Steps (Manual Dev-only)
+
+The manual steps below are for development-only and are not required when using Docker. Prefer the Docker-First setup above.
 
 ### 1. Navigate to Backend Directory
 
@@ -83,7 +123,7 @@ copy .env.example .env
 
 ---
 
-## Running the Application
+## Running the Application (Manual Dev-only)
 
 ### Start the Backend Server
 
@@ -92,6 +132,7 @@ uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 ```
 
 You should see:
+
 ```
 INFO:     Uvicorn running on http://0.0.0.0:8000 (Press CTRL+C to quit)
 INFO:     Started reloader process
@@ -104,15 +145,28 @@ INFO:     Application startup complete.
 
 ## Testing the API
 
+### With Docker Running
+
+Ensure `docker compose up -d` is running. Then you can use Swagger at `http://localhost:8000/api/docs` or run the PowerShell test script from the host:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File test_testing_debug_controls.ps1
+```
+
+The script targets the backend on `http://localhost:8000` exposed by the `backend` service.
+
+---
+
 ### Option 1: Interactive API Documentation
 
 Open your browser and navigate to:
+
 - **Swagger UI:** http://localhost:8000/api/docs
 - **ReDoc:** http://localhost:8000/api/redoc
 
 You can test all endpoints directly from the browser!
 
-### Option 2: Test Script
+### Option 2: Test Script (Manual Dev-only)
 
 ```bash
 # In a new terminal (keep the server running)
@@ -121,6 +175,7 @@ python test_backend.py
 ```
 
 Expected output:
+
 ```
 ============================================================
 Virtual Land World - Backend API Test
@@ -177,6 +232,7 @@ curl http://localhost:8000/api/v1/auth/me \
 ## Available Endpoints
 
 ### Authentication (✅ Implemented)
+
 - `POST /api/v1/auth/register` - Register new user
 - `POST /api/v1/auth/login` - Login and get JWT token
 - `POST /api/v1/auth/refresh` - Refresh access token
@@ -184,11 +240,13 @@ curl http://localhost:8000/api/v1/auth/me \
 - `GET /api/v1/auth/me` - Get current user profile
 
 ### Health Checks
+
 - `GET /health` - Application health
 - `GET /health/db` - Database health
 - `GET /health/cache` - Redis health
 
 ### Coming Soon
+
 - User endpoints (profile, balance, topup)
 - Land endpoints (CRUD, search, transfer)
 - Chunk endpoints (world generation)
@@ -242,6 +300,7 @@ sqlalchemy.exc.OperationalError: could not connect to server
 ```
 
 **Solution:**
+
 1. Make sure PostgreSQL is running
 2. Check DATABASE_URL in `.env`
 3. Verify database exists: `psql -U postgres -l`
@@ -253,6 +312,7 @@ redis.exceptions.ConnectionError: Error 10061 connecting to localhost:6379
 ```
 
 **Solution:**
+
 1. Make sure Redis is running
 2. Check REDIS_URL in `.env`
 3. Test Redis: `redis-cli ping` (should return PONG)
@@ -264,6 +324,7 @@ ModuleNotFoundError: No module named 'fastapi'
 ```
 
 **Solution:**
+
 ```bash
 # Make sure virtual environment is activated
 venv\Scripts\activate  # Windows
@@ -280,6 +341,7 @@ Error: Address already in use
 ```
 
 **Solution:**
+
 ```bash
 # Use a different port
 uvicorn app.main:app --reload --port 8001
@@ -334,6 +396,7 @@ alembic downgrade -1
 ## Getting Help
 
 ### Resources
+
 - **API Documentation:** http://localhost:8000/api/docs
 - **FastAPI Docs:** https://fastapi.tiangolo.com/
 - **SQLAlchemy Docs:** https://docs.sqlalchemy.org/

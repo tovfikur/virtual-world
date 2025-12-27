@@ -1211,6 +1211,104 @@ class AdminConfig(BaseModel):
         comment="Require explicit confirmation before enforcing fraud penalties"
     )
 
+    # Testing & Debugging Controls
+    test_data_generation_enabled = Column(
+        Boolean,
+        default=False,
+        nullable=False,
+        comment="Enable test data generation mode"
+    )
+    test_data_users_count = Column(
+        Integer,
+        default=100,
+        nullable=False,
+        comment="Number of test users to generate"
+    )
+    test_data_lands_count = Column(
+        Integer,
+        default=1000,
+        nullable=False,
+        comment="Number of test lands to generate"
+    )
+    test_data_listings_count = Column(
+        Integer,
+        default=500,
+        nullable=False,
+        comment="Number of test listings to generate"
+    )
+    test_data_market_activity_enabled = Column(
+        Boolean,
+        default=False,
+        nullable=False,
+        comment="Enable simulated market activity in test mode"
+    )
+    feature_flags_enabled = Column(
+        Boolean,
+        default=True,
+        nullable=False,
+        comment="Enable feature flag system"
+    )
+    ab_testing_enabled = Column(
+        Boolean,
+        default=False,
+        nullable=False,
+        comment="Enable A/B testing controls"
+    )
+    ab_test_split_percent = Column(
+        Float,
+        default=50.0,
+        nullable=False,
+        comment="A/B test split percentage (0-100)"
+    )
+    ab_test_variant_id = Column(
+        String(64),
+        default="control",
+        nullable=False,
+        comment="Current A/B test variant (control/variant_a/variant_b, etc)"
+    )
+    debug_session_inspect_enabled = Column(
+        Boolean,
+        default=False,
+        nullable=False,
+        comment="Enable session inspection/debugging endpoint"
+    )
+    debug_redis_inspect_enabled = Column(
+        Boolean,
+        default=False,
+        nullable=False,
+        comment="Enable Redis inspection/debugging endpoint"
+    )
+    debug_websocket_connections_enabled = Column(
+        Boolean,
+        default=False,
+        nullable=False,
+        comment="Enable WebSocket connection debugging"
+    )
+    debug_verbose_logging_enabled = Column(
+        Boolean,
+        default=False,
+        nullable=False,
+        comment="Enable verbose debug logging for troubleshooting"
+    )
+    perf_test_enabled = Column(
+        Boolean,
+        default=False,
+        nullable=False,
+        comment="Enable performance testing mode"
+    )
+    perf_test_concurrent_users = Column(
+        Integer,
+        default=10,
+        nullable=False,
+        comment="Number of concurrent users for perf testing"
+    )
+    perf_test_requests_per_second = Column(
+        Integer,
+        default=100,
+        nullable=False,
+        comment="Target requests per second for perf testing"
+    )
+
     # Meta
     updated_by_id = Column(
         UUID(as_uuid=True),
@@ -1535,6 +1633,34 @@ class AdminConfig(BaseModel):
                 "invalidation_scheduling_enabled": self.chunk_cache_invalidation_scheduling_enabled,
                 "invalidation_interval_minutes": self.chunk_cache_invalidation_interval_minutes,
                 "invalidation_max_age_minutes": self.chunk_cache_invalidation_max_age_minutes,
+            },
+            "testing_debugging": {
+                "test_data_generation": {
+                    "enabled": self.test_data_generation_enabled,
+                    "users_count": self.test_data_users_count,
+                    "lands_count": self.test_data_lands_count,
+                    "listings_count": self.test_data_listings_count,
+                    "market_activity_enabled": self.test_data_market_activity_enabled,
+                },
+                "feature_flags": {
+                    "enabled": self.feature_flags_enabled,
+                },
+                "ab_testing": {
+                    "enabled": self.ab_testing_enabled,
+                    "split_percent": self.ab_test_split_percent,
+                    "variant_id": self.ab_test_variant_id,
+                },
+                "debug_tools": {
+                    "session_inspect_enabled": self.debug_session_inspect_enabled,
+                    "redis_inspect_enabled": self.debug_redis_inspect_enabled,
+                    "websocket_connections_enabled": self.debug_websocket_connections_enabled,
+                    "verbose_logging_enabled": self.debug_verbose_logging_enabled,
+                },
+                "performance_testing": {
+                    "enabled": self.perf_test_enabled,
+                    "concurrent_users": self.perf_test_concurrent_users,
+                    "requests_per_second": self.perf_test_requests_per_second,
+                },
             },
             "updated_at": self.updated_at.isoformat() if self.updated_at else None
         }

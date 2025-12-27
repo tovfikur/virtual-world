@@ -1523,6 +1523,29 @@ class CacheSettingsUpdate(BaseModel):
     chunk_cache_invalidation_max_age_minutes: Optional[int] = None
 
 
+class TestingDebugSettingsUpdate(BaseModel):
+    # Test Data Generation
+    test_data_generation_enabled: Optional[bool] = None
+    test_data_users_count: Optional[int] = None
+    test_data_lands_count: Optional[int] = None
+    test_data_listings_count: Optional[int] = None
+    test_data_market_activity_enabled: Optional[bool] = None
+    # Feature Flags & A/B Testing
+    feature_flags_enabled: Optional[bool] = None
+    ab_testing_enabled: Optional[bool] = None
+    ab_test_split_percent: Optional[float] = None
+    ab_test_variant_id: Optional[str] = None
+    # Debugging Tools
+    debug_session_inspect_enabled: Optional[bool] = None
+    debug_redis_inspect_enabled: Optional[bool] = None
+    debug_websocket_connections_enabled: Optional[bool] = None
+    debug_verbose_logging_enabled: Optional[bool] = None
+    # Performance Testing
+    perf_test_enabled: Optional[bool] = None
+    perf_test_concurrent_users: Optional[int] = None
+    perf_test_requests_per_second: Optional[int] = None
+
+
 @router.get("/config/economy")
 async def get_economic_settings(
     db: AsyncSession = Depends(get_db),
@@ -2185,6 +2208,104 @@ async def update_cache_settings(
 
     return {
         "message": "Cache settings updated successfully",
+        "updated_fields": updates,
+    }
+
+
+@router.patch("/config/testing-debug")
+async def update_testing_debug_settings(
+    settings: TestingDebugSettingsUpdate,
+    db: AsyncSession = Depends(get_db),
+    admin: dict = Depends(require_admin)
+):
+    """Update testing and debugging controls."""
+    result = await db.execute(select(AdminConfig).limit(1))
+    config = result.scalar_one_or_none()
+
+    if not config:
+        raise HTTPException(status_code=404, detail="Configuration not found")
+
+    updates = settings.dict(exclude_none=True)
+
+    # Test Data Generation
+    if settings.test_data_generation_enabled is not None:
+        config.test_data_generation_enabled = settings.test_data_generation_enabled
+
+    if settings.test_data_users_count is not None:
+        if settings.test_data_users_count < 1:
+            raise HTTPException(status_code=400, detail="test_data_users_count must be >= 1")
+        config.test_data_users_count = settings.test_data_users_count
+
+    if settings.test_data_lands_count is not None:
+        if settings.test_data_lands_count < 1:
+            raise HTTPException(status_code=400, detail="test_data_lands_count must be >= 1")
+        config.test_data_lands_count = settings.test_data_lands_count
+
+    if settings.test_data_listings_count is not None:
+        if settings.test_data_listings_count < 1:
+            raise HTTPException(status_code=400, detail="test_data_listings_count must be >= 1")
+        config.test_data_listings_count = settings.test_data_listings_count
+
+    if settings.test_data_market_activity_enabled is not None:
+        config.test_data_market_activity_enabled = settings.test_data_market_activity_enabled
+
+    # Feature Flags & A/B Testing
+    if settings.feature_flags_enabled is not None:
+        config.feature_flags_enabled = settings.feature_flags_enabled
+
+    if settings.ab_testing_enabled is not None:
+        config.ab_testing_enabled = settings.ab_testing_enabled
+
+    if settings.ab_test_split_percent is not None:
+        if settings.ab_test_split_percent < 0 or settings.ab_test_split_percent > 100:
+            raise HTTPException(status_code=400, detail="ab_test_split_percent must be between 0 and 100")
+        config.ab_test_split_percent = settings.ab_test_split_percent
+
+    if settings.ab_test_variant_id is not None:
+        if len(settings.ab_test_variant_id.strip()) == 0:
+            raise HTTPException(status_code=400, detail="ab_test_variant_id cannot be empty")
+        config.ab_test_variant_id = settings.ab_test_variant_id
+
+    # Debugging Tools
+    if settings.debug_session_inspect_enabled is not None:
+        config.debug_session_inspect_enabled = settings.debug_session_inspect_enabled
+
+    if settings.debug_redis_inspect_enabled is not None:
+        config.debug_redis_inspect_enabled = settings.debug_redis_inspect_enabled
+
+    if settings.debug_websocket_connections_enabled is not None:
+        config.debug_websocket_connections_enabled = settings.debug_websocket_connections_enabled
+
+    if settings.debug_verbose_logging_enabled is not None:
+        config.debug_verbose_logging_enabled = settings.debug_verbose_logging_enabled
+
+    # Performance Testing
+    if settings.perf_test_enabled is not None:
+        config.perf_test_enabled = settings.perf_test_enabled
+
+    if settings.perf_test_concurrent_users is not None:
+        if settings.perf_test_concurrent_users < 1:
+            raise HTTPException(status_code=400, detail="perf_test_concurrent_users must be >= 1")
+        config.perf_test_concurrent_users = settings.perf_test_concurrent_users
+
+    if settings.perf_test_requests_per_second is not None:
+        if settings.perf_test_requests_per_second < 1:
+            raise HTTPException(status_code=400, detail="perf_test_requests_per_second must be >= 1")
+        config.perf_test_requests_per_second = settings.perf_test_requests_per_second
+
+    config.updated_at = datetime.utcnow()
+    db.add(create_audit_log(
+        actor_id=admin["sub"],
+        event_type="update_testing_debug_settings",
+        resource_type="config",
+        resource_id=str(config.config_id),
+        action="Updated testing and debugging settings",
+        details=updates,
+    ))
+    await db.commit()
+
+    return {
+        "message": "Testing and debugging settings updated successfully",
         "updated_fields": updates,
     }
 

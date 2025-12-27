@@ -65,7 +65,9 @@ A full-stack web application featuring real-time multiplayer interaction, land o
 
 ## 🚀 Quick Start
 
-### Using Docker (Recommended)
+### Using Docker (Required)
+
+This project is designed to run via Docker Compose. Do not install or run PostgreSQL/Redis/Backend/Frontend services natively for regular usage; use the containers provided.
 
 ```bash
 # Clone repository
@@ -77,13 +79,19 @@ cp .env.example .env
 # Edit .env with your settings (REQUIRED for real deployments)
 
 # Start all services
-docker-compose up -d
+docker compose pull
+docker compose build
+docker compose up -d
+
+# Check status & logs
+docker compose ps
+docker compose logs -f backend
 
 # Access the application
 open http://localhost
 ```
 
-### Manual Setup
+### Manual Setup (Dev-only)
 
 See [DEPLOYMENT.md](./DEPLOYMENT.md) for detailed setup instructions.
 

@@ -5,6 +5,7 @@ Complete guide for deploying the Virtual Land World platform to production.
 ## 🚀 Quick Start (Docker Compose)
 
 ### Prerequisites
+
 - Docker 20.10+
 - Docker Compose 2.0+
 - Domain name (for SSL)
@@ -26,6 +27,7 @@ nano .env
 ```
 
 **Required Changes in .env:**
+
 - `DB_PASSWORD` - Strong database password
 - `REDIS_PASSWORD` - Strong Redis password
 - `JWT_SECRET_KEY` - Generate with `openssl rand -hex 32`
@@ -36,26 +38,27 @@ nano .env
 
 ```bash
 # Build images
-docker-compose build
+docker compose pull
+docker compose build
 
 # Start all services
-docker-compose up -d
+docker compose up -d
 
 # Check status
-docker-compose ps
+docker compose ps
 
 # View logs
-docker-compose logs -f
+docker compose logs -f
 ```
 
 ### 3. Initialize Database
 
 ```bash
 # Run migrations
-docker-compose exec backend alembic upgrade head
+docker compose exec backend alembic upgrade head
 
 # Create initial admin user (optional)
-docker-compose exec backend python -c "
+docker compose exec backend python -c "
 from app.models.user import User
 from app.db.session import SessionLocal
 import bcrypt
@@ -74,30 +77,29 @@ print('Admin user created!')
 "
 ```
 
-### 4. Build Frontend
+### 4. Frontend Build & Serve
+
+Handled by Docker Compose via the `frontend` service. If you need to build locally for debugging:
 
 ```bash
-# Install dependencies
 cd frontend
 npm install
-
-# Build for production
 npm run build
-
-# Built files are in frontend/dist/
-# They will be served by Nginx
+# Outputs to frontend/dist/ (containers normally handle serving)
 ```
 
 ### 5. Access Application
 
 - Frontend: `http://localhost`
-- Backend API: `http://localhost/api`
-- API Docs: `http://localhost/api/docs`
-- Health Check: `http://localhost/health`
+- Backend API: `http://localhost:8000`
+- API Docs: `http://localhost:8000/api/docs`
+- Health Check: `http://localhost:8000/health`
 
 ---
 
 ## 🔧 Manual Setup (Without Docker)
+
+Note: Native/manual setup is provided for reference and development-only. Production and standard local usage should use Docker Compose.
 
 ### Backend Setup
 
@@ -273,19 +275,19 @@ curl http://localhost/health/cache
 Add to `docker-compose.yml`:
 
 ```yaml
-  prometheus:
-    image: prom/prometheus
-    ports:
-      - "9090:9090"
-    volumes:
-      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml
+prometheus:
+  image: prom/prometheus
+  ports:
+    - "9090:9090"
+  volumes:
+    - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml
 
-  grafana:
-    image: grafana/grafana
-    ports:
-      - "3000:3000"
-    depends_on:
-      - prometheus
+grafana:
+  image: grafana/grafana
+  ports:
+    - "3000:3000"
+  depends_on:
+    - prometheus
 ```
 
 ---
@@ -498,15 +500,15 @@ server {
 
 See `.env.production` for full list. Key variables:
 
-| Variable | Required | Description |
-|----------|----------|-------------|
-| `DATABASE_URL` | Yes | PostgreSQL connection string |
-| `REDIS_URL` | Yes | Redis connection string |
-| `JWT_SECRET_KEY` | Yes | JWT signing key (32+ chars) |
-| `ENCRYPTION_KEY` | Yes | Message encryption key |
-| `CORS_ORIGINS` | Yes | Allowed origins for CORS |
-| `DEFAULT_WORLD_SEED` | No | World generation seed |
-| `LOG_LEVEL` | No | Logging level (default: INFO) |
+| Variable             | Required | Description                   |
+| -------------------- | -------- | ----------------------------- |
+| `DATABASE_URL`       | Yes      | PostgreSQL connection string  |
+| `REDIS_URL`          | Yes      | Redis connection string       |
+| `JWT_SECRET_KEY`     | Yes      | JWT signing key (32+ chars)   |
+| `ENCRYPTION_KEY`     | Yes      | Message encryption key        |
+| `CORS_ORIGINS`       | Yes      | Allowed origins for CORS      |
+| `DEFAULT_WORLD_SEED` | No       | World generation seed         |
+| `LOG_LEVEL`          | No       | Logging level (default: INFO) |
 
 ---
 

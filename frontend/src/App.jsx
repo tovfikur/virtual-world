@@ -28,6 +28,9 @@ import AdminModerationPage from "./pages/AdminModerationPage";
 import AdminFeaturesPage from "./pages/AdminFeaturesPage";
 import AdminCommunicationPage from "./pages/AdminCommunicationPage";
 import AdminSecurityPage from "./pages/AdminSecurityPage";
+import AdminTestingDebugPage from "./pages/AdminTestingDebugPage";
+import AdminMaintenancePage from "./pages/AdminMaintenancePage";
+import AdminAnalyticsPage from "./pages/AdminAnalyticsPage";
 
 // Components
 import ProtectedRoute from "./components/ProtectedRoute";
@@ -265,6 +268,30 @@ function App() {
           element={
             <ProtectedRoute>
               <AdminSecurityPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/admin/testing-debug"
+          element={
+            <ProtectedRoute>
+              <AdminTestingDebugPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/admin/maintenance"
+          element={
+            <ProtectedRoute>
+              <AdminMaintenancePage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/admin/analytics"
+          element={
+            <ProtectedRoute>
+              <AdminAnalyticsPage />
             </ProtectedRoute>
           }
         />
