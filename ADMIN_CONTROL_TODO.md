@@ -2,7 +2,7 @@
 
 Statuses: ✅ Done · 🔄 In Progress · ⏳ Not Started
 
-## Completed (71)
+## Completed (72)
 
 - ✅ Biome trade fee configuration (AdminConfig + API + services)
 - ✅ Market volatility control (max price move per cycle)
@@ -42,6 +42,7 @@ Statuses: ✅ Done · 🔄 In Progress · ⏳ Not Started
 - ✅ World seed + noise/biome distribution controls
 - ✅ Chunk cache TTL controls
 - ✅ Chunk cache invalidation tools (chunk/all)
+- ✅ Chunk cache invalidation scheduling (interval + max age)
 - ✅ Minimum reserve price requirements
 - ✅ Listing creation fee / premium listing fee
 - ✅ Success fee vs flat fee toggle
@@ -80,7 +81,7 @@ Statuses: ✅ Done · 🔄 In Progress · ⏳ Not Started
 
 - None right now.
 
-## Not Started / Pending (~56)
+## Not Started / Pending (~55)
 
 ### Biome Trading & Market Stability
 
@@ -88,7 +89,7 @@ Statuses: ✅ Done · 🔄 In Progress · ⏳ Not Started
 
 ### World Generation
 
-- ⏳ Chunk cache invalidation scheduling (optional)
+- COMPLETED (all, including optional cache invalidation scheduling)
 
 ### Land Pricing & Mechanics
 
