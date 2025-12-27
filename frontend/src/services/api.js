@@ -321,6 +321,10 @@ export const adminAPI = {
 
   updateUser: (userId, data) => api.patch(`/admin/users/${userId}`, data),
 
+  verifyUser: (userId) => api.post(`/admin/users/${userId}/verify`),
+
+  unverifyUser: (userId) => api.delete(`/admin/users/${userId}/verify`),
+
   // System Monitoring
   getSystemHealth: () => api.get("/admin/system/health"),
 

@@ -14,6 +14,10 @@ function AdminUserDetailModal({ user, onClose, onUserUpdated }) {
   const [isBanning, setIsBanning] = useState(false);
   const [banReason, setBanReason] = useState(user?.ban_reason || "");
   const [isEditingBan, setIsEditingBan] = useState(false);
+  const [isVerifying, setIsVerifying] = useState(false);
+  const [isAdjustingBalance, setIsAdjustingBalance] = useState(false);
+  const [balanceAmount, setBalanceAmount] = useState("");
+  const [balanceAction, setBalanceAction] = useState("add");
 
   const handleBanUser = async () => {
     try {
@@ -38,6 +42,60 @@ function AdminUserDetailModal({ user, onClose, onUserUpdated }) {
       onClose();
     } catch (error) {
       toast.error(error.response?.data?.detail || "Failed to unban user");
+    } finally {
+      setIsBanning(false);
+    }
+  };
+
+  const handleVerify = async (flag) => {
+    try {
+      setIsVerifying(true);
+      if (flag) {
+        await adminAPI.verifyUser(user.user_id);
+        toast.success("User verified");
+      } else {
+        await adminAPI.unverifyUser(user.user_id);
+        toast.success("User unverified");
+      }
+      onUserUpdated();
+      onClose();
+    } catch (error) {
+      toast.error(error.response?.data?.detail || "Verification update failed");
+    } finally {
+      setIsVerifying(false);
+    }
+  };
+
+  const handleBalanceAdjustment = async () => {
+    const amount = parseInt(balanceAmount);
+    if (isNaN(amount) || amount <= 0) {
+      toast.error("Please enter a valid positive amount");
+      return;
+    }
+
+    try {
+      setIsBanning(true);
+      const currentBalance = user.balance_bdt || 0;
+      const newBalance =
+        balanceAction === "add"
+          ? currentBalance + amount
+          : currentBalance - amount;
+
+      if (newBalance < 0) {
+        toast.error("Cannot deduct more than current balance");
+        return;
+      }
+
+      await adminAPI.updateUser(user.user_id, { balance_bdt: newBalance });
+      toast.success(
+        `Balance ${balanceAction === "add" ? "added" : "deducted"} successfully`
+      );
+      setBalanceAmount("");
+      setIsAdjustingBalance(false);
+      onUserUpdated();
+      onClose();
+    } catch (error) {
+      toast.error(error.response?.data?.detail || "Failed to adjust balance");
     } finally {
       setIsBanning(false);
     }
@@ -136,8 +194,15 @@ function AdminUserDetailModal({ user, onClose, onUserUpdated }) {
                   </div>
                   <div>
                     <p className="text-sm text-gray-400">Verified</p>
-                    <p className="font-semibold">
+                    <p className="font-semibold flex items-center gap-2">
                       {user?.verified ? "Yes" : "No"}
+                      <button
+                        onClick={() => handleVerify(!user?.verified)}
+                        disabled={isVerifying}
+                        className="text-xs px-2 py-1 rounded bg-blue-700 hover:bg-blue-600 disabled:opacity-50"
+                      >
+                        {user?.verified ? "Unverify" : "Verify"}
+                      </button>
                     </p>
                   </div>
                   <div>
@@ -148,9 +213,9 @@ function AdminUserDetailModal({ user, onClose, onUserUpdated }) {
                         : "N/A"}
                     </p>
                   </div>
-                  <div>
+                  <div className="col-span-2">
                     <p className="text-sm text-gray-400">Bio</p>
-                    <p className="font-semibold text-sm truncate">
+                    <p className="text-sm text-gray-200 whitespace-pre-line bg-gray-800/80 border border-gray-600 rounded p-2">
                       {user?.bio || "—"}
                     </p>
                   </div>
@@ -214,6 +279,70 @@ function AdminUserDetailModal({ user, onClose, onUserUpdated }) {
 
           {activeTab === "actions" && (
             <div className="space-y-4">
+              {/* Balance Management */}
+              <div className="bg-gray-700 rounded-lg p-4 border border-gray-600">
+                <h3 className="font-semibold mb-3">Balance Management</h3>
+                {!isAdjustingBalance ? (
+                  <button
+                    onClick={() => setIsAdjustingBalance(true)}
+                    className="w-full px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors font-semibold"
+                  >
+                    Adjust Balance
+                  </button>
+                ) : (
+                  <div className="space-y-3">
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => setBalanceAction("add")}
+                        className={`flex-1 px-3 py-2 rounded-lg font-semibold transition-colors ${
+                          balanceAction === "add"
+                            ? "bg-green-600 text-white"
+                            : "bg-gray-600 text-gray-300 hover:bg-gray-500"
+                        }`}
+                      >
+                        Add Money
+                      </button>
+                      <button
+                        onClick={() => setBalanceAction("deduct")}
+                        className={`flex-1 px-3 py-2 rounded-lg font-semibold transition-colors ${
+                          balanceAction === "deduct"
+                            ? "bg-red-600 text-white"
+                            : "bg-gray-600 text-gray-300 hover:bg-gray-500"
+                        }`}
+                      >
+                        Deduct Money
+                      </button>
+                    </div>
+                    <input
+                      type="number"
+                      value={balanceAmount}
+                      onChange={(e) => setBalanceAmount(e.target.value)}
+                      placeholder="Amount (BDT)"
+                      min="1"
+                      className="w-full px-3 py-2 bg-gray-600 border border-gray-500 rounded-lg text-white focus:outline-none focus:border-blue-500"
+                    />
+                    <div className="flex gap-2">
+                      <button
+                        onClick={handleBalanceAdjustment}
+                        disabled={isBanning || !balanceAmount}
+                        className="flex-1 px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white rounded-lg transition-colors font-semibold"
+                      >
+                        {isBanning ? "Processing..." : "Confirm"}
+                      </button>
+                      <button
+                        onClick={() => {
+                          setIsAdjustingBalance(false);
+                          setBalanceAmount("");
+                        }}
+                        className="flex-1 px-4 py-2 bg-gray-600 hover:bg-gray-500 text-white rounded-lg transition-colors"
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+
               {/* Ban Section */}
               <div className="bg-gray-700 rounded-lg p-4 border border-gray-600">
                 <h3 className="font-semibold mb-3">Ban Management</h3>

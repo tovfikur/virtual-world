@@ -897,23 +897,59 @@ async def get_user_details(
             "email": user.email,
             "role": user.role,
             "balance_bdt": user.balance_bdt,
+            "avatar_url": user.avatar_url,
+            "bio": user.bio,
+            "verified": user.verified,
+            "is_banned": user.is_banned,
+            "ban_reason": user.ban_reason,
             "created_at": user.created_at.isoformat(),
             "last_login": user.last_login.isoformat() if user.last_login else None,
             "stats": {
                 "lands_owned": lands_count or 0,
                 "transactions": transactions_count or 0,
+                "total_transactions": transactions_count or 0,
                 "active_listings": listings_count or 0
             }
         }
 
     except HTTPException:
         raise
-    except Exception as e:
-        logger.error(f"Error getting user details: {e}")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Failed to fetch user details"
-        )
+
+
+@router.post("/users/{user_id}/verify")
+async def verify_user(
+    user_id: str,
+    db: AsyncSession = Depends(get_db),
+    admin: dict = Depends(require_admin)
+):
+    """Mark user as email-verified (admin override)."""
+    user = await db.get(User, user_id)
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    user.verified = True
+    await db.commit()
+    await db.refresh(user)
+
+    return {"status": "verified", "user_id": user_id}
+
+
+@router.delete("/users/{user_id}/verify")
+async def unverify_user(
+    user_id: str,
+    db: AsyncSession = Depends(get_db),
+    admin: dict = Depends(require_admin)
+):
+    """Mark user as not verified (admin override)."""
+    user = await db.get(User, user_id)
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    user.verified = False
+    await db.commit()
+    await db.refresh(user)
+
+    return {"status": "unverified", "user_id": user_id}
 
 
 @router.patch("/users/{user_id}")

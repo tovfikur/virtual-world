@@ -22,6 +22,10 @@ function ProfilePage() {
   const [balance, setBalance] = useState(null);
   const [loading, setLoading] = useState(true);
   const [loadingLands, setLoadingLands] = useState(false);
+  const [showTopupModal, setShowTopupModal] = useState(false);
+  const [topupAmount, setTopupAmount] = useState(500);
+  const [topupGateway, setTopupGateway] = useState("sslcommerz");
+  const [topupLoading, setTopupLoading] = useState(false);
 
   useEffect(() => {
     if (user) {
@@ -201,6 +205,44 @@ function ProfilePage() {
     [navigate, setFocusTarget, user]
   );
 
+  const handleTopup = async () => {
+    if (!user) return;
+    if (!topupAmount || topupAmount < 100) {
+      toast.error("Enter at least 100 BDT");
+      return;
+    }
+
+    try {
+      setTopupLoading(true);
+      const res = await usersAPI.initiateTopup(
+        user.user_id,
+        Number(topupAmount),
+        topupGateway
+      );
+
+      const url = res.data?.payment_url;
+      const txn = res.data?.transaction_id;
+      toast.success("Payment link ready. Complete checkout to finish top-up.");
+
+      if (url) {
+        window.open(url, "_blank", "noopener,noreferrer");
+      }
+
+      if (txn) {
+        console.log("Top-up transaction id:", txn);
+      }
+
+      setShowTopupModal(false);
+    } catch (error) {
+      const msg =
+        error.response?.data?.detail ||
+        "Failed to start top-up. Please try again.";
+      toast.error(msg);
+    } finally {
+      setTopupLoading(false);
+    }
+  };
+
   if (loading) {
     return (
       <div className="min-h-screen bg-gray-900 flex items-center justify-center">
@@ -240,7 +282,10 @@ function ProfilePage() {
             <p className="text-3xl md:text-4xl font-bold mb-3 md:mb-4">
               {balance?.balance_bdt || 0} BDT
             </p>
-            <button className="bg-white hover:bg-gray-100 text-blue-900 font-semibold px-3 md:px-4 py-2 rounded-lg transition-colors text-sm md:text-base">
+            <button
+              onClick={() => setShowTopupModal(true)}
+              className="bg-white hover:bg-gray-100 text-blue-900 font-semibold px-3 md:px-4 py-2 rounded-lg transition-colors text-sm md:text-base"
+            >
               Top Up
             </button>
           </div>
@@ -428,6 +473,86 @@ function ProfilePage() {
           )}
         </div>
       </div>
+
+      {/* Top-up Modal */}
+      {showTopupModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-gray-800 border border-gray-700 rounded-lg p-6 w-full max-w-md shadow-xl">
+            <div className="flex justify-between items-center mb-4">
+              <h3 className="text-lg font-bold">Add Funds</h3>
+              <button
+                onClick={() => setShowTopupModal(false)}
+                className="text-gray-400 hover:text-white"
+              >
+                <svg
+                  className="w-6 h-6"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M6 18L18 6M6 6l12 12"
+                  />
+                </svg>
+              </button>
+            </div>
+
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm text-gray-400 mb-1">
+                  Amount (BDT)
+                </label>
+                <input
+                  type="number"
+                  min={100}
+                  max={100000}
+                  value={topupAmount}
+                  onChange={(e) => setTopupAmount(Number(e.target.value))}
+                  className="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg focus:outline-none focus:border-blue-500 text-white"
+                />
+                <p className="text-xs text-gray-500 mt-1">
+                  Min 100, Max 100,000
+                </p>
+              </div>
+
+              <div>
+                <label className="block text-sm text-gray-400 mb-1">
+                  Gateway
+                </label>
+                <select
+                  value={topupGateway}
+                  onChange={(e) => setTopupGateway(e.target.value)}
+                  className="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg focus:outline-none focus:border-blue-500 text-white"
+                >
+                  <option value="sslcommerz">SSLCommerz</option>
+                  <option value="bkash">bKash</option>
+                  <option value="nagad">Nagad</option>
+                  <option value="rocket">Rocket</option>
+                </select>
+              </div>
+
+              <div className="flex gap-3 pt-2">
+                <button
+                  onClick={handleTopup}
+                  disabled={topupLoading}
+                  className="flex-1 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed text-white font-semibold px-4 py-2 rounded-lg transition-colors"
+                >
+                  {topupLoading ? "Processing..." : "Start Payment"}
+                </button>
+                <button
+                  onClick={() => setShowTopupModal(false)}
+                  className="flex-1 bg-gray-700 hover:bg-gray-600 text-white font-semibold px-4 py-2 rounded-lg transition-colors"
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
