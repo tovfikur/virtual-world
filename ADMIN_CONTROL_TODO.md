@@ -2,7 +2,7 @@
 
 Statuses: ✅ Done · 🔄 In Progress · ⏳ Not Started
 
-## Completed (69)
+## Completed (71)
 
 - ✅ Biome trade fee configuration (AdminConfig + API + services)
 - ✅ Market volatility control (max price move per cycle)
@@ -73,12 +73,14 @@ Statuses: ✅ Done · 🔄 In Progress · ⏳ Not Started
 - ✅ Wash trading detection enforcement (toggle + optional temp suspend)
 - ✅ Related account linkage detection enforcement (toggle)
 - ✅ Auto-reject transaction rules based on price deviation (toggle)
+- ✅ Admin audit logging coverage (20+ endpoints with create_audit_log)
+- ✅ Confirmation/preview flows for high-risk actions (market reset, user ban, fraud enforcement)
 
 ## In Progress (0)
 
 - None right now.
 
-## Not Started / Pending (~58)
+## Not Started / Pending (~56)
 
 ### Biome Trading & Market Stability
 
@@ -113,8 +115,7 @@ Statuses: ✅ Done · 🔄 In Progress · ⏳ Not Started
 
 ### Misc Governance
 
-- ⏳ Admin audit logging coverage for all new controls
-- ⏳ Confirmation/preview flows for high-risk actions
+// COMPLETED IN THIS PASS
 
 ## Notes
 
