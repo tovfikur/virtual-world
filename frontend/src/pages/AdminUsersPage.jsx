@@ -3,10 +3,11 @@
  * List, search, and manage users
  */
 
-import { useState, useEffect } from 'react';
-import { adminAPI } from '../services/api';
-import useAuthStore from '../stores/authStore';
-import toast from 'react-hot-toast';
+import { useState, useEffect } from "react";
+import { adminAPI } from "../services/api";
+import useAuthStore from "../stores/authStore";
+import AdminUserDetailModal from "../components/AdminUserDetailModal";
+import toast from "react-hot-toast";
 
 function AdminUsersPage() {
   const { user } = useAuthStore();
@@ -14,14 +15,14 @@ function AdminUsersPage() {
   const [loading, setLoading] = useState(true);
   const [page, setPage] = useState(1);
   const [total, setTotal] = useState(0);
-  const [search, setSearch] = useState('');
-  const [roleFilter, setRoleFilter] = useState('');
+  const [search, setSearch] = useState("");
+  const [roleFilter, setRoleFilter] = useState("");
   const [selectedUser, setSelectedUser] = useState(null);
   const [editMode, setEditMode] = useState(false);
   const [editData, setEditData] = useState({});
 
   useEffect(() => {
-    if (user?.role === 'admin') {
+    if (user?.role === "admin") {
       loadUsers();
     }
   }, [user, page, search, roleFilter]);
@@ -37,7 +38,7 @@ function AdminUsersPage() {
       setUsers(response.data.data);
       setTotal(response.data.pagination.total);
     } catch (error) {
-      toast.error('Failed to load users');
+      toast.error("Failed to load users");
     } finally {
       setLoading(false);
     }
@@ -48,7 +49,7 @@ function AdminUsersPage() {
       const response = await adminAPI.getUserDetails(userId);
       setSelectedUser(response.data);
     } catch (error) {
-      toast.error('Failed to load user details');
+      toast.error("Failed to load user details");
     }
   };
 
@@ -57,7 +58,7 @@ function AdminUsersPage() {
     setEditData({
       user_id: userData.user_id,
       role: userData.role,
-      balance_bdt: userData.balance_bdt
+      balance_bdt: userData.balance_bdt,
     });
   };
 
@@ -65,9 +66,9 @@ function AdminUsersPage() {
     try {
       await adminAPI.updateUser(editData.user_id, {
         role: editData.role,
-        balance_bdt: editData.balance_bdt
+        balance_bdt: editData.balance_bdt,
       });
-      toast.success('User updated successfully');
+      toast.success("User updated successfully");
       setEditMode(false);
       setEditData({});
       loadUsers();
@@ -75,17 +76,19 @@ function AdminUsersPage() {
         setSelectedUser(null);
       }
     } catch (error) {
-      toast.error(error.response?.data?.detail || 'Failed to update user');
+      toast.error(error.response?.data?.detail || "Failed to update user");
     }
   };
 
   const totalPages = Math.ceil(total / 20);
 
-  if (user?.role !== 'admin') {
+  if (user?.role !== "admin") {
     return (
       <div className="min-h-screen bg-gray-900 flex items-center justify-center">
         <div className="text-center">
-          <h1 className="text-2xl font-bold text-red-400 mb-4">Access Denied</h1>
+          <h1 className="text-2xl font-bold text-red-400 mb-4">
+            Access Denied
+          </h1>
           <p className="text-gray-400">Admin access required</p>
         </div>
       </div>
@@ -148,7 +151,7 @@ function AdminUsersPage() {
                 <thead className="bg-gray-700">
                   <tr>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">
-                      Username
+                      User
                     </th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">
                       Email
@@ -160,7 +163,7 @@ function AdminUsersPage() {
                       Balance
                     </th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">
-                      Registered
+                      Status
                     </th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">
                       Actions
@@ -169,40 +172,84 @@ function AdminUsersPage() {
                 </thead>
                 <tbody className="divide-y divide-gray-700">
                   {users.map((u) => (
-                    <tr key={u.user_id} className="hover:bg-gray-700 transition-colors">
+                    <tr
+                      key={u.user_id}
+                      className="hover:bg-gray-700 transition-colors"
+                    >
                       <td className="px-6 py-4 whitespace-nowrap">
-                        <span className="font-semibold">{u.username}</span>
+                        <div className="flex items-center gap-3">
+                          {u.avatar_url ? (
+                            <img
+                              src={u.avatar_url}
+                              alt={u.username}
+                              className="w-8 h-8 rounded-full bg-gray-600 object-cover border border-gray-500"
+                            />
+                          ) : (
+                            <div className="w-8 h-8 rounded-full bg-gray-600 border border-gray-500 flex items-center justify-center text-xs font-semibold">
+                              {u.username[0].toUpperCase()}
+                            </div>
+                          )}
+                          <span className="font-semibold">{u.username}</span>
+                        </div>
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-gray-300">
+                      <td className="px-6 py-4 whitespace-nowrap text-gray-300 text-sm">
                         {u.email}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
-                        <span className={`px-2 py-1 rounded text-xs font-semibold ${
-                          u.role === 'admin' ? 'bg-red-600' :
-                          u.role === 'premium' ? 'bg-yellow-600' :
-                          'bg-blue-600'
-                        }`}>
+                        <span
+                          className={`px-2 py-1 rounded text-xs font-semibold ${
+                            u.role === "admin"
+                              ? "bg-red-600"
+                              : u.role === "premium"
+                              ? "bg-yellow-600"
+                              : "bg-blue-600"
+                          }`}
+                        >
                           {u.role}
                         </span>
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-green-400">
+                      <td className="px-6 py-4 whitespace-nowrap text-green-400 text-sm">
                         {u.balance_bdt.toLocaleString()} BDT
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-gray-400 text-sm">
-                        {new Date(u.created_at).toLocaleDateString()}
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        {u.is_banned ? (
+                          <span className="inline-flex items-center gap-1 px-2 py-1 bg-red-900 border border-red-600 rounded text-xs font-semibold text-red-300">
+                            <svg
+                              className="w-3 h-3"
+                              fill="currentColor"
+                              viewBox="0 0 20 20"
+                            >
+                              <path
+                                fillRule="evenodd"
+                                d="M13.477 14.89A6 6 0 015.11 2.526a6 6 0 008.367 8.367zM18 10a8 8 0 11-16 0 8 8 0 0116 0z"
+                                clipRule="evenodd"
+                              />
+                            </svg>
+                            Banned
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center gap-1 px-2 py-1 bg-green-900 border border-green-600 rounded text-xs font-semibold text-green-300">
+                            <svg
+                              className="w-3 h-3"
+                              fill="currentColor"
+                              viewBox="0 0 20 20"
+                            >
+                              <path
+                                fillRule="evenodd"
+                                d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z"
+                                clipRule="evenodd"
+                              />
+                            </svg>
+                            Active
+                          </span>
+                        )}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
                         <button
                           onClick={() => handleViewDetails(u.user_id)}
-                          className="text-blue-400 hover:text-blue-300 mr-3 text-sm"
+                          className="text-blue-400 hover:text-blue-300 font-semibold text-sm"
                         >
-                          Details
-                        </button>
-                        <button
-                          onClick={() => handleEditUser(u)}
-                          className="text-green-400 hover:text-green-300 text-sm"
-                        >
-                          Edit
+                          Manage
                         </button>
                       </td>
                     </tr>
@@ -214,7 +261,7 @@ function AdminUsersPage() {
             {/* Pagination */}
             <div className="mt-6 flex justify-center items-center space-x-4">
               <button
-                onClick={() => setPage(p => Math.max(1, p - 1))}
+                onClick={() => setPage((p) => Math.max(1, p - 1))}
                 disabled={page === 1}
                 className="px-4 py-2 bg-gray-700 hover:bg-gray-600 disabled:opacity-50 disabled:cursor-not-allowed rounded-lg transition-colors"
               >
@@ -224,7 +271,7 @@ function AdminUsersPage() {
                 Page {page} of {totalPages}
               </span>
               <button
-                onClick={() => setPage(p => Math.min(totalPages, p + 1))}
+                onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
                 disabled={page >= totalPages}
                 className="px-4 py-2 bg-gray-700 hover:bg-gray-600 disabled:opacity-50 disabled:cursor-not-allowed rounded-lg transition-colors"
               >
@@ -235,98 +282,13 @@ function AdminUsersPage() {
         )}
       </div>
 
-      {/* User Details Modal */}
+      {/* User Detail Modal */}
       {selectedUser && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-          <div className="bg-gray-800 rounded-lg p-6 max-w-md w-full border border-gray-700">
-            <div className="flex justify-between items-center mb-4">
-              <h2 className="text-xl font-bold">User Details</h2>
-              <button
-                onClick={() => setSelectedUser(null)}
-                className="text-gray-400 hover:text-white"
-              >
-                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                </svg>
-              </button>
-            </div>
-            <div className="space-y-3">
-              <div>
-                <p className="text-sm text-gray-400">Username</p>
-                <p className="font-semibold">{selectedUser.username}</p>
-              </div>
-              <div>
-                <p className="text-sm text-gray-400">Email</p>
-                <p className="font-semibold">{selectedUser.email}</p>
-              </div>
-              <div>
-                <p className="text-sm text-gray-400">Role</p>
-                <p className="font-semibold capitalize">{selectedUser.role}</p>
-              </div>
-              <div>
-                <p className="text-sm text-gray-400">Balance</p>
-                <p className="font-semibold text-green-400">{selectedUser.balance_bdt} BDT</p>
-              </div>
-              <div>
-                <p className="text-sm text-gray-400">Lands Owned</p>
-                <p className="font-semibold">{selectedUser.stats?.lands_owned || 0}</p>
-              </div>
-              <div>
-                <p className="text-sm text-gray-400">Transactions</p>
-                <p className="font-semibold">{selectedUser.stats?.transactions || 0}</p>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Edit User Modal */}
-      {editMode && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-          <div className="bg-gray-800 rounded-lg p-6 max-w-md w-full border border-gray-700">
-            <h2 className="text-xl font-bold mb-4">Edit User</h2>
-            <div className="space-y-4">
-              <div>
-                <label className="block text-sm text-gray-400 mb-2">Role</label>
-                <select
-                  value={editData.role}
-                  onChange={(e) => setEditData({ ...editData, role: e.target.value })}
-                  className="w-full px-4 py-2 bg-gray-700 rounded-lg border border-gray-600 focus:border-blue-500 focus:outline-none"
-                >
-                  <option value="user">User</option>
-                  <option value="premium">Premium</option>
-                  <option value="admin">Admin</option>
-                </select>
-              </div>
-              <div>
-                <label className="block text-sm text-gray-400 mb-2">Balance (BDT)</label>
-                <input
-                  type="number"
-                  value={editData.balance_bdt}
-                  onChange={(e) => setEditData({ ...editData, balance_bdt: parseInt(e.target.value) })}
-                  className="w-full px-4 py-2 bg-gray-700 rounded-lg border border-gray-600 focus:border-blue-500 focus:outline-none"
-                />
-              </div>
-              <div className="flex space-x-4 pt-4">
-                <button
-                  onClick={handleSaveEdit}
-                  className="flex-1 bg-green-600 hover:bg-green-700 py-2 rounded-lg transition-colors font-semibold"
-                >
-                  Save
-                </button>
-                <button
-                  onClick={() => {
-                    setEditMode(false);
-                    setEditData({});
-                  }}
-                  className="flex-1 bg-gray-700 hover:bg-gray-600 py-2 rounded-lg transition-colors"
-                >
-                  Cancel
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
+        <AdminUserDetailModal
+          user={selectedUser}
+          onClose={() => setSelectedUser(null)}
+          onUserUpdated={loadUsers}
+        />
       )}
     </div>
   );

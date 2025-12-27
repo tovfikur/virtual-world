@@ -100,7 +100,7 @@ export const usersAPI = {
 
   uploadAvatar: (userId, formData) =>
     api.post(`/users/${userId}/avatar`, formData, {
-      headers: { 'Content-Type': 'multipart/form-data' },
+      headers: { "Content-Type": "multipart/form-data" },
     }),
 
   getBalance: (userId) => api.get(`/users/${userId}/balance`),

@@ -3,16 +3,16 @@
  * Displays user's transaction history with filtering and pagination
  */
 
-import { useState, useEffect } from 'react';
-import { usersAPI } from '../services/api';
-import toast from 'react-hot-toast';
+import { useState, useEffect } from "react";
+import { usersAPI } from "../services/api";
+import toast from "react-hot-toast";
 
 function TransactionHistory({ userId }) {
   const [transactions, setTransactions] = useState([]);
   const [pagination, setPagination] = useState(null);
   const [isLoading, setIsLoading] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
-  const [filterType, setFilterType] = useState('all');
+  const [filterType, setFilterType] = useState("all");
 
   useEffect(() => {
     loadTransactions(currentPage);
@@ -22,49 +22,50 @@ function TransactionHistory({ userId }) {
     try {
       setIsLoading(true);
       const res = await usersAPI.getTransactions(userId, page, 10);
-      
+
       setTransactions(res.data.transactions || []);
       setPagination(res.data.pagination);
     } catch (error) {
-      toast.error('Failed to load transactions');
-      console.error('Transaction load error:', error);
+      toast.error("Failed to load transactions");
+      console.error("Transaction load error:", error);
     } finally {
       setIsLoading(false);
     }
   };
 
-  const filteredTransactions = filterType === 'all'
-    ? transactions
-    : transactions.filter(t => t.transaction_type === filterType);
+  const filteredTransactions =
+    filterType === "all"
+      ? transactions
+      : transactions.filter((t) => t.transaction_type === filterType);
 
   const formatCurrency = (amount) => {
-    return new Intl.NumberFormat('en-BD', {
-      style: 'currency',
-      currency: 'BDT'
+    return new Intl.NumberFormat("en-BD", {
+      style: "currency",
+      currency: "BDT",
     }).format(amount);
   };
 
   const getTransactionTypeColor = (type) => {
     const colors = {
-      'AUCTION': 'bg-blue-900',
-      'BUY_NOW': 'bg-green-900',
-      'FIXED_PRICE': 'bg-purple-900',
-      'TRANSFER': 'bg-gray-700',
-      'TOPUP': 'bg-yellow-900',
-      'BIOME_BUY': 'bg-cyan-900',
-      'BIOME_SELL': 'bg-orange-900'
+      AUCTION: "bg-blue-900",
+      BUY_NOW: "bg-green-900",
+      FIXED_PRICE: "bg-purple-900",
+      TRANSFER: "bg-gray-700",
+      TOPUP: "bg-yellow-900",
+      BIOME_BUY: "bg-cyan-900",
+      BIOME_SELL: "bg-orange-900",
     };
-    return colors[type] || 'bg-gray-700';
+    return colors[type] || "bg-gray-700";
   };
 
   const getStatusColor = (status) => {
     const colors = {
-      'COMPLETED': 'text-green-400',
-      'PENDING': 'text-yellow-400',
-      'FAILED': 'text-red-400',
-      'REFUNDED': 'text-orange-400'
+      COMPLETED: "text-green-400",
+      PENDING: "text-yellow-400",
+      FAILED: "text-red-400",
+      REFUNDED: "text-orange-400",
     };
-    return colors[status] || 'text-gray-400';
+    return colors[status] || "text-gray-400";
   };
 
   if (isLoading && transactions.length === 0) {
@@ -106,21 +107,42 @@ function TransactionHistory({ userId }) {
       {/* Transactions List */}
       {filteredTransactions.length === 0 ? (
         <div className="text-center py-12 text-gray-400">
-          <svg className="w-12 h-12 mx-auto mb-4 opacity-50" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+          <svg
+            className="w-12 h-12 mx-auto mb-4 opacity-50"
+            fill="none"
+            stroke="currentColor"
+            viewBox="0 0 24 24"
+          >
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth={2}
+              d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
+            />
           </svg>
           <p>No transactions yet</p>
         </div>
       ) : (
         <div className="space-y-3">
           {filteredTransactions.map((tx) => (
-            <div key={tx.transaction_id} className="bg-gray-700 rounded-lg p-4 border border-gray-600 hover:border-gray-500 transition-colors">
+            <div
+              key={tx.transaction_id}
+              className="bg-gray-700 rounded-lg p-4 border border-gray-600 hover:border-gray-500 transition-colors"
+            >
               <div className="flex items-start justify-between mb-2">
                 <div className="flex items-center gap-2">
-                  <span className={`px-2 py-1 rounded text-xs font-semibold text-white ${getTransactionTypeColor(tx.transaction_type)}`}>
-                    {tx.transaction_type.replace(/_/g, ' ')}
+                  <span
+                    className={`px-2 py-1 rounded text-xs font-semibold text-white ${getTransactionTypeColor(
+                      tx.transaction_type
+                    )}`}
+                  >
+                    {tx.transaction_type.replace(/_/g, " ")}
                   </span>
-                  <span className={`text-xs font-semibold ${getStatusColor(tx.status)}`}>
+                  <span
+                    className={`text-xs font-semibold ${getStatusColor(
+                      tx.status
+                    )}`}
+                  >
                     {tx.status}
                   </span>
                 </div>
@@ -137,23 +159,28 @@ function TransactionHistory({ userId }) {
                 )}
                 {tx.shares && (
                   <div>
-                    <span className="text-gray-500">Shares:</span> {tx.shares.toFixed(2)}
+                    <span className="text-gray-500">Shares:</span>{" "}
+                    {tx.shares.toFixed(2)}
                   </div>
                 )}
                 {tx.gateway_name && (
                   <div>
-                    <span className="text-gray-500">Gateway:</span> {tx.gateway_name}
+                    <span className="text-gray-500">Gateway:</span>{" "}
+                    {tx.gateway_name}
                   </div>
                 )}
                 {tx.platform_fee_bdt > 0 && (
                   <div>
-                    <span className="text-gray-500">Platform Fee:</span> {formatCurrency(tx.platform_fee_bdt)}
+                    <span className="text-gray-500">Platform Fee:</span>{" "}
+                    {formatCurrency(tx.platform_fee_bdt)}
                   </div>
                 )}
               </div>
 
               <div className="mt-2 text-xs text-gray-500">
-                {tx.created_at ? new Date(tx.created_at).toLocaleString() : 'N/A'}
+                {tx.created_at
+                  ? new Date(tx.created_at).toLocaleString()
+                  : "N/A"}
               </div>
             </div>
           ))}
@@ -164,7 +191,7 @@ function TransactionHistory({ userId }) {
       {pagination && pagination.pages > 1 && (
         <div className="flex items-center justify-between mt-6 pt-4 border-t border-gray-600">
           <button
-            onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+            onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
             disabled={!pagination.has_prev || isLoading}
             className="px-3 py-2 bg-gray-700 hover:bg-gray-600 text-white rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-sm"
           >
@@ -176,7 +203,9 @@ function TransactionHistory({ userId }) {
           </span>
 
           <button
-            onClick={() => setCurrentPage(p => Math.min(pagination.pages, p + 1))}
+            onClick={() =>
+              setCurrentPage((p) => Math.min(pagination.pages, p + 1))
+            }
             disabled={!pagination.has_next || isLoading}
             className="px-3 py-2 bg-gray-700 hover:bg-gray-600 text-white rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-sm"
           >
