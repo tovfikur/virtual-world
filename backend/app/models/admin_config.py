@@ -1173,6 +1173,26 @@ class AdminConfig(BaseModel):
         nullable=False
     )
 
+    # Governance & Confirmation Controls
+    require_confirmation_market_reset = Column(
+        Boolean,
+        default=True,
+        nullable=False,
+        comment="Require explicit admin confirmation before executing market reset"
+    )
+    require_confirmation_user_ban = Column(
+        Boolean,
+        default=True,
+        nullable=False,
+        comment="Require explicit confirmation before banning users"
+    )
+    require_confirmation_fraud_enforcement = Column(
+        Boolean,
+        default=False,
+        nullable=False,
+        comment="Require explicit confirmation before enforcing fraud penalties"
+    )
+
     # Meta
     updated_by_id = Column(
         UUID(as_uuid=True),
@@ -1486,6 +1506,11 @@ class AdminConfig(BaseModel):
             "logging": {
                 "level": self.log_level,
                 "retention_days": self.log_retention_days,
+            },
+            "governance": {
+                "require_confirmation_market_reset": self.require_confirmation_market_reset,
+                "require_confirmation_user_ban": self.require_confirmation_user_ban,
+                "require_confirmation_fraud_enforcement": self.require_confirmation_fraud_enforcement,
             },
             "cache": {
                 "chunk_ttl_seconds": self.chunk_cache_ttl_seconds,

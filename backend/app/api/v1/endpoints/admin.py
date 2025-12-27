@@ -1497,6 +1497,11 @@ class EconomicSettingsUpdate(BaseModel):
     price_deviation_auto_reject_enabled: Optional[bool] = None
     fraud_temp_suspend_minutes: Optional[int] = None
 
+    # Governance & Confirmation Controls
+    require_confirmation_market_reset: Optional[bool] = None
+    require_confirmation_user_ban: Optional[bool] = None
+    require_confirmation_fraud_enforcement: Optional[bool] = None
+
 
 class WorldSettingsUpdate(BaseModel):
     world_seed: Optional[int] = None
@@ -1959,6 +1964,16 @@ async def update_economic_settings(
             if settings.fraud_temp_suspend_minutes < 0:
                 raise HTTPException(status_code=400, detail="fraud_temp_suspend_minutes must be non-negative")
             config.fraud_temp_suspend_minutes = settings.fraud_temp_suspend_minutes
+
+        # Governance & Confirmation Controls
+        if settings.require_confirmation_market_reset is not None:
+            config.require_confirmation_market_reset = settings.require_confirmation_market_reset
+
+        if settings.require_confirmation_user_ban is not None:
+            config.require_confirmation_user_ban = settings.require_confirmation_user_ban
+
+        if settings.require_confirmation_fraud_enforcement is not None:
+            config.require_confirmation_fraud_enforcement = settings.require_confirmation_fraud_enforcement
 
         config.updated_at = datetime.utcnow()
 
