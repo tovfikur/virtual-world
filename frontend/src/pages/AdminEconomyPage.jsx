@@ -554,6 +554,43 @@ function AdminEconomyPage() {
             </div>
           </div>
 
+          {/* Biome Land Base Prices */}
+          <div>
+            <h2 className="text-xl font-bold mb-4">Biome Land Base Prices</h2>
+            <p className="text-sm text-gray-400 mb-4">
+              Set the initial price for each biome type when claiming new land. These prices are used for the first purchase of unclaimed land parcels.
+            </p>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {["plains", "forest", "beach", "mountain", "desert", "snow", "ocean"].map((biome) => (
+                <div key={biome} className="bg-gray-700 rounded-lg p-4">
+                  <label className="block text-sm font-medium text-gray-300 mb-2 capitalize">
+                    {biome}
+                  </label>
+                  <div className="flex items-center space-x-2">
+                    <input
+                      type="number"
+                      min="0"
+                      step="100"
+                      value={settings?.biome_land_base_prices?.[biome] ?? 0}
+                      onChange={(e) =>
+                        setSettings((prev) => ({
+                          ...prev,
+                          biome_land_base_prices: {
+                            ...prev?.biome_land_base_prices,
+                            [biome]: parseInt(e.target.value) || 0,
+                          },
+                        }))
+                      }
+                      className="flex-1 bg-gray-600 text-white px-3 py-2 rounded border border-gray-500 focus:outline-none focus:border-blue-500"
+                    />
+                    <span className="text-sm text-gray-400">BDT</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+
           {/* Biome Multipliers */}
           <div>
             <h2 className="text-xl font-bold mb-4">Biome Price Multipliers</h2>
