@@ -875,18 +875,49 @@ async def claim_land(
             detail="User not found"
         )
 
-    # Check if user has sufficient balance
-    if user.balance_bdt < claim_data.price_base_bdt:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Insufficient balance. Need {claim_data.price_base_bdt} BDT, have {user.balance_bdt} BDT"
-        )
-
     # Get color based on biome
     try:
         biome_enum = Biome(claim_data.biome.lower())
     except ValueError:
         biome_enum = Biome.PLAINS  # Default fallback
+
+    # Fetch admin config for pricing
+    from app.models.admin_config import AdminConfig
+    config_result = await db.execute(select(AdminConfig).limit(1))
+    config = config_result.scalar_one_or_none()
+    if not config:
+        raise HTTPException(status_code=500, detail="Admin config not found")
+
+    # Calculate price based on admin config and land attributes
+    # Dynamic pricing: base * biome_multiplier * elevation_factor
+    base_price = config.base_land_price_bdt
+    biome_multipliers = {
+        Biome.FOREST: config.forest_multiplier,
+        Biome.PLAINS: config.grassland_multiplier,
+        Biome.BEACH: config.water_multiplier,
+        Biome.DESERT: config.desert_multiplier,
+        Biome.MOUNTAIN: 1.0,  # Add specific multiplier if exists
+        Biome.SNOW: config.snow_multiplier,
+        Biome.OCEAN: config.water_multiplier,
+    }
+    biome_mult = biome_multipliers.get(biome_enum, 1.0)
+    elevation_factor = (
+        config.elevation_price_min_factor +
+        (config.elevation_price_max_factor - config.elevation_price_min_factor) * (claim_data.elevation or 0.5)
+    )
+    price = int(base_price * biome_mult * elevation_factor)
+    # Clamp to min/max if set
+    if hasattr(config, "min_land_price_bdt") and config.min_land_price_bdt:
+        price = max(price, config.min_land_price_bdt)
+    if hasattr(config, "max_land_price_bdt") and config.max_land_price_bdt:
+        price = min(price, config.max_land_price_bdt)
+
+    # Check if user has sufficient balance
+    if user.balance_bdt < price:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Insufficient balance. Need {price} BDT, have {user.balance_bdt} BDT"
+        )
 
     # Map biome to color
     biome_colors = {
@@ -909,13 +940,13 @@ async def claim_land(
         biome=biome_enum,
         elevation=claim_data.elevation,
         color_hex=color_hex,
-        price_base_bdt=claim_data.price_base_bdt,
+        price_base_bdt=price,
         for_sale=False,
         fenced=False
     )
 
     # Deduct cost from user balance
-    user.balance_bdt -= claim_data.price_base_bdt
+    user.balance_bdt -= price
 
     db.add(new_land)
     await db.commit()
@@ -929,7 +960,7 @@ async def claim_land(
         seller_id=None,
         listing_id=None,
         transaction_type=TransactionType.FIXED_PRICE,
-        amount_bdt=claim_data.price_base_bdt,
+        amount_bdt=price,
         currency="BDT",
         status=TransactionStatus.COMPLETED,
         platform_fee_bdt=0,
@@ -943,7 +974,7 @@ async def claim_land(
     # Invalidate caches
     await cache_service.delete(f"user_lands:{user_id}")
 
-    logger.info(f"Land claimed at ({claim_data.x}, {claim_data.y}) by user {user_id} for {claim_data.price_base_bdt} BDT")
+    logger.info(f"Land claimed at ({claim_data.x}, {claim_data.y}) by user {user_id} for {price} BDT")
 
     # Return serialized land
     return await _serialize_land(new_land, db)

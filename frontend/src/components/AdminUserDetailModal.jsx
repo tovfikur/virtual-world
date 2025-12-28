@@ -18,12 +18,41 @@ function AdminUserDetailModal({ user, onClose, onUserUpdated }) {
   const [isAdjustingBalance, setIsAdjustingBalance] = useState(false);
   const [balanceAmount, setBalanceAmount] = useState("");
   const [balanceAction, setBalanceAction] = useState("add");
+  const [latestUser, setLatestUser] = useState(user);
+  // Fetch latest user info when modal opens or after update
+  useEffect(() => {
+    if (!user?.user_id) return;
+    const fetchUser = async () => {
+      try {
+        const res = await adminAPI.getUserDetails(user.user_id);
+        setLatestUser(res.data);
+        setBanReason(res.data.ban_reason || "");
+      } catch (e) {
+        setLatestUser(user); // fallback
+      }
+    };
+    fetchUser();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user]);
+
+  // Refetch after update
+  const refetchUser = async () => {
+    if (!user?.user_id) return;
+    try {
+      const res = await adminAPI.getUserDetails(user.user_id);
+      setLatestUser(res.data);
+      setBanReason(res.data.ban_reason || "");
+    } catch (e) {
+      // ignore
+    }
+  };
 
   const handleBanUser = async () => {
     try {
       setIsBanning(true);
-      await adminAPI.banUser(user.user_id, { reason: banReason });
+      await adminAPI.banUser(latestUser.user_id, { reason: banReason });
       toast.success("User banned successfully");
+      await refetchUser();
       onUserUpdated();
       onClose();
     } catch (error) {
@@ -36,8 +65,9 @@ function AdminUserDetailModal({ user, onClose, onUserUpdated }) {
   const handleUnbanUser = async () => {
     try {
       setIsBanning(true);
-      await adminAPI.unbanUser(user.user_id);
+      await adminAPI.unbanUser(latestUser.user_id);
       toast.success("User unbanned successfully");
+      await refetchUser();
       onUserUpdated();
       onClose();
     } catch (error) {
@@ -51,12 +81,13 @@ function AdminUserDetailModal({ user, onClose, onUserUpdated }) {
     try {
       setIsVerifying(true);
       if (flag) {
-        await adminAPI.verifyUser(user.user_id);
+        await adminAPI.verifyUser(latestUser.user_id);
         toast.success("User verified");
       } else {
-        await adminAPI.unverifyUser(user.user_id);
+        await adminAPI.unverifyUser(latestUser.user_id);
         toast.success("User unverified");
       }
+      await refetchUser();
       onUserUpdated();
       onClose();
     } catch (error) {
@@ -75,7 +106,7 @@ function AdminUserDetailModal({ user, onClose, onUserUpdated }) {
 
     try {
       setIsBanning(true);
-      const currentBalance = user.balance_bdt || 0;
+      const currentBalance = latestUser.balance_bdt || 0;
       const newBalance =
         balanceAction === "add"
           ? currentBalance + amount
@@ -86,12 +117,13 @@ function AdminUserDetailModal({ user, onClose, onUserUpdated }) {
         return;
       }
 
-      await adminAPI.updateUser(user.user_id, { balance_bdt: newBalance });
+      await adminAPI.updateUser(latestUser.user_id, { balance_bdt: newBalance });
       toast.success(
         `Balance ${balanceAction === "add" ? "added" : "deducted"} successfully`
       );
       setBalanceAmount("");
       setIsAdjustingBalance(false);
+      await refetchUser();
       onUserUpdated();
       onClose();
     } catch (error) {
@@ -107,16 +139,16 @@ function AdminUserDetailModal({ user, onClose, onUserUpdated }) {
         {/* Header */}
         <div className="flex justify-between items-center p-6 border-b border-gray-700">
           <div className="flex items-center gap-4">
-            {user?.avatar_url && (
+            {latestUser?.avatar_url && (
               <img
-                src={user.avatar_url}
-                alt={user.username}
+                src={latestUser.avatar_url}
+                alt={latestUser.username}
                 className="w-12 h-12 rounded-full bg-gray-700 object-cover border-2 border-blue-600"
               />
             )}
             <div>
-              <h2 className="text-xl font-bold">{user?.username}</h2>
-              <p className="text-sm text-gray-400">{user?.email}</p>
+              <h2 className="text-xl font-bold">{latestUser?.username}</h2>
+              <p className="text-sm text-gray-400">{latestUser?.email}</p>
             </div>
           </div>
           <button onClick={onClose} className="text-gray-400 hover:text-white">
@@ -179,50 +211,50 @@ function AdminUserDetailModal({ user, onClose, onUserUpdated }) {
                   <div>
                     <p className="text-sm text-gray-400">User ID</p>
                     <p className="text-xs font-mono text-gray-300 break-all">
-                      {user?.user_id}
+                      {latestUser?.user_id}
                     </p>
                   </div>
                   <div>
                     <p className="text-sm text-gray-400">Role</p>
-                    <p className="font-semibold capitalize">{user?.role}</p>
+                    <p className="font-semibold capitalize">{latestUser?.role}</p>
                   </div>
                   <div>
                     <p className="text-sm text-gray-400">Balance</p>
                     <p className="font-semibold text-green-400">
-                      {user?.balance_bdt?.toLocaleString()} BDT
+                      {latestUser?.balance_bdt?.toLocaleString()} BDT
                     </p>
                   </div>
                   <div>
                     <p className="text-sm text-gray-400">Verified</p>
                     <p className="font-semibold flex items-center gap-2">
-                      {user?.verified ? "Yes" : "No"}
+                      {latestUser?.verified ? "Yes" : "No"}
                       <button
-                        onClick={() => handleVerify(!user?.verified)}
+                        onClick={() => handleVerify(!latestUser?.verified)}
                         disabled={isVerifying}
                         className="text-xs px-2 py-1 rounded bg-blue-700 hover:bg-blue-600 disabled:opacity-50"
                       >
-                        {user?.verified ? "Unverify" : "Verify"}
+                        {latestUser?.verified ? "Unverify" : "Verify"}
                       </button>
                     </p>
                   </div>
                   <div>
                     <p className="text-sm text-gray-400">Registered</p>
                     <p className="font-semibold">
-                      {user?.created_at
-                        ? new Date(user.created_at).toLocaleDateString()
+                      {latestUser?.created_at
+                        ? new Date(latestUser.created_at).toLocaleDateString()
                         : "N/A"}
                     </p>
                   </div>
                   <div className="col-span-2">
                     <p className="text-sm text-gray-400">Bio</p>
                     <p className="text-sm text-gray-200 whitespace-pre-line bg-gray-800/80 border border-gray-600 rounded p-2">
-                      {user?.bio || "—"}
+                      {latestUser?.bio || "—"}
                     </p>
                   </div>
                 </div>
               </div>
 
-              {user?.is_banned && (
+              {latestUser?.is_banned && (
                 <div className="bg-red-900/20 border border-red-700 rounded-lg p-4">
                   <div className="flex items-start gap-3">
                     <svg
@@ -241,31 +273,31 @@ function AdminUserDetailModal({ user, onClose, onUserUpdated }) {
                         User is Banned
                       </p>
                       <p className="text-sm text-red-300 mt-1">
-                        {user.ban_reason}
+                        {latestUser.ban_reason}
                       </p>
                     </div>
                   </div>
                 </div>
               )}
 
-              {user?.stats && (
+              {latestUser?.stats && (
                 <div className="grid grid-cols-3 gap-4">
                   <div className="bg-gray-700 rounded-lg p-4">
                     <p className="text-sm text-gray-400 mb-1">Lands Owned</p>
                     <p className="text-2xl font-bold text-green-400">
-                      {user.stats.lands_owned}
+                      {latestUser.stats.lands_owned}
                     </p>
                   </div>
                   <div className="bg-gray-700 rounded-lg p-4">
                     <p className="text-sm text-gray-400 mb-1">Transactions</p>
                     <p className="text-2xl font-bold text-blue-400">
-                      {user.stats.total_transactions}
+                      {latestUser.stats.total_transactions}
                     </p>
                   </div>
                   <div className="bg-gray-700 rounded-lg p-4">
                     <p className="text-sm text-gray-400 mb-1">Land Value</p>
                     <p className="text-2xl font-bold text-purple-400">
-                      {(user.stats.total_land_value_bdt || 0).toLocaleString()}
+                      {(latestUser.stats.total_land_value_bdt || 0).toLocaleString()}
                     </p>
                   </div>
                 </div>
@@ -274,7 +306,7 @@ function AdminUserDetailModal({ user, onClose, onUserUpdated }) {
           )}
 
           {activeTab === "transactions" && (
-            <TransactionHistory userId={user?.user_id} />
+            <TransactionHistory userId={latestUser?.user_id} />
           )}
 
           {activeTab === "actions" && (
@@ -347,7 +379,7 @@ function AdminUserDetailModal({ user, onClose, onUserUpdated }) {
               <div className="bg-gray-700 rounded-lg p-4 border border-gray-600">
                 <h3 className="font-semibold mb-3">Ban Management</h3>
 
-                {user?.is_banned ? (
+                {latestUser?.is_banned ? (
                   <div>
                     <p className="text-sm text-gray-400 mb-3">
                       User is currently banned
@@ -395,7 +427,7 @@ function AdminUserDetailModal({ user, onClose, onUserUpdated }) {
                           <button
                             onClick={() => {
                               setIsEditingBan(false);
-                              setBanReason(user?.ban_reason || "");
+                              setBanReason(latestUser?.ban_reason || "");
                             }}
                             className="flex-1 px-4 py-2 bg-gray-600 hover:bg-gray-500 text-white rounded-lg transition-colors"
                           >
@@ -415,25 +447,24 @@ function AdminUserDetailModal({ user, onClose, onUserUpdated }) {
                   <div className="flex justify-between">
                     <span className="text-gray-400">Current Balance:</span>
                     <span className="font-semibold text-green-400">
-                      {user?.balance_bdt?.toLocaleString()} BDT
+                      {latestUser?.balance_bdt?.toLocaleString()} BDT
                     </span>
                   </div>
                   <div className="flex justify-between">
                     <span className="text-gray-400">Email Verified:</span>
                     <span className="font-semibold">
-                      {user?.verified ? "✓ Yes" : "✗ No"}
+                      {latestUser?.verified ? "✓ Yes" : "✗ No"}
                     </span>
                   </div>
                   <div className="flex justify-between">
                     <span className="text-gray-400">Account Age:</span>
                     <span className="font-semibold">
-                      {user?.created_at
+                      {latestUser?.created_at
                         ? Math.floor(
-                            (Date.now() - new Date(user.created_at).getTime()) /
+                            (Date.now() - new Date(latestUser.created_at).getTime()) /
                               (1000 * 60 * 60 * 24)
                           )
-                        : 0}{" "}
-                      days
+                        : 0} days
                     </span>
                   </div>
                 </div>

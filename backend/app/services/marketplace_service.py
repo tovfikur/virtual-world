@@ -292,34 +292,23 @@ class MarketplaceService:
         buyer_id: uuid.UUID
     ) -> Transaction:
         """
-        Execute instant buy now purchase.
-
-        Args:
-            db: Database session
-            listing_id: Listing to purchase
-            buyer_id: Buyer user ID
-
-        Returns:
-            Transaction record
-
-        Raises:
-            ValueError: If validation fails
+        Execute instant buy now purchase with dynamic pricing.
+        Uses latest admin-configured or trading price for each land/biome at purchase time.
         """
+        from app.services.world_service import WorldService
+        from app.services.biome_market_service import BiomeMarketService
+        world_service = WorldService()
+        biome_market_service = BiomeMarketService()
+
         # Get listing
         result = await db.execute(
             select(Listing).where(Listing.listing_id == listing_id)
         )
         listing = result.scalar_one_or_none()
-
         if not listing:
             raise ValueError("Listing not found")
-
         if listing.status != ListingStatus.ACTIVE:
             raise ValueError("Listing is not active")
-
-        if not listing.buy_now_price_bdt:
-            raise ValueError("Buy now not available for this listing")
-
         # Cannot buy own listing
         if listing.seller_id == buyer_id:
             raise ValueError("Cannot buy your own listing")
@@ -329,13 +318,8 @@ class MarketplaceService:
             select(User).where(User.user_id == buyer_id).with_for_update()
         )
         buyer = result.scalar_one_or_none()
-
         if not buyer:
             raise ValueError("Buyer not found")
-
-        if buyer.balance_bdt < listing.buy_now_price_bdt:
-            raise ValueError("Insufficient balance")
-
         result = await db.execute(
             select(User).where(User.user_id == listing.seller_id).with_for_update()
         )
@@ -348,12 +332,22 @@ class MarketplaceService:
             )
         )
         lands = result.scalars().all()
-
         if not lands:
             raise ValueError("No lands found in listing")
 
-        # Execute transaction (apply tiered platform fee)
-        amount = listing.buy_now_price_bdt
+        # Calculate dynamic price for each land
+        total_price = 0
+        land_prices = []
+        for land in lands:
+            # Use trading price if available, else admin-configured base price
+            try:
+                market = await biome_market_service.get_market(db, land.biome)
+                price = int(market.share_price_bdt)
+            except Exception:
+                # Fallback to admin-configured base price
+                price = await world_service.calculate_base_price(land.biome, land.elevation, db)
+            land_prices.append((land, price))
+            total_price += price
 
         # Fetch admin config for fee tiers
         cfg_res = await db.execute(select(AdminConfig).limit(1))
@@ -368,17 +362,19 @@ class MarketplaceService:
                 return float(config.fee_tier_2_percent)
             if amount_bdt < config.fee_tier_3_threshold:
                 return float(config.fee_tier_3_percent)
-            # Above highest threshold, use tier 3 percent
             return float(config.fee_tier_3_percent)
 
-        fee_percent = get_fee_percent(amount)
-        platform_fee = int(amount * (fee_percent / 100.0))
+        fee_percent = get_fee_percent(total_price)
+        platform_fee = int(total_price * (fee_percent / 100.0))
 
-        buyer.balance_bdt -= amount
-        seller.balance_bdt += (amount - platform_fee)
+        if buyer.balance_bdt < total_price:
+            raise ValueError(f"Insufficient balance: {buyer.balance_bdt} < {total_price}")
+
+        buyer.balance_bdt -= total_price
+        seller.balance_bdt += (total_price - platform_fee)
 
         # Transfer all lands in parcel to buyer
-        for land in lands:
+        for land, _ in land_prices:
             land.owner_id = buyer_id
             land.for_sale = False
             land.fenced = False
@@ -390,14 +386,11 @@ class MarketplaceService:
             land_id=lands[0].land_id if lands else None,  # Primary land for legacy compat
             buyer_id=buyer_id,
             seller_id=listing.seller_id,
-            amount_bdt=amount,
+            amount_bdt=total_price,
             transaction_type=TransactionType.BUY_NOW,
             status=TransactionStatus.COMPLETED
         )
-
-        # Record platform fee
         transaction.platform_fee_bdt = platform_fee
-
         db.add(transaction)
 
         # Mark listing as sold
@@ -415,7 +408,7 @@ class MarketplaceService:
 
         logger.info(
             f"Buy now completed: listing {listing_id}, "
-            f"buyer {buyer_id}, {len(lands)} lands, amount {listing.buy_now_price_bdt} BDT"
+            f"buyer {buyer_id}, {len(lands)} lands, dynamic total {total_price} BDT"
         )
 
         return transaction

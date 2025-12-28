@@ -1437,7 +1437,10 @@ function WorldRenderer() {
 
     const fetchOwnedTiles = async () => {
       try {
-        const response = await landsAPI.getOwnerCoordinates(user.user_id, 20000);
+        const response = await landsAPI.getOwnerCoordinates(
+          user.user_id,
+          20000
+        );
         if (!cancelled) {
           const lands = response.data?.lands ?? [];
           setPlayerHomeTiles(lands);

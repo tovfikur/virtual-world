@@ -1716,26 +1716,37 @@ async def update_economic_settings(
         if settings.biome_prices_frozen is not None:
             config.biome_prices_frozen = settings.biome_prices_frozen
         # Biome Land Base Prices
-        if settings.plains_base_price is not None:
-            config.plains_base_price = settings.plains_base_price
 
-        if settings.forest_base_price is not None:
-            config.forest_base_price = settings.forest_base_price
+        # --- Record biome base price changes in price history ---
+        from app.models.biome_price_history import BiomePriceHistory
+        from app.models.land import Biome
+        from app.models.biome_market import BiomeMarket
+        from datetime import datetime
 
-        if settings.beach_base_price is not None:
-            config.beach_base_price = settings.beach_base_price
-
-        if settings.mountain_base_price is not None:
-            config.mountain_base_price = settings.mountain_base_price
-
-        if settings.desert_base_price is not None:
-            config.desert_base_price = settings.desert_base_price
-
-        if settings.snow_base_price is not None:
-            config.snow_base_price = settings.snow_base_price
-
-        if settings.ocean_base_price is not None:
-            config.ocean_base_price = settings.ocean_base_price
+        biome_price_fields = [
+            ("plains_base_price", Biome.PLAINS),
+            ("forest_base_price", Biome.FOREST),
+            ("beach_base_price", Biome.BEACH),
+            ("mountain_base_price", Biome.MOUNTAIN),
+            ("desert_base_price", Biome.DESERT),
+            ("snow_base_price", Biome.SNOW),
+            ("ocean_base_price", Biome.OCEAN),
+        ]
+        for field, biome in biome_price_fields:
+            new_price = getattr(settings, field, None)
+            if new_price is not None:
+                setattr(config, field, new_price)
+                # Get current market state for this biome
+                market = await db.execute(select(BiomeMarket).where(BiomeMarket.biome == biome))
+                market = market.scalar_one_or_none()
+                price_history = BiomePriceHistory(
+                    biome=biome,
+                    price_bdt=new_price,
+                    market_cash_bdt=market.market_cash_bdt if market else 0,
+                    attention_score=market.attention_score if market else 0,
+                    timestamp=datetime.utcnow()
+                )
+                db.add(price_history)
 
         # Marketplace Fee Tiers
         if settings.fee_tier_1_threshold is not None:
