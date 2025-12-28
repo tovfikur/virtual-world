@@ -131,7 +131,7 @@ export const landsAPI = {
 
   getLandByCoords: (x, y) => api.get(`/lands/coordinates/${x}/${y}`),
 
-  getOwnerCoordinates: (ownerId, limit = 5000) =>
+  getOwnerCoordinates: (ownerId, limit = 100000) =>
     api.get(`/lands/owner/${ownerId}/coordinates`, { params: { limit } }),
 
   searchLands: (params) => api.get("/lands", { params }),

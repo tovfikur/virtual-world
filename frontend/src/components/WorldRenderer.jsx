@@ -1437,7 +1437,7 @@ function WorldRenderer() {
 
     const fetchOwnedTiles = async () => {
       try {
-        const response = await landsAPI.getOwnerCoordinates(user.user_id, 5000);
+        const response = await landsAPI.getOwnerCoordinates(user.user_id, 50000);
         if (!cancelled) {
           const lands = response.data?.lands ?? [];
           setPlayerHomeTiles(lands);
@@ -1571,12 +1571,28 @@ function WorldRenderer() {
     const borderGraphic = new PIXI.Graphics();
     // Green for current user's lands, white for others
     const borderColor = ownerId === currentUserId ? 0x00ff00 : 0xffffff;
-    borderGraphic.lineStyle(3, borderColor, 0.8);
+    // Use centered alignment and a crisp stroke to avoid half-pixel gaps
+    if (typeof borderGraphic.lineStyle === "function") {
+      try {
+        borderGraphic.lineStyle({
+          width: 2,
+          color: borderColor,
+          alpha: 0.95,
+          join: "miter",
+          cap: "square",
+          alignment: 0.5,
+          miterLimit: 2,
+        });
+      } catch (_) {
+        borderGraphic.lineStyle(2, borderColor, 0.95);
+      }
+    }
 
     // For each owned land, draw borders on edges that border non-owned land
+    const offset = 0.5; // subpixel offset for crisp lines
     lands.forEach((land) => {
-      const baseX = land.x * LAND_SIZE;
-      const baseY = land.y * LAND_SIZE;
+      const baseX = land.x * LAND_SIZE + offset;
+      const baseY = land.y * LAND_SIZE + offset;
 
       // Check all 4 edges
       const hasTop = !ownedSet.has(`${land.x}_${land.y - 1}`);
@@ -1643,7 +1659,7 @@ function WorldRenderer() {
 
       if (!ownerData) {
         try {
-          const response = await landsAPI.getOwnerCoordinates(ownerId);
+          const response = await landsAPI.getOwnerCoordinates(ownerId, 50000);
           ownerData = {
             owner_id: ownerId,
             owner_username: response.data.owner_username,
@@ -1895,7 +1911,7 @@ function WorldRenderer() {
     // Redraw borders for owners whose lands changed
     ownersToRedraw.forEach(async (ownerId) => {
       try {
-        const response = await landsAPI.getOwnerCoordinates(ownerId, 5000);
+        const response = await landsAPI.getOwnerCoordinates(ownerId, 50000);
         const ownerLands = response.data?.lands || [];
         const ownerUsername =
           response.data?.owner_username ||
