@@ -1437,7 +1437,7 @@ function WorldRenderer() {
 
     const fetchOwnedTiles = async () => {
       try {
-        const response = await landsAPI.getOwnerCoordinates(user.user_id, 50000);
+        const response = await landsAPI.getOwnerCoordinates(user.user_id, 20000);
         if (!cancelled) {
           const lands = response.data?.lands ?? [];
           setPlayerHomeTiles(lands);
@@ -1659,7 +1659,7 @@ function WorldRenderer() {
 
       if (!ownerData) {
         try {
-          const response = await landsAPI.getOwnerCoordinates(ownerId, 50000);
+          const response = await landsAPI.getOwnerCoordinates(ownerId, 20000);
           ownerData = {
             owner_id: ownerId,
             owner_username: response.data.owner_username,
@@ -1911,7 +1911,7 @@ function WorldRenderer() {
     // Redraw borders for owners whose lands changed
     ownersToRedraw.forEach(async (ownerId) => {
       try {
-        const response = await landsAPI.getOwnerCoordinates(ownerId, 50000);
+        const response = await landsAPI.getOwnerCoordinates(ownerId, 20000);
         const ownerLands = response.data?.lands || [];
         const ownerUsername =
           response.data?.owner_username ||

@@ -131,8 +131,9 @@ export const landsAPI = {
 
   getLandByCoords: (x, y) => api.get(`/lands/coordinates/${x}/${y}`),
 
-  getOwnerCoordinates: (ownerId, limit = 100000) =>
-    api.get(`/lands/owner/${ownerId}/coordinates`, { params: { limit } }),
+  // Backend enforces max limit=20000; cap client requests accordingly
+  getOwnerCoordinates: (ownerId, limit = 20000) =>
+    api.get(`/lands/owner/${ownerId}/coordinates`, { params: { limit: Math.min(limit || 20000, 20000) } }),
 
   searchLands: (params) => api.get("/lands", { params }),
 
