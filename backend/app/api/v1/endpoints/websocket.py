@@ -593,8 +593,22 @@ async def get_online_users(
     if not online_user_ids:
         return {"users": [], "count": 0}
 
-    # Get user details
-    user_uuids = [uuid.UUID(uid) for uid in online_user_ids]
+    # Get user details - filter out invalid UUIDs
+    user_uuids = []
+    for uid in online_user_ids:
+        try:
+            user_uuids.append(uuid.UUID(uid))
+        except (ValueError, AttributeError, TypeError) as e:
+            logger.warning(f"Invalid UUID in online users list: {uid} - {e}")
+            # Clean up invalid entry from Redis
+            try:
+                connection_manager.redis_client.srem("online_users", uid)
+            except Exception as cleanup_err:
+                logger.error(f"Failed to cleanup invalid user ID {uid}: {cleanup_err}")
+            continue
+
+    if not user_uuids:
+        return {"users": [], "count": 0}
 
     result = await db.execute(
         select(User).where(User.user_id.in_(user_uuids))
