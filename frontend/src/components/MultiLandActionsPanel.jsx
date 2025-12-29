@@ -11,6 +11,36 @@ import toast from "react-hot-toast";
 import { validateConnectivity } from "../utils/parcelValidation";
 
 function MultiLandActionsPanel() {
+  // Fetch latest price for all unowned lands
+  const refreshUnownedLandPrices = async () => {
+    const updatedLands = await Promise.all(
+      selectedLands.map(async (land) => {
+        if (!land.land_id) {
+          try {
+            const response = await landsAPI.getLandByCoords(land.x, land.y);
+            const data = response.data;
+            return {
+              ...land,
+              price_base_bdt:
+                data.price_base_bdt ??
+                data.base_price_bdt ??
+                data.base_price ??
+                land.price_base_bdt,
+              // Optionally update other fields if needed
+            };
+          } catch (e) {
+            // If not found, keep as is
+            return land;
+          }
+        }
+        return land;
+      })
+    );
+    // Update selectedLands in store
+    updatedLands.forEach((land) => {
+      updateLandProperty(land.x, land.y, "price_base_bdt", land.price_base_bdt);
+    });
+  };
   const { user } = useAuthStore();
   const {
     selectedLands,
@@ -409,7 +439,10 @@ function MultiLandActionsPanel() {
             </p>
           </div>
           <button
-            onClick={() => setShowPaymentModal(true)}
+            onClick={async () => {
+              await refreshUnownedLandPrices();
+              setShowPaymentModal(true);
+            }}
             disabled={processing}
             className="w-full bg-green-600 hover:bg-green-700 disabled:bg-gray-600 text-white font-semibold py-3 rounded-lg transition-colors text-sm md:text-base shadow-lg"
           >
@@ -460,11 +493,14 @@ function MultiLandActionsPanel() {
       {showListingForm && (
         <div className="bg-gray-700 rounded-lg p-4 space-y-3">
           <h4 className="text-white font-semibold mb-2">
-            Create Parcel Listing ({ownedLands.length} land{ownedLands.length !== 1 ? 's' : ''})
+            Create Parcel Listing ({ownedLands.length} land
+            {ownedLands.length !== 1 ? "s" : ""})
           </h4>
           <div className="bg-blue-900 bg-opacity-50 border border-blue-500 rounded p-2 mb-3">
             <p className="text-blue-200 text-xs">
-              ℹ️ <strong>Parcel System:</strong> All selected lands must be edge-connected (touching sides, not diagonals). They will be sold as one unit.
+              ℹ️ <strong>Parcel System:</strong> All selected lands must be
+              edge-connected (touching sides, not diagonals). They will be sold
+              as one unit.
             </p>
           </div>
           <form onSubmit={handleBulkListing} className="space-y-3">

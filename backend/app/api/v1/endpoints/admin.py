@@ -1737,8 +1737,10 @@ async def update_economic_settings(
             if new_price is not None:
                 setattr(config, field, new_price)
                 # Get current market state for this biome
-                market = await db.execute(select(BiomeMarket).where(BiomeMarket.biome == biome))
-                market = market.scalar_one_or_none()
+                market_result = await db.execute(select(BiomeMarket).where(BiomeMarket.biome == biome))
+                market = market_result.scalar_one_or_none()
+                if market:
+                    market.share_price_bdt = float(new_price)
                 price_history = BiomePriceHistory(
                     biome=biome,
                     price_bdt=new_price,
