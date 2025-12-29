@@ -123,7 +123,7 @@ class Settings(BaseSettings):
     # World Generation
     # Seed: "Topu" encoded as integer (84, 111, 112, 117 -> 1416589429)
     default_world_seed: int = Field(default=1416589429, env="DEFAULT_WORLD_SEED")
-    chunk_cache_ttl: int = Field(default=3600, env="CHUNK_CACHE_TTL")
+    chunk_cache_ttl: int = Field(default=86400, env="CHUNK_CACHE_TTL")
     max_chunks_in_memory: int = Field(default=1000, env="MAX_CHUNKS_IN_MEMORY")
 
     @property
@@ -206,15 +206,15 @@ settings = Settings()
 
 # Cache TTL configurations
 CACHE_TTLS = {
-    "session": 3600,  # 1 hour
+    "session": 86400,  # 24 hours
     "refresh_token": 7 * 24 * 60 * 60,  # 7 days
-    "chunk": 3600,  # 1 hour
+    "chunk": 86400,  # 24 hours
     "land": 300,  # 5 minutes
     "listing": 300,  # 5 minutes
     "presence": 60,  # 1 minute
     "rate_limit": 60,  # 1 minute
     "user_profile": 600,  # 10 minutes
-    "analytics": 3600,  # 1 hour
+    "analytics": 86400,  # 24 hours
     "leaderboard": 1800,  # 30 minutes
-    "heatmap": 3600,  # 1 hour
+    "heatmap": 86400,  # 24 hours
 }
