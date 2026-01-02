@@ -450,6 +450,9 @@ function WorldRenderer() {
   const movementDirectionRef = useRef({ x: 0, y: 0 });
   const playerAnimationRef = useRef({ phase: 0 });
   const touchPadPointerIdRef = useRef(null);
+  const activeTouchPointersRef = useRef(new Map());
+  const lastPinchDistanceRef = useRef(null);
+  const isPinchingRef = useRef(false);
   const cameraRef = useRef(null);
   const audioContextRef = useRef(null);
   const footstepBuffersRef = useRef(new Map());
@@ -2787,6 +2790,11 @@ function WorldRenderer() {
     };
 
     const onPointerMove = (e) => {
+      if (isPinchingRef.current) {
+        lastPosInitializedRef.current = false;
+        return;
+      }
+
       // Don't pan camera if in long press multi-select mode
       if (longPressMultiSelectRef.current) {
         return;
@@ -2905,6 +2913,91 @@ function WorldRenderer() {
       }
     };
   }, [camera, moveCamera]);
+
+  // Camera controls - Touch pinch zoom
+  useEffect(() => {
+    const canvas = canvasRef.current?.querySelector("canvas");
+    if (!canvas) return undefined;
+
+    const pointers = activeTouchPointersRef.current;
+
+    const computeDistance = () => {
+      if (pointers.size < 2) return null;
+      const values = Array.from(pointers.values());
+      const [a, b] = values;
+      return Math.hypot(a.x - b.x, a.y - b.y);
+    };
+
+    const handlePointerDown = (event) => {
+      if (event.pointerType !== "touch") return;
+      event.preventDefault();
+      pointers.set(event.pointerId, { x: event.clientX, y: event.clientY });
+
+      if (pointers.size === 2) {
+        const distance = computeDistance();
+        if (distance) {
+          lastPinchDistanceRef.current = distance;
+          isPinchingRef.current = true;
+        }
+      }
+    };
+
+    const handlePointerMove = (event) => {
+      if (event.pointerType !== "touch") return;
+      if (!pointers.has(event.pointerId)) return;
+      event.preventDefault();
+
+      pointers.set(event.pointerId, { x: event.clientX, y: event.clientY });
+
+      if (pointers.size >= 2) {
+        const distance = computeDistance();
+        const previous = lastPinchDistanceRef.current;
+
+        if (distance && previous) {
+          const scale = distance / previous;
+          if (scale > 0) {
+            const baseZoom = cameraRef.current?.zoom ?? camera.zoom;
+            const nextZoom = clamp(baseZoom * scale, 0.25, 4);
+            setCamera(undefined, undefined, nextZoom);
+          }
+        }
+
+        lastPinchDistanceRef.current = distance;
+        isPinchingRef.current = true;
+      }
+    };
+
+    const handlePointerEnd = (event) => {
+      if (event.pointerType !== "touch") return;
+      pointers.delete(event.pointerId);
+
+      if (pointers.size < 2) {
+        lastPinchDistanceRef.current = null;
+        isPinchingRef.current = false;
+      }
+    };
+
+    canvas.addEventListener("pointerdown", handlePointerDown, {
+      passive: false,
+    });
+    canvas.addEventListener("pointermove", handlePointerMove, {
+      passive: false,
+    });
+    canvas.addEventListener("pointerup", handlePointerEnd);
+    canvas.addEventListener("pointercancel", handlePointerEnd);
+    canvas.addEventListener("pointerleave", handlePointerEnd);
+
+    return () => {
+      canvas.removeEventListener("pointerdown", handlePointerDown);
+      canvas.removeEventListener("pointermove", handlePointerMove);
+      canvas.removeEventListener("pointerup", handlePointerEnd);
+      canvas.removeEventListener("pointercancel", handlePointerEnd);
+      canvas.removeEventListener("pointerleave", handlePointerEnd);
+      pointers.clear();
+      lastPinchDistanceRef.current = null;
+      isPinchingRef.current = false;
+    };
+  }, [camera.zoom, setCamera]);
 
   // Camera controls - Zoom
   useEffect(() => {
