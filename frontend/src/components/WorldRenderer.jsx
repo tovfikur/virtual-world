@@ -3084,6 +3084,29 @@ function WorldRenderer() {
     opacity: touchPadVector.active ? 1 : 0.6,
   };
 
+  const directionButtonClass =
+    "w-10 h-10 rounded-lg bg-gray-800/85 border border-gray-600 text-white flex items-center justify-center shadow-lg active:scale-95 transition-transform";
+
+  const handleDirectionPress = useCallback(
+    (dx, dy) => (event) => {
+      event.preventDefault();
+      applyTouchDirection(dx, dy);
+    },
+    [applyTouchDirection]
+  );
+
+  const handleDirectionRelease = useCallback(() => {
+    stopTouchMovement();
+  }, [stopTouchMovement]);
+
+  const handleZoom = useCallback(
+    (delta) => (event) => {
+      event.preventDefault();
+      zoomCamera(delta);
+    },
+    [zoomCamera]
+  );
+
   return (
     <div className="absolute inset-0 bg-gray-900">
       <div
@@ -3094,6 +3117,84 @@ function WorldRenderer() {
 
       <div className="pointer-events-none absolute top-4 left-1/2 -translate-x-1/2 text-xs uppercase tracking-wide text-white/70 hidden md:block">
         Arrow keys to walk the creature
+      </div>
+
+      <div className="absolute bottom-4 right-4 z-20 md:hidden pointer-events-none">
+        <div className="grid grid-cols-3 gap-1 pointer-events-auto select-none">
+          <button
+            aria-label="Zoom in"
+            className={directionButtonClass}
+            onPointerDown={handleZoom(0.12)}
+            onClick={(e) => e.preventDefault()}
+          >
+            <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M12 5v14M5 12h14" />
+            </svg>
+          </button>
+          <button
+            aria-label="Move up"
+            className={directionButtonClass}
+            onPointerDown={handleDirectionPress(0, -1)}
+            onPointerUp={handleDirectionRelease}
+            onPointerLeave={handleDirectionRelease}
+            onPointerCancel={handleDirectionRelease}
+          >
+            <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M12 5l-6 8h12z" />
+            </svg>
+          </button>
+          <button
+            aria-label="Zoom out"
+            className={directionButtonClass}
+            onPointerDown={handleZoom(-0.12)}
+            onClick={(e) => e.preventDefault()}
+          >
+            <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M5 12h14" />
+            </svg>
+          </button>
+
+          <button
+            aria-label="Move left"
+            className={directionButtonClass}
+            onPointerDown={handleDirectionPress(-1, 0)}
+            onPointerUp={handleDirectionRelease}
+            onPointerLeave={handleDirectionRelease}
+            onPointerCancel={handleDirectionRelease}
+          >
+            <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M5 12l8 6V6z" />
+            </svg>
+          </button>
+          <div className="w-10 h-10" />
+          <button
+            aria-label="Move right"
+            className={directionButtonClass}
+            onPointerDown={handleDirectionPress(1, 0)}
+            onPointerUp={handleDirectionRelease}
+            onPointerLeave={handleDirectionRelease}
+            onPointerCancel={handleDirectionRelease}
+          >
+            <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M19 12l-8 6V6z" />
+            </svg>
+          </button>
+
+          <div className="w-10 h-10" />
+          <button
+            aria-label="Move down"
+            className={directionButtonClass}
+            onPointerDown={handleDirectionPress(0, 1)}
+            onPointerUp={handleDirectionRelease}
+            onPointerLeave={handleDirectionRelease}
+            onPointerCancel={handleDirectionRelease}
+          >
+            <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M12 19l6-8H6z" />
+            </svg>
+          </button>
+          <div className="w-10 h-10" />
+        </div>
       </div>
     </div>
   );
