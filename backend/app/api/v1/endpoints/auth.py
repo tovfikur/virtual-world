@@ -38,10 +38,10 @@ async def _get_security_settings(db: AsyncSession):
 
     password_policy = {
         "min_length": config.password_min_length if config else settings.password_min_length,
-        "require_uppercase": config.password_require_uppercase if config else True,
-        "require_lowercase": config.password_require_lowercase if config else True,
-        "require_number": config.password_require_number if config else True,
-        "require_special": config.password_require_special if config else True,
+        "require_uppercase": config.password_require_uppercase if config else False,
+        "require_lowercase": config.password_require_lowercase if config else False,
+        "require_number": config.password_require_number if config else False,
+        "require_special": config.password_require_special if config else False,
     }
 
     login_policy = {
@@ -54,34 +54,10 @@ async def _get_security_settings(db: AsyncSession):
 
 
 def _validate_password_policy(password: str, policy: dict):
-    if len(password) < policy.get("min_length", 0):
+    if len(password) < policy.get("min_length", 6):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Password must be at least {policy['min_length']} characters"
-        )
-
-    if policy.get("require_uppercase") and not re.search(r"[A-Z]", password):
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Password must include at least one uppercase letter"
-        )
-
-    if policy.get("require_lowercase") and not re.search(r"[a-z]", password):
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Password must include at least one lowercase letter"
-        )
-
-    if policy.get("require_number") and not re.search(r"[0-9]", password):
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Password must include at least one number"
-        )
-
-    if policy.get("require_special") and not re.search(r"[^A-Za-z0-9]", password):
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Password must include at least one special character"
+            detail=f"Password must be at least {policy.get('min_length', 6)} characters"
         )
 
 
@@ -339,6 +315,7 @@ async def login(
     # Create response
     token_response = TokenResponse(
         access_token=access_token,
+        refresh_token=refresh_token,
         token_type="Bearer",
         expires_in=access_expires_seconds,
         user=UserResponse.model_validate(user.to_dict()),
@@ -365,6 +342,7 @@ async def login(
 async def refresh_token(
     request: Request,
     response: Response,
+    body: dict | None = None,
     db: AsyncSession = Depends(get_db)
 ):
     """
@@ -374,8 +352,10 @@ async def refresh_token(
 
     Returns new access token and sets new refresh token cookie.
     """
-    # Extract refresh token from cookie
+    # Extract refresh token from cookie first, then JSON body fallback
     refresh_token = request.cookies.get("refresh_token")
+    if not refresh_token and body and body.get("refresh_token"):
+        refresh_token = body.get("refresh_token")
 
     if not refresh_token:
         raise HTTPException(
@@ -425,11 +405,62 @@ async def refresh_token(
             detail="Active session not found"
         )
 
+    # Check if session exists in database and is still valid
+    session_token = session_data.get("session_id")
+    logger.info(f"Refresh: Looking for DB session with token {session_token}")
+    db_session = None
+    if session_token:
+        try:
+            db_session = await SessionService.get_session_by_token(db, session_token)
+            if db_session:
+                logger.info(f"Refresh: Found DB session {db_session.session_id}, is_active={db_session.is_active}")
+            else:
+                logger.warning(f"Refresh: DB session not found for token {session_token}")
+        except Exception as e:
+            logger.error(f"Error checking DB session: {e}")
+
+    # If DB session is missing or expired, create a new one and update session_id
+    if not db_session:
+        logger.warning(f"DB session invalid for token {session_token}; creating new session")
+        try:
+            # Create new session with same user
+            new_session_id = secrets.token_urlsafe(32)
+            access_minutes, refresh_days, _, _ = await _get_security_settings(db)
+            
+            new_db_session = await SessionService.create_session(
+                db=db,
+                user_id=str(user.user_id),
+                session_token=new_session_id,
+                user_agent=session_data.get("user_agent", "unknown"),
+                ip_address=session_data.get("ip_address", "0.0.0.0"),
+                expires_in_minutes=refresh_days * 24 * 60,
+            )
+            
+            # Update cache with new session_id
+            session_data["session_id"] = new_session_id
+            await cache_service.set(
+                f"session:{user.user_id}",
+                session_data,
+                ttl=max(refresh_days * 24 * 60 * 60, CACHE_TTLS["session"])
+            )
+            logger.info(f"Created new DB session {new_session_id} for refresh")
+            db_session = new_db_session
+        except Exception as e:
+            logger.error(f"Failed to create new session on refresh: {e}")
+            # Fall back to reusing old session_id, will likely fail auth but at least we tried
+    else:
+        # Session exists, just update its last activity
+        try:
+            await SessionService.update_activity(db, db_session)
+            logger.info(f"Updated activity for existing session {db_session.session_id}")
+        except Exception as e:
+            logger.error(f"Error updating session activity: {e}")
+
     access_minutes, refresh_days, _, _ = await _get_security_settings(db)
     access_expires_seconds = access_minutes * 60
     refresh_ttl_seconds = refresh_days * 24 * 60 * 60
 
-    # Generate new tokens bound to existing session
+    # Generate new tokens bound to (possibly new) session
     new_access_token = auth_service.create_access_token(
         user_id=str(user.user_id),
         email=user.email,
@@ -457,6 +488,7 @@ async def refresh_token(
     # Create response
     token_response = TokenResponse(
         access_token=new_access_token,
+        refresh_token=new_refresh_token,
         token_type="Bearer",
         expires_in=access_expires_seconds,
         user=UserResponse.model_validate(user.to_dict())
@@ -503,7 +535,7 @@ async def logout(
         )
     
     user_id = current_user["sub"]
-    session_id = current_user.get("session_id")
+    session_token = current_user.get("session_id")
 
     # Delete refresh token from Redis
     await cache_service.delete(f"refresh_token:{user_id}")
@@ -512,11 +544,15 @@ async def logout(
     await cache_service.delete(f"session:{user_id}")
 
     # Terminate session in database
-    if session_id:
+    if session_token:
         try:
-            await SessionService.terminate_session(db, session_id)
+            db_session = await SessionService.get_session_by_token(db, session_token)
+            if db_session:
+                await SessionService.terminate_session(db, str(db_session.session_id))
+            else:
+                logger.warning(f"Logout called with missing DB session for token {session_token}")
         except Exception as e:
-            logger.error(f"Failed to terminate session {session_id} in database: {e}")
+            logger.error(f"Failed to terminate session for token {session_token}: {e}")
             # Don't fail logout if DB update fails
 
     logger.info(f"User logged out: {user_id}")
@@ -657,6 +693,7 @@ async def login_confirm_takeover(
     # Create response
     token_response = TokenResponse(
         access_token=access_token,
+        refresh_token=refresh_token,
         token_type="Bearer",
         expires_in=access_expires_seconds,
         user=UserResponse.model_validate(user.to_dict()),

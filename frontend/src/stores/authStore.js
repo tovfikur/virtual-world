@@ -25,7 +25,9 @@ const useAuthStore = create((set, get) => ({
 
       // Store tokens
       localStorage.setItem("access_token", access_token);
-      localStorage.setItem("refresh_token", refresh_token);
+      if (refresh_token) {
+        localStorage.setItem("refresh_token", refresh_token);
+      }
 
       // Update state
       set({
@@ -72,7 +74,9 @@ const useAuthStore = create((set, get) => ({
 
       // Store tokens
       localStorage.setItem("access_token", access_token);
-      localStorage.setItem("refresh_token", refresh_token);
+      if (refresh_token) {
+        localStorage.setItem("refresh_token", refresh_token);
+      }
 
       // Update state
       set({

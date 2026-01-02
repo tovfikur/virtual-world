@@ -49,21 +49,19 @@ api.interceptors.response.use(
             refresh_token: refreshToken,
           });
 
-          const { access_token } = response.data;
+          const { access_token, refresh_token } = response.data;
           localStorage.setItem("access_token", access_token);
+          if (refresh_token) {
+            localStorage.setItem("refresh_token", refresh_token);
+          }
 
           // Retry original request
           originalRequest.headers.Authorization = `Bearer ${access_token}`;
           return api(originalRequest);
         }
       } catch (refreshError) {
-        // Don't redirect during page unload
-        if (!window.__isPageUnloading) {
-          // Refresh failed, logout user
-          localStorage.removeItem("access_token");
-          localStorage.removeItem("refresh_token");
-          window.location.href = "/login";
-        }
+        // If refresh fails, propagate the error without forcing logout/redirect.
+        // This prevents unintended logout on endpoints that return 401 (e.g., role-restricted routes).
         return Promise.reject(refreshError);
       }
     }

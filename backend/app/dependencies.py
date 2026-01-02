@@ -83,15 +83,15 @@ async def get_current_user(
             )
 
         # Enforce single active session - validate against database
-        token_session_id = payload.get("session_id")
-        if not token_session_id:
+        session_token = payload.get("session_id")
+        if not session_token:
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="Invalid token: missing session ID"
             )
 
         # Check if session exists and is active in database
-        db_session = await SessionService.get_session(db, token_session_id)
+        db_session = await SessionService.get_session_by_token(db, session_token)
         if not db_session:
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,

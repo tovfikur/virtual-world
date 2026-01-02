@@ -17,20 +17,8 @@ function RegisterPage() {
   const navigate = useNavigate();
 
   const validatePassword = () => {
-    if (password.length < 12) {
-      return "Password must be at least 12 characters";
-    }
-    if (!/[A-Z]/.test(password)) {
-      return "Password must include at least one uppercase letter";
-    }
-    if (!/[a-z]/.test(password)) {
-      return "Password must include at least one lowercase letter";
-    }
-    if (!/[0-9]/.test(password)) {
-      return "Password must include at least one number";
-    }
-    if (!/[!@#$%^&*]/.test(password)) {
-      return "Password must include at least one special character (!@#$%^&*)";
+    if (password.length < 6) {
+      return "Password must be at least 6 characters";
     }
     return null;
   };
@@ -115,7 +103,7 @@ function RegisterPage() {
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 className="w-full px-4 py-2 bg-gray-700 text-white rounded-lg border border-gray-600 focus:border-blue-500 focus:outline-none"
-                placeholder="At least 12 characters, include A/a/0-9/!@#$%^&*"
+                placeholder="At least 6 characters"
                 required
               />
             </div>
@@ -143,11 +131,7 @@ function RegisterPage() {
             <div className="bg-blue-900/30 border border-blue-700 text-blue-200 px-4 py-3 rounded-lg text-sm">
               <p className="font-semibold mb-1">Password Requirements:</p>
               <ul className="list-disc list-inside space-y-1">
-                <li>At least 12 characters</li>
-                <li>At least one uppercase letter (A–Z)</li>
-                <li>At least one lowercase letter (a–z)</li>
-                <li>At least one number (0–9)</li>
-                <li>At least one special character (!@#$%^&*)</li>
+                <li>At least 6 characters</li>
               </ul>
             </div>
 

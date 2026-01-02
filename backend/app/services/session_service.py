@@ -6,7 +6,7 @@ Enforces single-session-per-user policy for authenticated users
 
 import logging
 import hashlib
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Optional, List, Tuple
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, and_
@@ -82,7 +82,7 @@ class SessionService:
                 await SessionService.terminate_all_sessions(db, user_id)
 
         # Create new session
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         session = UserSession(
             user_id=user_id,
             session_token=session_token,
@@ -122,7 +122,7 @@ class SessionService:
         session = result.scalar_one_or_none()
 
         # Check if expired
-        if session and session.expires_at < datetime.utcnow():
+        if session and session.expires_at < datetime.now(timezone.utc):
             session.is_active = False
             await db.commit()
             return None
@@ -154,7 +154,7 @@ class SessionService:
         session = result.scalar_one_or_none()
 
         # Check if expired
-        if session and session.expires_at < datetime.utcnow():
+        if session and session.expires_at < datetime.now(timezone.utc):
             session.is_active = False
             await db.commit()
             return None
@@ -203,7 +203,7 @@ class SessionService:
         if not session or not session.is_active:
             return False
 
-        if session.expires_at < datetime.utcnow():
+        if session.expires_at < datetime.now(timezone.utc):
             session.is_active = False
             await db.commit()
             return False
@@ -221,7 +221,7 @@ class SessionService:
             db: Database session
             session: UserSession to update
         """
-        session.last_activity = datetime.utcnow()
+        session.last_activity = datetime.now(timezone.utc)
         await db.commit()
 
     @staticmethod
@@ -299,7 +299,7 @@ class SessionService:
             select(UserSession).where(
                 and_(
                     UserSession.is_active == True,
-                    UserSession.expires_at < datetime.utcnow(),
+                    UserSession.expires_at < datetime.now(timezone.utc),
                 )
             )
         )

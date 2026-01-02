@@ -54,7 +54,7 @@ class Settings(BaseSettings):
 
     # Password Security
     bcrypt_rounds: int = Field(default=12, env="BCRYPT_ROUNDS")
-    password_min_length: int = Field(default=12, env="PASSWORD_MIN_LENGTH")
+    password_min_length: int = Field(default=6, env="PASSWORD_MIN_LENGTH")
     max_login_attempts: int = Field(default=5, env="MAX_LOGIN_ATTEMPTS")
     lockout_duration_minutes: int = Field(default=15, env="LOCKOUT_DURATION_MINUTES")
 

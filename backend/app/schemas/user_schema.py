@@ -33,14 +33,6 @@ class UserCreate(BaseModel):
         min_len = settings.password_min_length
         if len(v) < min_len:
             raise ValueError(f'Password must be at least {min_len} characters')
-        if not re.search(r"[A-Z]", v):
-            raise ValueError('Password must include at least one uppercase letter')
-        if not re.search(r"[a-z]", v):
-            raise ValueError('Password must include at least one lowercase letter')
-        if not re.search(r"[0-9]", v):
-            raise ValueError('Password must include at least one number')
-        if not re.search(r"[^A-Za-z0-9]", v):
-            raise ValueError('Password must include at least one special character')
         return v
 
     class Config:
@@ -48,7 +40,7 @@ class UserCreate(BaseModel):
             "example": {
                 "username": "john_doe",
                 "email": "john@example.com",
-                "password": "DemoPassword123!",
+                "password": "password123",
                 "country_code": "BD"
             }
         }
@@ -137,6 +129,7 @@ class TokenResponse(BaseModel):
     """Schema for authentication token response."""
 
     access_token: str
+    refresh_token: str | None = None
     token_type: str = "Bearer"
     expires_in: int
     user: UserResponse
@@ -204,12 +197,4 @@ class PasswordChange(BaseModel):
         min_len = settings.password_min_length
         if len(v) < min_len:
             raise ValueError(f'Password must be at least {min_len} characters')
-        if not re.search(r"[A-Z]", v):
-            raise ValueError('Password must include at least one uppercase letter')
-        if not re.search(r"[a-z]", v):
-            raise ValueError('Password must include at least one lowercase letter')
-        if not re.search(r"[0-9]", v):
-            raise ValueError('Password must include at least one number')
-        if not re.search(r"[^A-Za-z0-9]", v):
-            raise ValueError('Password must include at least one special character')
         return v
