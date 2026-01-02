@@ -2962,17 +2962,17 @@ function WorldRenderer() {
         const midX = (values[0].x + values[1].x) / 2;
         const midY = (values[0].y + values[1].y) / 2;
         const distance = computeDistance();
+        const prevDistance = lastPinchDistanceRef.current;
 
-        const startDistance = lastPinchDistanceRef.current;
-        const startZoom = pinchStartZoomRef.current ?? camera.zoom;
-
-        if (distance && startDistance && startZoom) {
-          const targetScale = distance / startDistance;
-          if (targetScale > 0) {
-            const targetZoom = clamp(startZoom * targetScale, 0.25, 4);
+        if (distance && prevDistance) {
+          const rawScale = distance / prevDistance;
+          // Ignore tiny jitter and dampen scale to avoid jumps.
+          if (Math.abs(rawScale - 1) > 0.005) {
+            const scaleDelta = Math.pow(rawScale, 0.5);
             const currentZoom = cameraRef.current?.zoom ?? camera.zoom;
+            const targetZoom = clamp(currentZoom * scaleDelta, 0.25, 4);
             const smoothedZoom =
-              currentZoom + (targetZoom - currentZoom) * 0.25;
+              currentZoom + (targetZoom - currentZoom) * 0.35;
 
             // Keep the point between fingers stable while zooming.
             const anchor = pinchAnchorRef.current;
@@ -2998,6 +2998,7 @@ function WorldRenderer() {
           }
         }
 
+        lastPinchDistanceRef.current = distance ?? prevDistance;
         pinchAnchorRef.current = { x: midX, y: midY };
         isPinchingRef.current = true;
       }
