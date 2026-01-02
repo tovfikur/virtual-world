@@ -3095,26 +3095,6 @@ function WorldRenderer() {
       <div className="pointer-events-none absolute top-4 left-1/2 -translate-x-1/2 text-xs uppercase tracking-wide text-white/70 hidden md:block">
         Arrow keys to walk the creature
       </div>
-
-      {isTouchDevice && (
-        <div className="absolute bottom-6 right-6 z-30 flex flex-col items-center gap-2 pointer-events-none">
-          <div
-            className="pointer-events-auto w-28 h-28 rounded-full border border-white/30 bg-gray-900/60 backdrop-blur-md relative"
-            onPointerDown={handleTouchPadPointerDown}
-            onPointerMove={handleTouchPadPointerMove}
-            onPointerUp={handleTouchPadPointerUp}
-            onPointerCancel={handleTouchPadPointerUp}
-          >
-            <div
-              className="absolute rounded-full bg-blue-400/80 border border-blue-100/80 shadow-lg"
-              style={padThumbStyle}
-            />
-          </div>
-          <p className="text-xs text-white/80 font-semibold drop-shadow pointer-events-none">
-            Touch & drag to walk
-          </p>
-        </div>
-      )}
     </div>
   );
 }

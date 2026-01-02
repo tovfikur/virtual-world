@@ -138,7 +138,7 @@ function WorldPage() {
   };
 
   return (
-    <div className="relative w-screen h-screen overflow-hidden bg-gray-900">
+    <div className="relative w-screen h-screen overflow-hidden bg-gray-900" style={{ height: '100dvh' }}>  
       {/* PixiJS World Renderer */}
       <WorldRenderer />
 
@@ -147,7 +147,7 @@ function WorldPage() {
 
       {/* Chat Box - Bottom Left */}
       {showChat && (
-        <div className="absolute bottom-4 left-2 md:left-4 right-2 md:right-auto md:w-96 z-20">
+        <div className="absolute bottom-2 left-2 md:left-4 right-2 md:right-auto md:w-96 z-20">
           <ChatBox onClose={() => setShowChat(false)} land={selectedLand} />
         </div>
       )}
@@ -156,7 +156,7 @@ function WorldPage() {
       {!showChat && (
         <button
           onClick={() => setShowChat(true)}
-          className="absolute bottom-4 left-2 md:left-4 z-20 bg-gray-800 hover:bg-gray-700 text-white px-3 md:px-4 py-2 rounded-lg shadow-lg border border-gray-600 transition-colors"
+          className="absolute bottom-2 left-2 md:left-4 z-20 bg-gray-800 hover:bg-gray-700 text-white px-3 md:px-4 py-2 rounded-lg shadow-lg border border-gray-600 transition-colors">
         >
           <svg
             className="w-5 h-5 md:w-6 md:h-6"
@@ -325,7 +325,7 @@ function WorldPage() {
       )}
 
       {/* Controls Help - Bottom Right */}
-      <div className="hidden md:block absolute bottom-4 right-4 z-10 bg-gray-800/80 backdrop-blur-sm text-white px-4 py-3 rounded-lg shadow-lg border border-gray-600 text-sm">
+      <div className="hidden md:block absolute bottom-2 right-2 z-10 bg-gray-800/80 backdrop-blur-sm text-white px-4 py-3 rounded-lg shadow-lg border border-gray-600 text-sm">
         <div className="font-semibold mb-2">Controls:</div>
         <div className="space-y-1 text-gray-300">
           <div>
