@@ -12,6 +12,7 @@ import logging
 from app.db.session import get_db
 from app.services.auth_service import auth_service, InvalidTokenException
 from app.services.cache_service import cache_service
+from app.services.session_service import SessionService
 from app.models.user import User, UserRole
 
 logger = logging.getLogger(__name__)
@@ -26,6 +27,11 @@ async def get_current_user(
 ) -> dict:
     """
     Dependency to extract and verify current user from JWT token.
+    
+    Also validates that:
+    1. The session is still active in the database
+    2. For authenticated users: Only one session is active at a time
+    3. The token's session_id matches the active session
 
     Args:
         credentials: HTTP Bearer token from Authorization header
@@ -35,7 +41,7 @@ async def get_current_user(
         dict: Token payload with user information
 
     Raises:
-        HTTPException: If token is invalid or user not found
+        HTTPException: If token is invalid, user not found, or session is invalid
 
     Example:
         ```python
@@ -76,19 +82,31 @@ async def get_current_user(
                 detail="Account is locked"
             )
 
-        # Enforce single active session
-        active_session = await cache_service.get(f"session:{user_id}")
+        # Enforce single active session - validate against database
         token_session_id = payload.get("session_id")
-        if not active_session or not token_session_id:
+        if not token_session_id:
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Session expired"
+                detail="Invalid token: missing session ID"
             )
-        if active_session.get("session_id") != token_session_id:
+
+        # Check if session exists and is active in database
+        db_session = await SessionService.get_session(db, token_session_id)
+        if not db_session:
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="You have been logged out from another device"
+                detail="Session expired or invalid"
             )
+
+        # Validate session is still active
+        if not await SessionService.validate_session(db, db_session):
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Session is no longer active"
+            )
+
+        # Update last activity timestamp
+        await SessionService.update_activity(db, db_session)
 
         return payload
 

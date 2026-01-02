@@ -11,6 +11,7 @@ import logging
 import secrets
 from datetime import datetime
 import re
+import hashlib
 
 from app.db.session import get_db
 from app.models.user import User
@@ -19,6 +20,7 @@ from app.schemas.user_schema import UserCreate, UserLogin, UserResponse, TokenRe
 from app.services.auth_service import auth_service
 from app.services.cache_service import cache_service
 from app.services.land_allocation_service import land_allocation_service
+from app.services.session_service import SessionService
 from app.config import settings, CACHE_TTLS
 from app.dependencies import get_current_user
 from app.services.websocket_service import connection_manager
@@ -167,10 +169,17 @@ async def register(
 async def login(
     user_data: UserLogin,
     response: Response,
-    db: AsyncSession = Depends(get_db)
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    confirm_takeover: bool = False,
 ):
     """
     Authenticate user with email and password.
+
+    For authenticated users: Enforces single-session-per-user policy.
+    If user is already logged in from another device:
+    - Returns 409 CONFLICT with session info
+    - Requires explicit confirm_takeover=true to proceed
 
     Returns:
     - **access_token**: JWT token (expires in 1 hour)
@@ -219,23 +228,60 @@ async def login(
     user.reset_login_attempts()
     await db.commit()
 
-    # Check for existing session to enforce single-device rule
-    previous_session = await cache_service.get(f"session:{user.user_id}")
-    previous_session_terminated = False
+    # Prepare device information for current request
+    current_user_agent = request.headers.get("user-agent", "unknown")
+    current_ip_address = request.client.host if request.client else "0.0.0.0"
+    
+    # Calculate device fingerprint for current request
+    current_fingerprint = hashlib.sha256(
+        f"{current_user_agent}:{current_ip_address}".encode()
+    ).hexdigest()
 
-    if login_policy["max_sessions_per_user"] <= 1 and previous_session and connection_manager.has_active_connections(str(user.user_id)):
-        forced = await connection_manager.force_logout_user(
-            str(user.user_id),
-            reason="Another device signed in with this account"
-        )
-        if forced:
+    # CHECK FOR EXISTING SESSION (Conflict Detection)
+    if login_policy["max_sessions_per_user"] <= 1:
+        existing_sessions = await SessionService.get_active_sessions(db, str(user.user_id))
+        
+        # If session exists, check if it's from a different device
+        if existing_sessions and not confirm_takeover:
+            active_session = existing_sessions[0]
+            
+            # Compare device fingerprints - if same device, allow re-login without conflict
+            is_same_device = (active_session.device_fingerprint == current_fingerprint)
+            
+            if not is_same_device:
+                logger.warning(f"Login conflict detected for user {user.username}: attempt from new device without confirmation")
+                
+                # Return conflict response only if different device
+                conflict_response = {
+                    "status": "session_conflict",
+                    "message": "Your account is already logged in from another browser or device. Please logout from the other device first, or click 'Take Over Session' to terminate the other session and login from this device.",
+                    "user": user.to_dict(),
+                    "has_active_session": True,
+                    "active_session_device": active_session.user_agent,
+                    "active_session_ip": active_session.ip_address,
+                    "active_session_started": active_session.started_at.isoformat() if active_session.started_at else None
+                }
+                
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail=conflict_response
+                )
+            else:
+                # Same device - terminate old session silently and continue with new login
+                logger.info(f"Re-login from same device for user {user.username}: terminating existing session")
+                await SessionService.terminate_all_sessions(db, str(user.user_id))
+
+    # SINGLE SESSION ENFORCEMENT: Terminate any existing sessions for this user
+    previous_session_terminated = False
+    if login_policy["max_sessions_per_user"] <= 1:
+        terminated_count = await SessionService.terminate_all_sessions(db, str(user.user_id))
+        if terminated_count > 0:
             previous_session_terminated = True
-        else:
-            logger.warning(f"Could not terminate existing session for user {user.username}")
-            raise HTTPException(
-                status_code=status.HTTP_423_LOCKED,
-                detail="Another device is already using this account. Please log out there first."
-            )
+            logger.info(f"Terminated {terminated_count} existing session(s) for user {user.username}")
+
+    # Prepare device information for session tracking
+    user_agent = request.headers.get("user-agent", "unknown")
+    ip_address = request.client.host if request.client else "0.0.0.0"
 
     access_minutes, refresh_days, _, _ = await _get_security_settings(db)
     access_expires_seconds = access_minutes * 60
@@ -252,6 +298,21 @@ async def login(
         expires_minutes=access_minutes,
     )
     refresh_token = auth_service.create_refresh_token()
+
+    # Create new session in database with device fingerprinting
+    try:
+        db_session = await SessionService.create_session(
+            db=db,
+            user_id=str(user.user_id),
+            session_token=session_id,
+            user_agent=user_agent,
+            ip_address=ip_address,
+            expires_in_minutes=refresh_days * 24 * 60,  # Same as refresh token
+        )
+        logger.info(f"Session created in DB: {db_session.session_id} for user {user.username}")
+    except Exception as e:
+        logger.error(f"Failed to create session in database: {e}")
+        # Don't fail login if session DB creation fails, still use cache
 
     # Store refresh token in Redis with user_id as key
     await cache_service.set(
@@ -419,21 +480,44 @@ async def refresh_token(
 @router.post("/logout", status_code=status.HTTP_204_NO_CONTENT)
 async def logout(
     request: Request,
-    current_user: dict = Depends(get_current_user)
+    current_user: dict = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+    confirm: bool = True
 ):
     """
     Logout current user.
 
-    Invalidates refresh token and session.
+    Invalidates refresh token, session in cache, and terminates session in database.
     Client should discard the access token.
+    
+    Args:
+        confirm: Must be True to prevent accidental logouts (e.g., on page refresh)
+                Default is True to maintain backwards compatibility.
     """
+    # Prevent accidental logouts on page refresh or other unintended triggers
+    if not confirm:
+        logger.warning(f"Logout attempt without confirmation for user {current_user['sub']}")
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Logout confirmation required"
+        )
+    
     user_id = current_user["sub"]
+    session_id = current_user.get("session_id")
 
     # Delete refresh token from Redis
     await cache_service.delete(f"refresh_token:{user_id}")
 
     # Delete session from Redis
     await cache_service.delete(f"session:{user_id}")
+
+    # Terminate session in database
+    if session_id:
+        try:
+            await SessionService.terminate_session(db, session_id)
+        except Exception as e:
+            logger.error(f"Failed to terminate session {session_id} in database: {e}")
+            # Don't fail logout if DB update fails
 
     logger.info(f"User logged out: {user_id}")
 
@@ -442,6 +526,157 @@ async def logout(
     response.delete_cookie(key="refresh_token")
 
     return response
+
+
+@router.post("/login/confirm-takeover", response_model=TokenResponse)
+async def login_confirm_takeover(
+    user_data: UserLogin,
+    response: Response,
+    request: Request,
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Confirm taking over the session - terminates existing session and logs in from new device.
+    
+    This endpoint is called after receiving a 409 CONFLICT response from /login.
+    It requires valid credentials and will terminate any existing sessions for the user.
+    
+    Returns:
+    - **access_token**: JWT token (expires in 1 hour)
+    - **refresh_token**: Set as HTTP-only cookie (expires in 7 days)
+    - **user**: User profile information
+    - **previous_session_terminated**: True (confirming existing session was terminated)
+    """
+    confirm_takeover = True  # Always true for this endpoint
+    
+    access_minutes, refresh_days, _, login_policy = await _get_security_settings(db)
+
+    # Find user by email
+    result = await db.execute(
+        select(User).where(User.email == user_data.email)
+    )
+    user = result.scalar_one_or_none()
+
+    if not user:
+        logger.warning(f"Login attempt with non-existent email: {user_data.email}")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid email or password"
+        )
+
+    # Check if account is locked
+    if user.is_locked():
+        logger.warning(f"Login attempt on locked account: {user.username}")
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Account is temporarily locked due to too many failed login attempts"
+        )
+
+    # Verify password
+    if not user.verify_password(user_data.password):
+        user.add_failed_login(
+            max_attempts=login_policy["max_attempts"],
+            lockout_minutes=login_policy["lockout_duration_minutes"],
+        )
+        await db.commit()
+        logger.warning(f"Failed login attempt for user: {user.username}")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid email or password"
+        )
+
+    # Reset failed login attempts on successful login
+    user.reset_login_attempts()
+    await db.commit()
+
+    # Prepare device information for current request
+    confirm_takeover_user_agent = request.headers.get("user-agent", "unknown")
+    confirm_takeover_ip_address = request.client.host if request.client else "0.0.0.0"
+
+    # SINGLE SESSION ENFORCEMENT: Terminate any existing sessions for this user
+    previous_session_terminated = False
+    if login_policy["max_sessions_per_user"] <= 1:
+        terminated_count = await SessionService.terminate_all_sessions(db, str(user.user_id))
+        if terminated_count > 0:
+            previous_session_terminated = True
+            logger.info(f"Terminated {terminated_count} existing session(s) for user {user.username}")
+
+    access_minutes, refresh_days, _, _ = await _get_security_settings(db)
+    access_expires_seconds = access_minutes * 60
+    refresh_ttl_seconds = refresh_days * 24 * 60 * 60
+    session_ttl = max(refresh_ttl_seconds, CACHE_TTLS["session"])
+
+    # Generate tokens with session binding
+    session_id = secrets.token_urlsafe(32)
+    access_token = auth_service.create_access_token(
+        user_id=str(user.user_id),
+        email=user.email,
+        role=user.role.value,
+        additional_claims={"session_id": session_id},
+        expires_minutes=access_minutes,
+    )
+    refresh_token = auth_service.create_refresh_token()
+
+    # Create new session in database with device fingerprinting
+    try:
+        db_session = await SessionService.create_session(
+            db=db,
+            user_id=str(user.user_id),
+            session_token=session_id,
+            user_agent=confirm_takeover_user_agent,
+            ip_address=confirm_takeover_ip_address,
+            expires_in_minutes=refresh_days * 24 * 60,  # Same as refresh token
+        )
+        logger.info(f"Session created in DB: {db_session.session_id} for user {user.username}")
+    except Exception as e:
+        logger.error(f"Failed to create session in database: {e}")
+        # Don't fail login if session DB creation fails, still use cache
+
+    # Store refresh token in Redis with user_id as key
+    await cache_service.set(
+        f"refresh_token:{user.user_id}",
+        refresh_token,
+        ttl=refresh_ttl_seconds
+    )
+
+    # Store session in Redis
+    await cache_service.set(
+        f"session:{user.user_id}",
+        {
+            "session_id": session_id,
+            "user_id": str(user.user_id),
+            "email": user.email,
+            "role": user.role.value,
+            "created_at": datetime.utcnow().isoformat()
+        },
+        ttl=session_ttl
+    )
+
+    logger.info(f"User logged in: {user.username} ({user.user_id})")
+
+    # Create response
+    token_response = TokenResponse(
+        access_token=access_token,
+        token_type="Bearer",
+        expires_in=access_expires_seconds,
+        user=UserResponse.model_validate(user.to_dict()),
+        previous_session_terminated=previous_session_terminated
+    )
+
+    # Set refresh token as HTTP-only cookie
+    json_response = JSONResponse(
+        content=token_response.model_dump(mode='json')
+    )
+    json_response.set_cookie(
+        key="refresh_token",
+        value=refresh_token,
+        max_age=refresh_ttl_seconds,
+        httponly=True,
+        secure=True,  # HTTPS only in production
+        samesite="strict"
+    )
+
+    return json_response
 
 
 @router.get("/me", response_model=UserResponse)

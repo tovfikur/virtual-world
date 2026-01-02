@@ -160,6 +160,37 @@ class TokenResponse(BaseModel):
         }
 
 
+class SessionConflictResponse(BaseModel):
+    """Schema for session conflict (already logged in elsewhere)."""
+
+    status: str = "session_conflict"
+    message: str
+    user: UserResponse
+    has_active_session: bool = True
+    active_session_device: Optional[str] = None
+    active_session_ip: Optional[str] = None
+    active_session_started: Optional[datetime] = None
+
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "status": "session_conflict",
+                "message": "Your account is already logged in from another browser/device. Please logout from the other device first, or click 'Take Over' to terminate the other session.",
+                "user": {
+                    "user_id": "550e8400-e29b-41d4-a716-446655440000",
+                    "username": "john_doe",
+                    "email": "john@example.com",
+                    "role": "user",
+                    "balance_bdt": 50000
+                },
+                "has_active_session": True,
+                "active_session_device": "Chrome on Windows",
+                "active_session_ip": "192.168.1.1",
+                "active_session_started": "2026-01-02T10:30:00Z"
+            }
+        }
+
+
 class PasswordChange(BaseModel):
     """Schema for changing password."""
 

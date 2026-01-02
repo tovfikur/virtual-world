@@ -37,12 +37,22 @@ import ProtectedRoute from "./components/ProtectedRoute";
 import LoadingScreen from "./components/LoadingScreen";
 
 function App() {
-  const { isAuthenticated, isLoading, loadUser, logout } = useAuthStore();
+  const {
+    isAuthenticated,
+    isLoading,
+    loadUser,
+    logout,
+    setupPageUnloadHandler,
+  } = useAuthStore();
 
   // Load user on mount
   useEffect(() => {
     loadUser();
-  }, [loadUser]);
+
+    // Setup page unload handler to prevent accidental logout on refresh
+    const cleanup = setupPageUnloadHandler();
+    return cleanup;
+  }, [loadUser, setupPageUnloadHandler]);
 
   // Listen for broadcast messages from admin
   useEffect(() => {

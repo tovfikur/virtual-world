@@ -57,10 +57,13 @@ api.interceptors.response.use(
           return api(originalRequest);
         }
       } catch (refreshError) {
-        // Refresh failed, logout user
-        localStorage.removeItem("access_token");
-        localStorage.removeItem("refresh_token");
-        window.location.href = "/login";
+        // Don't redirect during page unload
+        if (!window.__isPageUnloading) {
+          // Refresh failed, logout user
+          localStorage.removeItem("access_token");
+          localStorage.removeItem("refresh_token");
+          window.location.href = "/login";
+        }
         return Promise.reject(refreshError);
       }
     }
@@ -79,7 +82,17 @@ export const authAPI = {
 
   login: (email, password) => api.post("/auth/login", { email, password }),
 
-  logout: () => api.post("/auth/logout"),
+  confirmTakeover: (email, password) =>
+    api.post("/auth/login/confirm-takeover", { email, password }),
+
+  logout: (confirm = true) => {
+    // Prevent logout on page unload/refresh (Ctrl+Shift+R)
+    // Only allow logout if page is not being unloaded
+    if (window.__isPageUnloading) {
+      return Promise.resolve({ data: {} });
+    }
+    return api.post("/auth/logout", null, { params: { confirm } });
+  },
 
   getMe: () => api.get("/auth/me"),
 

@@ -4,6 +4,7 @@ Exports all ORM models
 """
 
 from app.models.user import User, UserRole
+from app.models.session import UserSession
 from app.models.land import Land, Biome
 from app.models.listing import Listing, ListingType, ListingStatus
 from app.models.listing_land import ListingLand
@@ -23,6 +24,7 @@ __all__ = [
     # User
     "User",
     "UserRole",
+    "UserSession",
     # Land
     "Land",
     "Biome",
