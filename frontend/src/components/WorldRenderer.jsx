@@ -3085,10 +3085,10 @@ function WorldRenderer() {
   };
 
   return (
-    <div className="absolute inset-0">
+    <div className="absolute inset-0 bg-gray-900">
       <div
         ref={canvasRef}
-        className="absolute inset-0"
+        className="absolute inset-0 w-full h-full"
         style={{ cursor: isDraggingRef.current ? "grabbing" : "grab" }}
       />
 
