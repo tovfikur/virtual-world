@@ -453,6 +453,8 @@ function WorldRenderer() {
   const activeTouchPointersRef = useRef(new Map());
   const lastPinchDistanceRef = useRef(null);
   const isPinchingRef = useRef(false);
+  const pinchStartZoomRef = useRef(null);
+  const pinchAnchorRef = useRef({ x: null, y: null });
   const cameraRef = useRef(null);
   const audioContextRef = useRef(null);
   const footstepBuffersRef = useRef(new Map());
@@ -2934,8 +2936,14 @@ function WorldRenderer() {
       pointers.set(event.pointerId, { x: event.clientX, y: event.clientY });
 
       if (pointers.size === 2) {
+        const values = Array.from(pointers.values());
+        const midX = (values[0].x + values[1].x) / 2;
+        const midY = (values[0].y + values[1].y) / 2;
+        pinchAnchorRef.current = { x: midX, y: midY };
+
         const distance = computeDistance();
         if (distance) {
+          pinchStartZoomRef.current = cameraRef.current?.zoom ?? camera.zoom;
           lastPinchDistanceRef.current = distance;
           isPinchingRef.current = true;
         }
@@ -2950,19 +2958,47 @@ function WorldRenderer() {
       pointers.set(event.pointerId, { x: event.clientX, y: event.clientY });
 
       if (pointers.size >= 2) {
+        const values = Array.from(pointers.values());
+        const midX = (values[0].x + values[1].x) / 2;
+        const midY = (values[0].y + values[1].y) / 2;
         const distance = computeDistance();
-        const previous = lastPinchDistanceRef.current;
 
-        if (distance && previous) {
-          const scale = distance / previous;
-          if (scale > 0) {
-            const baseZoom = cameraRef.current?.zoom ?? camera.zoom;
-            const nextZoom = clamp(baseZoom * scale, 0.25, 4);
-            setCamera(undefined, undefined, nextZoom);
+        const startDistance = lastPinchDistanceRef.current;
+        const startZoom = pinchStartZoomRef.current ?? camera.zoom;
+
+        if (distance && startDistance && startZoom) {
+          const targetScale = distance / startDistance;
+          if (targetScale > 0) {
+            const targetZoom = clamp(startZoom * targetScale, 0.25, 4);
+            const currentZoom = cameraRef.current?.zoom ?? camera.zoom;
+            const smoothedZoom =
+              currentZoom + (targetZoom - currentZoom) * 0.25;
+
+            // Keep the point between fingers stable while zooming.
+            const anchor = pinchAnchorRef.current;
+            const cx =
+              typeof anchor.x === "number" ? anchor.x : midX ?? viewport.width / 2;
+            const cy =
+              typeof anchor.y === "number" ? anchor.y : midY ?? viewport.height / 2;
+
+            const camX = cameraRef.current?.x ?? camera.x;
+            const camY = cameraRef.current?.y ?? camera.y;
+
+            const worldX =
+              camX + (cx - viewport.width / 2) / (currentZoom * LAND_SIZE);
+            const worldY =
+              camY + (cy - viewport.height / 2) / (currentZoom * LAND_SIZE);
+
+            const nextCamX =
+              worldX - (cx - viewport.width / 2) / (smoothedZoom * LAND_SIZE);
+            const nextCamY =
+              worldY - (cy - viewport.height / 2) / (smoothedZoom * LAND_SIZE);
+
+            setCamera(nextCamX, nextCamY, smoothedZoom);
           }
         }
 
-        lastPinchDistanceRef.current = distance;
+        pinchAnchorRef.current = { x: midX, y: midY };
         isPinchingRef.current = true;
       }
     };
@@ -2973,6 +3009,8 @@ function WorldRenderer() {
 
       if (pointers.size < 2) {
         lastPinchDistanceRef.current = null;
+        pinchStartZoomRef.current = null;
+        pinchAnchorRef.current = { x: null, y: null };
         isPinchingRef.current = false;
       }
     };
@@ -2995,6 +3033,8 @@ function WorldRenderer() {
       canvas.removeEventListener("pointerleave", handlePointerEnd);
       pointers.clear();
       lastPinchDistanceRef.current = null;
+      pinchStartZoomRef.current = null;
+      pinchAnchorRef.current = { x: null, y: null };
       isPinchingRef.current = false;
     };
   }, [camera.zoom, setCamera]);
