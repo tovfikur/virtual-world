@@ -1437,6 +1437,7 @@ class AdminConfig(BaseModel):
                 }
             },
             "biome_trade_fee_percent": self.biome_trade_fee_percent,
+            "enable_land_trading": self.enable_land_trading,
             "biome_market_controls": {
                 "max_price_move_percent": self.max_price_move_percent,
                 "max_transaction_percent": self.max_transaction_percent,
