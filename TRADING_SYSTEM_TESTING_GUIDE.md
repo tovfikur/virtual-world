@@ -3,6 +3,7 @@
 ## 🎯 Quick Test (5 minutes)
 
 ### Prerequisites
+
 - Running backend server (localhost:8000)
 - Admin account with valid token
 - User account with valid token
@@ -21,6 +22,7 @@ curl -X GET http://localhost:8000/admin/config/economy \
 ```
 
 **Expected Response** (abbreviated):
+
 ```json
 {
   "base_land_price_bdt": 1000,
@@ -43,12 +45,14 @@ curl -X GET http://localhost:8000/admin/config/economy \
 4. Scroll to "**General Land Pricing**" section
 5. Look for checkbox labeled "**Enable Land Trading**"
 
-**✅ Pass Criteria**: 
+**✅ Pass Criteria**:
+
 - Checkbox is visible
 - It's either checked or unchecked (showing a state)
 - Not blank or greyed out
 
 **❌ Fail Criteria**:
+
 - Checkbox is missing
 - Checkbox is always unchecked regardless of setting
 - Checkbox doesn't respond to clicks
@@ -64,6 +68,7 @@ curl -X GET http://localhost:8000/admin/config/economy \
 3. Wait for "Success" message
 
 **Verify via API:**
+
 ```bash
 curl -X GET http://localhost:8000/admin/config/economy \
   -H "Authorization: Bearer YOUR_ADMIN_TOKEN"
@@ -72,6 +77,7 @@ curl -X GET http://localhost:8000/admin/config/economy \
 **✅ Pass Criteria**: Response has `"enable_land_trading": false`
 
 **In Frontend:**
+
 1. Reload the admin page (F5)
 2. Checkbox should still be **UNCHECKED**
 
@@ -94,11 +100,13 @@ curl -X POST http://localhost:8000/marketplace/listings \
   }'
 ```
 
-**✅ Pass Criteria**: 
+**✅ Pass Criteria**:
+
 - Response status: **403 Forbidden**
 - Response body: `{"detail": "Land trading is currently disabled by admin"}`
 
 **❌ Fail Criteria**:
+
 - Status 201 Created (listing was created - BAD!)
 - Status 200 OK (operation succeeded - BAD!)
 - Any status other than 403
@@ -114,6 +122,7 @@ curl -X POST http://localhost:8000/marketplace/listings \
 3. Wait for success message
 
 **In Terminal:**
+
 ```bash
 curl -X GET http://localhost:8000/admin/config/economy \
   -H "Authorization: Bearer YOUR_ADMIN_TOKEN"
@@ -122,6 +131,7 @@ curl -X GET http://localhost:8000/admin/config/economy \
 **✅ Pass Criteria**: Response has `"enable_land_trading": true`
 
 **In Frontend:**
+
 1. Reload (F5)
 2. Checkbox should be **CHECKED**
 
@@ -143,10 +153,12 @@ curl -X POST http://localhost:8000/marketplace/listings \
 ```
 
 **✅ Pass Criteria**:
+
 - Status: **201 Created** (or 400 if land IDs invalid, but NOT 403)
 - Response body has: `"listing_id": "..."`
 
 **❌ Fail Criteria**:
+
 - Status 403 Forbidden (should work now!)
 - Status 500 Internal Server Error
 
@@ -172,44 +184,54 @@ curl -X GET http://localhost:8000/admin/config/economy \
 ### Test 2: Toggle ON → OFF → ON
 
 **Step 1: Set to ON**
+
 ```bash
 curl -X PATCH http://localhost:8000/admin/config/economy \
   -H "Authorization: Bearer YOUR_ADMIN_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{"enable_land_trading": true}'
 ```
+
 **Verify**: Response shows `"enable_land_trading": true`
 
 **Step 2: Get and verify persistence**
+
 ```bash
 curl -X GET http://localhost:8000/admin/config/economy \
   -H "Authorization: Bearer YOUR_ADMIN_TOKEN" | jq .enable_land_trading
 ```
+
 **Expected**: `true`
 
 **Step 3: Set to OFF**
+
 ```bash
 curl -X PATCH http://localhost:8000/admin/config/economy \
   -H "Authorization: Bearer YOUR_ADMIN_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{"enable_land_trading": false}'
 ```
+
 **Verify**: Response shows `"enable_land_trading": false`
 
 **Step 4: Get and verify**
+
 ```bash
 curl -X GET http://localhost:8000/admin/config/economy \
   -H "Authorization: Bearer YOUR_ADMIN_TOKEN" | jq .enable_land_trading
 ```
+
 **Expected**: `false`
 
 **Step 5: Set to ON again**
+
 ```bash
 curl -X PATCH http://localhost:8000/admin/config/economy \
   -H "Authorization: Bearer YOUR_ADMIN_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{"enable_land_trading": true}'
 ```
+
 **Verify**: Response shows `"enable_land_trading": true`
 
 ---
@@ -219,6 +241,7 @@ curl -X PATCH http://localhost:8000/admin/config/economy \
 #### When Trading is OFF
 
 **Disable trading first:**
+
 ```bash
 curl -X PATCH http://localhost:8000/admin/config/economy \
   -H "Authorization: Bearer YOUR_ADMIN_TOKEN" \
@@ -228,35 +251,43 @@ curl -X PATCH http://localhost:8000/admin/config/economy \
 **Try each endpoint:**
 
 **3a. Create Listing**
+
 ```bash
 curl -X POST http://localhost:8000/marketplace/listings \
   -H "Authorization: Bearer YOUR_USER_TOKEN" \
   -d '{"land_ids": ["..."], "listing_type": "fixed_price", ...}'
 ```
+
 **Expected**: 403 Forbidden ✅
 
 **3b. Place Bid**
+
 ```bash
 curl -X POST http://localhost:8000/marketplace/listings/LISTING_ID/bids \
   -H "Authorization: Bearer YOUR_USER_TOKEN" \
   -d '{"amount_bdt": 150000}'
 ```
+
 **Expected**: 403 Forbidden ✅
 
 **3c. Buy Now**
+
 ```bash
 curl -X POST http://localhost:8000/marketplace/listings/LISTING_ID/buy-now \
   -H "Authorization: Bearer YOUR_USER_TOKEN" \
   -d '{"payment_method": "balance"}'
 ```
+
 **Expected**: 403 Forbidden ✅
 
 **3d. Claim Land**
+
 ```bash
 curl -X POST http://localhost:8000/lands/claim \
   -H "Authorization: Bearer YOUR_USER_TOKEN" \
   -d '{"x": 100, "y": 100, "biome": "plains"}'
 ```
+
 **Expected**: 403 Forbidden ✅
 
 ---
@@ -264,6 +295,7 @@ curl -X POST http://localhost:8000/lands/claim \
 #### When Trading is ON
 
 **Enable trading first:**
+
 ```bash
 curl -X PATCH http://localhost:8000/admin/config/economy \
   -H "Authorization: Bearer YOUR_ADMIN_TOKEN" \
@@ -273,15 +305,19 @@ curl -X PATCH http://localhost:8000/admin/config/economy \
 **Try same endpoints - should work (or give different error):**
 
 **3a. Create Listing**
+
 - Expected: 201 Created ✅ (or 400 if bad data, but NOT 403)
 
 **3b. Place Bid**
+
 - Expected: 201 Created ✅ (or 400/404, but NOT 403)
 
 **3c. Buy Now**
+
 - Expected: 200 OK ✅ (or 400/404, but NOT 403)
 
 **3d. Claim Land**
+
 - Expected: 200 OK ✅ (or 400, but NOT 403)
 
 ---
@@ -291,19 +327,23 @@ curl -X PATCH http://localhost:8000/admin/config/economy \
 **Objective**: UI correctly reflects and persists settings
 
 **Step 1: Open Admin Settings**
+
 - Go to Admin → Economic Settings
 - Note current state of "Enable Land Trading" checkbox
 
 **Step 2: Reload Page**
+
 - Press F5 (refresh)
 - Checkbox should be in same state
 
 **Step 3: Toggle Checkbox**
+
 - Click checkbox to opposite state
 - Click SAVE
 - See "Success" message
 
 **Step 4: Reload Again**
+
 - Press F5
 - Checkbox should be in NEW state
 
@@ -384,6 +424,7 @@ _________________________________________________________________
 ### Issue: API Still Doesn't Return Field
 
 **Check:**
+
 1. Code is deployed: `git log` shows commit e857f7a
 2. Server restarted/reloaded
 3. Using correct endpoint: `/admin/config/economy`
@@ -396,6 +437,7 @@ _________________________________________________________________
 ### Issue: Checkbox Still Unchecked
 
 **Check:**
+
 1. API is returning the field (do Test 1 first)
 2. Browser cache is cleared (Ctrl+Shift+Del)
 3. Frontend reloaded (Ctrl+Shift+R hard refresh)
@@ -407,12 +449,14 @@ _________________________________________________________________
 ### Issue: Trading Still Works When Disabled
 
 **Check:**
+
 1. Admin actually saved (see success message)
 2. Verify via API it's set to false
 3. User is using fresh token (not cached)
 4. Server restarted after code deployment
 
 **Fix:** Check logs for enforcement errors:
+
 ```bash
 grep "enable_land_trading" /var/log/backend.log
 ```
@@ -422,12 +466,14 @@ grep "enable_land_trading" /var/log/backend.log
 ### Issue: Trading Blocked When Enabled
 
 **Check:**
+
 1. API shows `"enable_land_trading": true`
 2. Using correct endpoint
 3. User has valid lands to list
 4. No other errors (check response body)
 
 **Fix:** Check full error response:
+
 ```bash
 curl ... -v  # Verbose mode shows headers and full response
 ```
@@ -454,6 +500,7 @@ Before deploying to production:
 ## Questions?
 
 Refer to:
+
 - [Root Cause Analysis](./TRADING_SYSTEM_ROOT_CAUSE_FIX.md)
 - [Visual Diagrams](./TRADING_SYSTEM_VISUAL_GUIDE.md)
 - [Complete Summary](./TRADING_SYSTEM_FINAL_SUMMARY.md)

@@ -3,6 +3,7 @@
 ## What Was Fixed ✅
 
 The admin toggle for "Enable Land Trading" now works correctly:
+
 - Admin disables trading → Users cannot trade
 - Admin enables trading → Users can trade
 - Changes take effect immediately (no restart needed)
@@ -19,16 +20,17 @@ Added validation checks to all transaction endpoints that confirm the admin flag
 
 ## Protected Endpoints
 
-| Endpoint | File | Function | Status |
-|----------|------|----------|--------|
-| `POST /marketplace/listings` | marketplace.py:116 | `create_listing()` | ✅ Protected |
-| `POST /marketplace/listings/{id}/bids` | marketplace.py:436 | `place_bid()` | ✅ Protected |
-| `POST /marketplace/listings/{id}/buy-now` | marketplace.py:580 | `buy_now()` | ✅ Protected |
-| `POST /lands/claim` | lands.py:958 | `claim_land()` | ✅ Protected |
+| Endpoint                                  | File               | Function           | Status       |
+| ----------------------------------------- | ------------------ | ------------------ | ------------ |
+| `POST /marketplace/listings`              | marketplace.py:116 | `create_listing()` | ✅ Protected |
+| `POST /marketplace/listings/{id}/bids`    | marketplace.py:436 | `place_bid()`      | ✅ Protected |
+| `POST /marketplace/listings/{id}/buy-now` | marketplace.py:580 | `buy_now()`        | ✅ Protected |
+| `POST /lands/claim`                       | lands.py:958       | `claim_land()`     | ✅ Protected |
 
 ## How to Test It
 
 ### Disable Trading
+
 ```bash
 curl -X PATCH http://localhost:8000/admin/config/economy \
   -H "Authorization: Bearer {ADMIN_TOKEN}" \
@@ -36,6 +38,7 @@ curl -X PATCH http://localhost:8000/admin/config/economy \
 ```
 
 ### Try to Create Listing (Should Fail)
+
 ```bash
 curl -X POST http://localhost:8000/marketplace/listings \
   -H "Authorization: Bearer {USER_TOKEN}" \
@@ -46,6 +49,7 @@ curl -X POST http://localhost:8000/marketplace/listings \
 **Message**: "Land trading is currently disabled by admin"
 
 ### Re-enable Trading
+
 ```bash
 curl -X PATCH http://localhost:8000/admin/config/economy \
   -H "Authorization: Bearer {ADMIN_TOKEN}" \
@@ -53,6 +57,7 @@ curl -X PATCH http://localhost:8000/admin/config/economy \
 ```
 
 ### Try to Create Listing Again (Should Work)
+
 Same request as above should now return `201 Created`
 
 ## Technical Details
@@ -84,6 +89,7 @@ Ready for production deployment
 ---
 
 **Need more details?** See:
+
 - [Complete Fix Documentation](./TRADING_SYSTEM_COMPLETE_FIX.md)
 - [Technical Implementation Details](./TRADING_SYSTEM_FIX.md)
 - [Marketplace API Spec](./20_MARKETPLACE_API.md)

@@ -163,7 +163,7 @@ GET /admin/config/economy
   "biome_multipliers": {...},
   "biome_market_controls": {...},
   ... 95 more fields ...
-  
+
   ❌ "enable_land_trading": undefined
      (Frontend gets undefined, defaults to false)
 }
@@ -245,6 +245,7 @@ Changes are:
 ## Checkbox Behavior
 
 ### Before Fix ❌
+
 ```
 ┌──────────────────────────────┐
 │ Enable Land Trading          │
@@ -259,6 +260,7 @@ Changes are:
 ```
 
 ### After Fix ✅
+
 ```
 ┌──────────────────────────────┐
 │ Enable Land Trading          │
@@ -333,11 +335,11 @@ Impact: Negligible ✅
 ```
    Problem          Solution           Result
    ───────          ────────           ──────
-   
+
    ❌               +1 line            ✅
    Missing field    "enable_land_      Field returned
    in response      trading": ...      in response
-   
+
    ❌               ✅ Checks          ✅
    Checkbox         already in         Enforcement
    always unchecked  place             working
