@@ -7,11 +7,13 @@ Dynamic land prices across all 7 biomes based on buy/sell activity.
 ## The Formula
 
 When someone buys land for C BDT:
+
 ```
 Price increase per land in biome i = C ÷ 7 ÷ (number of owned lands in biome i)
 ```
 
 Example: $10,000 purchase
+
 - Plains (50 owned lands): +$28.57 per land
 - Beach (30 owned lands): +$47.62 per land
 - Forest (100 owned lands): +$14.29 per land
@@ -21,12 +23,12 @@ When someone sells land for C BDT, same formula but subtract (prices decrease).
 
 ## Core Files
 
-| File | Purpose |
-|------|---------|
-| `backend/app/models/biome_land_market.py` | BiomeLandMarket model - tracks per-biome state |
+| File                                                 | Purpose                                          |
+| ---------------------------------------------------- | ------------------------------------------------ |
+| `backend/app/models/biome_land_market.py`            | BiomeLandMarket model - tracks per-biome state   |
 | `backend/app/services/biome_land_economy_service.py` | BiomeLandEconomyService - price adjustment logic |
-| `backend/app/services/marketplace_service.py` | Integration in buy_now() and finalize_auction() |
-| `backend/app/main.py` | Initialization on app startup |
+| `backend/app/services/marketplace_service.py`        | Integration in buy_now() and finalize_auction()  |
+| `backend/app/main.py`                                | Initialization on app startup                    |
 
 ## Key Methods
 
@@ -51,6 +53,7 @@ stats = await BiomeLandEconomyService.get_biome_market_stats(db)
 ## How It Integrates
 
 ### Buy Now Flow
+
 1. Player buys land in marketplace (fixed price)
 2. Lands transfer, funds exchanged
 3. **Economy system calls handle_land_purchase()**
@@ -58,6 +61,7 @@ stats = await BiomeLandEconomyService.get_biome_market_stats(db)
 5. BiomeLandMarket statistics updated
 
 ### Auction Flow
+
 1. Auction ends, highest bid wins
 2. Lands transfer, funds exchanged
 3. **Economy system calls handle_land_purchase()**
@@ -65,7 +69,9 @@ stats = await BiomeLandEconomyService.get_biome_market_stats(db)
 5. BiomeLandMarket statistics updated
 
 ### Sell Flow
+
 Currently marketplace only has buy listings. When sell listings are implemented:
+
 1. Player lists land for sale
 2. Buyer purchases
 3. **Economy system calls handle_land_sale()**
@@ -73,27 +79,30 @@ Currently marketplace only has buy listings. When sell listings are implemented:
 
 ## Edge Cases
 
-| Case | Behavior | Why |
-|------|----------|-----|
-| Biome has 0 owned lands | Skip price update for that biome | Avoid division by zero |
-| Price would go negative | Cap at 0 | Prices can't be negative |
-| Concurrent transactions | Handled by database locks | SQLAlchemy with_for_update() |
-| Transaction fails | Automatic rollback | Single async session |
+| Case                    | Behavior                         | Why                          |
+| ----------------------- | -------------------------------- | ---------------------------- |
+| Biome has 0 owned lands | Skip price update for that biome | Avoid division by zero       |
+| Price would go negative | Cap at 0                         | Prices can't be negative     |
+| Concurrent transactions | Handled by database locks        | SQLAlchemy with_for_update() |
+| Transaction fails       | Automatic rollback               | Single async session         |
 
 ## Impact on Players
 
 **Price Discovery**
+
 - Prices reflect real market activity
 - High demand (many purchases) → prices rise
 - Low demand (many sales) → prices fall
 - Fair market mechanism
 
 **Opportunity**
+
 - Early movers in cheap biome can profit as prices rise
 - Speculators can buy low, sell high
 - Equilibrium pricing over time
 
 **Volatility**
+
 - Large purchases/sales cause big swings
 - Fragmented markets (few lands) more volatile
 - Consolidated markets (many lands) more stable
@@ -102,11 +111,11 @@ Currently marketplace only has buy listings. When sell listings are implemented:
 
 Currently all economy parameters are hardcoded:
 
-| Parameter | Value | Location |
-|-----------|-------|----------|
-| Number of biomes | 7 | TOTAL_BIOMES constant |
-| Price formula | C / (X × Xi) | Formula in handle_land_purchase() |
-| Minimum price | 0 (can't go negative) | max(0, ...) in handle_land_sale() |
+| Parameter        | Value                 | Location                          |
+| ---------------- | --------------------- | --------------------------------- |
+| Number of biomes | 7                     | TOTAL_BIOMES constant             |
+| Price formula    | C / (X × Xi)          | Formula in handle_land_purchase() |
+| Minimum price    | 0 (can't go negative) | max(0, ...) in handle_land_sale() |
 
 **Future Enhancement**: Make these configurable in AdminConfig
 
@@ -121,6 +130,7 @@ ERROR: Error processing land purchase: ...
 ```
 
 Check database:
+
 ```sql
 SELECT * FROM biome_land_market;
 ```
@@ -145,13 +155,13 @@ SELECT * FROM biome_land_market;
 
 ## Common Issues & Solutions
 
-| Issue | Solution |
-|-------|----------|
-| Prices not updating | Check logs for errors, verify transaction completed |
-| Market stats wrong | Check BiomeLandMarket for stale data |
-| Division by zero error | Verify handle_land_sale() skips zero-lands biomes |
-| Negative prices | Check max() in handle_land_sale() is working |
-| Slow transaction response | Monitor database query times, consider caching |
+| Issue                     | Solution                                            |
+| ------------------------- | --------------------------------------------------- |
+| Prices not updating       | Check logs for errors, verify transaction completed |
+| Market stats wrong        | Check BiomeLandMarket for stale data                |
+| Division by zero error    | Verify handle_land_sale() skips zero-lands biomes   |
+| Negative prices           | Check max() in handle_land_sale() is working        |
+| Slow transaction response | Monitor database query times, consider caching      |
 
 ## Next Steps
 

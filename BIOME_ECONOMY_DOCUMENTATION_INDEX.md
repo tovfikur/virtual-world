@@ -13,21 +13,25 @@ This index provides quick navigation to all documentation related to the Global 
 ## 🚀 Getting Started (Choose Your Path)
 
 ### I'm a Developer - Show Me the Code
+
 1. Start: [BIOME_ECONOMY_QUICK_REFERENCE.md](BIOME_ECONOMY_QUICK_REFERENCE.md) (5 min read)
 2. Then: [BIOME_ECONOMY_IMPLEMENTATION.md](BIOME_ECONOMY_IMPLEMENTATION.md) (20 min read)
 3. Reference: [BIOME_ECONOMY_IMPLEMENTATION_SUMMARY.md](BIOME_ECONOMY_IMPLEMENTATION_SUMMARY.md)
 
 ### I'm a QA/Tester - How Do I Verify?
+
 1. Start: [BIOME_ECONOMY_QUICK_REFERENCE.md](BIOME_ECONOMY_QUICK_REFERENCE.md) (understand the system)
 2. Then: [BIOME_ECONOMY_VERIFICATION_GUIDE.md](BIOME_ECONOMY_VERIFICATION_GUIDE.md) (step-by-step testing)
 3. Reference: [BIOME_ECONOMY_IMPLEMENTATION_SUMMARY.md](BIOME_ECONOMY_IMPLEMENTATION_SUMMARY.md)
 
 ### I'm an Admin/Product Manager - What Should I Know?
+
 1. Start: [BIOME_ECONOMY_QUICK_REFERENCE.md](BIOME_ECONOMY_QUICK_REFERENCE.md) (overview)
 2. Then: [BIOME_ECONOMY_IMPLEMENTATION_SUMMARY.md](BIOME_ECONOMY_IMPLEMENTATION_SUMMARY.md) (what was built)
 3. Reference: [BIOME_ECONOMY_IMPLEMENTATION.md](BIOME_ECONOMY_IMPLEMENTATION.md#future-enhancements) (future roadmap)
 
 ### I'm a Player - How Does This Affect Me?
+
 See: [Player-Focused Explanation](#player-focused-explanation) below
 
 ---
@@ -35,9 +39,11 @@ See: [Player-Focused Explanation](#player-focused-explanation) below
 ## 📖 Complete Documentation Library
 
 ### 1. BIOME_ECONOMY_QUICK_REFERENCE.md
+
 **Type**: Quick Reference | **Length**: ~200 lines | **Time**: 5-10 minutes
 
 **Contents**:
+
 - What the system does
 - The formula explained simply
 - Core files and methods
@@ -54,9 +60,11 @@ See: [Player-Focused Explanation](#player-focused-explanation) below
 ---
 
 ### 2. BIOME_ECONOMY_IMPLEMENTATION.md
+
 **Type**: Technical Guide | **Length**: ~450 lines | **Time**: 20-30 minutes
 
 **Contents**:
+
 - Detailed overview
 - Complete formula with examples
 - System architecture
@@ -78,9 +86,11 @@ See: [Player-Focused Explanation](#player-focused-explanation) below
 ---
 
 ### 3. BIOME_ECONOMY_IMPLEMENTATION_SUMMARY.md
+
 **Type**: Summary Report | **Length**: ~300 lines | **Time**: 10-15 minutes
 
 **Contents**:
+
 - Objective achieved
 - What was built
 - Data model details
@@ -103,9 +113,11 @@ See: [Player-Focused Explanation](#player-focused-explanation) below
 ---
 
 ### 4. BIOME_ECONOMY_VERIFICATION_GUIDE.md
+
 **Type**: Testing Guide | **Length**: ~450 lines | **Time**: 30-45 minutes (to execute)
 
 **Contents**:
+
 - Pre-verification checklist
 - Step 1: Verify database initialization
 - Step 2: Verify application logs
@@ -130,26 +142,33 @@ See: [Player-Focused Explanation](#player-focused-explanation) below
 ## 🔍 Finding Specific Information
 
 ### "How does the formula work?"
+
 1. Quick version: [BIOME_ECONOMY_QUICK_REFERENCE.md](BIOME_ECONOMY_QUICK_REFERENCE.md#the-formula)
 2. Detailed version: [BIOME_ECONOMY_IMPLEMENTATION.md](BIOME_ECONOMY_IMPLEMENTATION.md#formula)
 3. Examples: [BIOME_ECONOMY_IMPLEMENTATION_SUMMARY.md](BIOME_ECONOMY_IMPLEMENTATION_SUMMARY.md#-the-economics-formula)
 
 ### "What files were changed?"
+
 [BIOME_ECONOMY_IMPLEMENTATION_SUMMARY.md](BIOME_ECONOMY_IMPLEMENTATION_SUMMARY.md#-files-modified-created)
 
 ### "How do I test this?"
+
 [BIOME_ECONOMY_VERIFICATION_GUIDE.md](BIOME_ECONOMY_VERIFICATION_GUIDE.md)
 
 ### "What are the edge cases?"
+
 [BIOME_ECONOMY_IMPLEMENTATION.md](BIOME_ECONOMY_IMPLEMENTATION.md#edge-cases--special-handling)
 
 ### "What could go wrong?"
+
 [BIOME_ECONOMY_VERIFICATION_GUIDE.md](BIOME_ECONOMY_VERIFICATION_GUIDE.md#common-issues--diagnostics)
 
 ### "What's the code doing?"
+
 [BIOME_ECONOMY_IMPLEMENTATION.md](BIOME_ECONOMY_IMPLEMENTATION.md#integration-points)
 
 ### "Future plans?"
+
 [BIOME_ECONOMY_IMPLEMENTATION.md](BIOME_ECONOMY_IMPLEMENTATION.md#future-enhancements)
 
 ---
@@ -166,6 +185,7 @@ This is applied to ALL owned lands in the biome.
 ```
 
 **Example**: 10,000 BDT purchase
+
 - Plains (50 lands): +28.57 per land
 - Beach (30 lands): +47.62 per land
 - etc. for all 7 biomes
@@ -203,29 +223,31 @@ This is applied to ALL owned lands in the biome.
 ## 📊 Market Impact Overview
 
 ### Purchase for 10,000 BDT:
+
 - Per-biome allocation: 1,428.57 BDT
 - Plains (50 lands): +28.57/land
 - Beach (30 lands): +47.62/land
 - Forest (100 lands): +14.29/land
 
 ### Key Insight:
+
 Scarce biomes (fewer lands) get higher price increases.
 
 ---
 
 ## ✅ Implementation Status
 
-| Component | Status | Document |
-|-----------|--------|----------|
-| BiomeLandMarket model | ✅ Complete | [Summary](BIOME_ECONOMY_IMPLEMENTATION_SUMMARY.md) |
-| BiomeLandEconomyService | ✅ Complete | [Implementation](BIOME_ECONOMY_IMPLEMENTATION.md) |
-| Marketplace buy_now integration | ✅ Complete | [Summary](BIOME_ECONOMY_IMPLEMENTATION_SUMMARY.md) |
+| Component                        | Status      | Document                                           |
+| -------------------------------- | ----------- | -------------------------------------------------- |
+| BiomeLandMarket model            | ✅ Complete | [Summary](BIOME_ECONOMY_IMPLEMENTATION_SUMMARY.md) |
+| BiomeLandEconomyService          | ✅ Complete | [Implementation](BIOME_ECONOMY_IMPLEMENTATION.md)  |
+| Marketplace buy_now integration  | ✅ Complete | [Summary](BIOME_ECONOMY_IMPLEMENTATION_SUMMARY.md) |
 | Auction finalization integration | ✅ Complete | [Summary](BIOME_ECONOMY_IMPLEMENTATION_SUMMARY.md) |
-| App initialization | ✅ Complete | [Summary](BIOME_ECONOMY_IMPLEMENTATION_SUMMARY.md) |
-| Error handling | ✅ Complete | [Implementation](BIOME_ECONOMY_IMPLEMENTATION.md) |
-| Logging | ✅ Complete | [Implementation](BIOME_ECONOMY_IMPLEMENTATION.md) |
-| Documentation | ✅ Complete | All 4 documents |
-| Git commit | ✅ Complete | Commit 128c6d0 |
+| App initialization               | ✅ Complete | [Summary](BIOME_ECONOMY_IMPLEMENTATION_SUMMARY.md) |
+| Error handling                   | ✅ Complete | [Implementation](BIOME_ECONOMY_IMPLEMENTATION.md)  |
+| Logging                          | ✅ Complete | [Implementation](BIOME_ECONOMY_IMPLEMENTATION.md)  |
+| Documentation                    | ✅ Complete | All 4 documents                                    |
+| Git commit                       | ✅ Complete | Commit 128c6d0                                     |
 
 ---
 
@@ -238,6 +260,7 @@ The virtual economy is now **dynamic**. When players buy and sell land, the pric
 ### The Concept
 
 Think of it like real estate markets:
+
 - When many people buy property, prices go up everywhere
 - When many people sell, prices go down everywhere
 - However, the effect is stronger in neighborhoods with fewer properties (scarce areas gain more)
@@ -247,6 +270,7 @@ Think of it like real estate markets:
 **Scenario**: You own 10 plots in the Plains biome.
 
 1. **Someone buys 50,000 BDT of land**
+
    - This money is split across all 7 biomes
    - Plains gets ~7,142 BDT
    - Distributed to all Plains landowners
@@ -260,16 +284,19 @@ Think of it like real estate markets:
 ### What This Means For You
 
 **Opportunity**:
+
 - **Early adopters** in cheap biomes benefit as prices rise
 - **Speculators** can buy in undervalued biomes, sell when prices rise
 - **Diversification** across biomes balances risk
 
 **Volatility**:
+
 - Fragmented biomes (few lands) = more dramatic price swings
 - Consolidated biomes (many lands) = stable prices
 - Large purchases/sales move the market
 
 **Fairness**:
+
 - All landowners benefit equally from activity
 - Prices reflect actual supply/demand
 - No artificial manipulation possible
@@ -279,21 +306,25 @@ Think of it like real estate markets:
 ## 📞 Support & Questions
 
 ### For Developers
+
 1. Read [BIOME_ECONOMY_IMPLEMENTATION.md](BIOME_ECONOMY_IMPLEMENTATION.md)
 2. Check [BIOME_ECONOMY_QUICK_REFERENCE.md](BIOME_ECONOMY_QUICK_REFERENCE.md)
 3. Review code comments in service files
 
 ### For QA/Testing
+
 1. Follow [BIOME_ECONOMY_VERIFICATION_GUIDE.md](BIOME_ECONOMY_VERIFICATION_GUIDE.md)
 2. Check common issues section
 3. Report findings with specific database queries
 
 ### For Product/Admin
+
 1. Read [BIOME_ECONOMY_IMPLEMENTATION_SUMMARY.md](BIOME_ECONOMY_IMPLEMENTATION_SUMMARY.md)
 2. Review future enhancements section
 3. Check deployment status checklist
 
 ### For Players
+
 1. See [Player-Focused Explanation](#player-focused-explanation)
 2. Check economy stats in-game (coming soon)
 3. Join economy discussion channels
@@ -313,18 +344,19 @@ These documents are also relevant:
 
 ## 📋 Version History
 
-| Date | Commit | Changes |
-|------|--------|---------|
-| 2024-01-03 | 128c6d0 | Initial implementation |
+| Date       | Commit  | Changes                    |
+| ---------- | ------- | -------------------------- |
+| 2024-01-03 | 128c6d0 | Initial implementation     |
 | 2024-01-03 | 84b91e5 | Add implementation summary |
-| 2024-01-03 | 1258c5f | Add verification guide |
-| 2024-01-03 | TBD | Add this index |
+| 2024-01-03 | 1258c5f | Add verification guide     |
+| 2024-01-03 | TBD     | Add this index             |
 
 ---
 
 ## ✨ Quick Navigation
 
 **Fastest Path to Understanding**:
+
 1. (5 min) [Quick Reference](BIOME_ECONOMY_QUICK_REFERENCE.md)
 2. (20 min) [Full Implementation](BIOME_ECONOMY_IMPLEMENTATION.md)
 3. (30 min) [Verification Guide](BIOME_ECONOMY_VERIFICATION_GUIDE.md)
@@ -336,6 +368,7 @@ These documents are also relevant:
 ## 🎉 Summary
 
 The Global Biome Economy System creates a **living, breathing virtual economy** where:
+
 - Land prices respond to market activity
 - Scarce biomes reward early investors
 - Prices are fair, dynamic, and auditable

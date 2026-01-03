@@ -20,6 +20,7 @@ SELECT * FROM biome_land_market;
 ```
 
 **Expected Result:**
+
 ```
 biome          | sold_lands_count | average_price_bdt | total_market_value_bdt | last_transaction_at
 ---------------|------------------|-------------------|------------------------|--------------------
@@ -61,7 +62,7 @@ snow           | 0                | 0.0               | 0                      |
 
 ```sql
 -- Get average price per biome before purchase
-SELECT 
+SELECT
     l.biome,
     AVG(l.price_base_bdt) as avg_price,
     COUNT(*) as land_count
@@ -105,7 +106,7 @@ INFO: Buy now completed: listing uuid, ...
 
 ```sql
 -- Get average price per biome after purchase
-SELECT 
+SELECT
     l.biome,
     AVG(l.price_base_bdt) as avg_price,
     COUNT(*) as land_count
@@ -115,17 +116,19 @@ GROUP BY l.biome;
 ```
 
 **Expected Result:**
+
 - All biomes with owned lands show higher average prices
 - Price increase follows formula: 10,000 ÷ 7 ÷ land_count
 
 ### Verify BiomeLandMarket Updated
 
 ```sql
-SELECT * FROM biome_land_market 
+SELECT * FROM biome_land_market
 ORDER BY biome;
 ```
 
 **Expected Result:**
+
 - `last_transaction_at` updated to current timestamp
 - `total_market_value_bdt` increased by 10,000 ÷ 7 = ~1,428.57
 - `average_price_bdt` recalculated (if lands in biome)
@@ -144,6 +147,7 @@ Price increase = 1,428.57 ÷ number_of_owned_lands_in_biome
 ```
 
 **Example:**
+
 ```
 Plains: 1,428.57 ÷ 50 = 28.57 BDT per land
 Beach: 1,428.57 ÷ 30 = 47.62 BDT per land
@@ -153,7 +157,7 @@ Beach: 1,428.57 ÷ 30 = 47.62 BDT per land
 
 ```sql
 -- Get actual price increases per biome
-SELECT 
+SELECT
     l.biome,
     COUNT(*) as owned_lands,
     AVG(l.price_base_bdt) - {old_average_price} as avg_increase,
@@ -175,7 +179,7 @@ GROUP BY l.biome;
 
 ```sql
 -- Find a biome with no owned lands
-SELECT 
+SELECT
     l.biome,
     COUNT(*) as owned_lands
 FROM land l
@@ -192,6 +196,7 @@ GROUP BY l.biome;
 3. SQL query: Verify Ocean (0 lands) didn't get updated
 
 **Expected Log:**
+
 ```
 DEBUG: Biome economy updated: {
     "price_changes": {
@@ -230,6 +235,7 @@ SELECT * FROM biome_land_market;
 ```
 
 **Expected Result:**
+
 - `last_transaction_at` updated after auction finalization
 - Market value increased
 
@@ -243,7 +249,7 @@ SELECT * FROM biome_land_market;
 **SQL Check:**
 
 ```sql
-SELECT 
+SELECT
     l.biome,
     MIN(l.price_base_bdt) as min_price,
     MAX(l.price_base_bdt) as max_price,
@@ -268,6 +274,7 @@ GROUP BY l.biome;
 3. Verify transaction still completes despite economy service error
 
 **Expected Behavior:**
+
 ```
 ERROR: Error processing land purchase: Connection timeout
 // But transaction still completes successfully
@@ -295,12 +302,14 @@ POST /api/v1/marketplace/listings/{id}/buy-now
 ## Comprehensive Verification Checklist
 
 ### Database State
+
 - [ ] BiomeLandMarket table exists with 7 records
 - [ ] `last_transaction_at` updates after transactions
 - [ ] Land prices update correctly
 - [ ] No negative prices
 
 ### Application Behavior
+
 - [ ] Startup logs show "Biome land economy markets initialized"
 - [ ] Buy transactions trigger economy update
 - [ ] Auction finalization triggers economy update
@@ -308,12 +317,14 @@ POST /api/v1/marketplace/listings/{id}/buy-now
 - [ ] Error logs show graceful handling of failures
 
 ### Formula Accuracy
+
 - [ ] Price increases match C / (X × Xi) formula
 - [ ] Zero-lands biomes skipped
 - [ ] All owned lands in biome get same increase
 - [ ] Per-biome shares calculated correctly
 
 ### Error Handling
+
 - [ ] Economy service errors don't block transactions
 - [ ] Negative prices prevented
 - [ ] Division by zero prevented
@@ -324,12 +335,14 @@ POST /api/v1/marketplace/listings/{id}/buy-now
 ### Issue: BiomeLandMarket table doesn't exist
 
 **Diagnosis:**
+
 ```bash
 # Check migrations ran
 psql your_db -c "\dt" | grep biome_land_market
 ```
 
 **Solution:**
+
 ```bash
 # Run migrations
 alembic upgrade head
@@ -338,6 +351,7 @@ alembic upgrade head
 ### Issue: Prices not updating after purchase
 
 **Diagnosis:**
+
 1. Check application logs for errors
 2. Verify transaction was created
 3. Check if land has owner_id
@@ -353,6 +367,7 @@ SELECT owner_id, price_base_bdt FROM land WHERE land_id IN (
 ```
 
 **Solution:**
+
 - Check for error messages in logs
 - Verify database is connected
 - Restart application
@@ -360,37 +375,41 @@ SELECT owner_id, price_base_bdt FROM land WHERE land_id IN (
 ### Issue: Wrong price increases
 
 **Diagnosis:**
+
 1. Calculate expected: `1,428.57 / owned_lands_count`
 2. Compare with actual `price_base_bdt` change
 3. Check if formula is being applied
 
 ```sql
 -- Check recent transactions
-SELECT * FROM transaction 
+SELECT * FROM transaction
 WHERE created_at > NOW() - INTERVAL '1 hour'
 ORDER BY created_at DESC LIMIT 5;
 ```
 
 **Solution:**
+
 - Verify formula in code hasn't been modified
 - Check that economy service is called after transaction
 
 ### Issue: Slow transaction response
 
 **Diagnosis:**
+
 1. Check database query performance
 2. Count lands per biome
 
 ```sql
 -- Biome with most lands
-SELECT biome, COUNT(*) as land_count 
-FROM land 
+SELECT biome, COUNT(*) as land_count
+FROM land
 WHERE owner_id IS NOT NULL
-GROUP BY biome 
+GROUP BY biome
 ORDER BY land_count DESC;
 ```
 
 **Solution:**
+
 - Add database indexes on (biome, owner_id)
 - Cache BiomeLandMarket data
 - Optimize bulk update queries
@@ -400,12 +419,14 @@ ORDER BY land_count DESC;
 If verification fails:
 
 1. **Collect evidence:**
+
    - Application logs (last 100 lines)
    - Database query results
    - Transaction ID from failed purchase
    - Expected vs actual prices
 
 2. **Document issue:**
+
    - Steps to reproduce
    - Error messages
    - Database state
@@ -419,6 +440,7 @@ If verification fails:
 ## Success Criteria
 
 ✅ **System is working correctly when:**
+
 1. All 7 biomes initialized in database
 2. Buy transactions increase prices in all biomes
 3. Prices follow formula: C / (7 × owned_lands_in_biome)
@@ -431,6 +453,7 @@ If verification fails:
 ## Next Steps
 
 Once verified:
+
 1. ✅ Monitor in production for 1 week
 2. ✅ Collect market statistics
 3. ✅ Check for edge cases not covered

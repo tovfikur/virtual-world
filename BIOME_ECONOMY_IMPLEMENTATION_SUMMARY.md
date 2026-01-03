@@ -11,9 +11,11 @@ Implemented the **Global Biome Economy System** as specified by user requirement
 ## 📋 What Was Built
 
 ### 1. Data Model (`backend/app/models/biome_land_market.py`)
+
 **New Model: BiomeLandMarket**
 
 Tracks market state per biome:
+
 - `biome` (enum): Plains, Beach, Forest, Mountain, Desert, Snow, Ocean
 - `sold_lands_count` (int): Number of owned lands in biome
 - `average_price_bdt` (float): Average price per land
@@ -21,21 +23,26 @@ Tracks market state per biome:
 - `last_transaction_at` (datetime): Last price update timestamp
 
 **Methods:**
+
 - `to_dict()`: Serialization for API responses
 - `calculate_average_price()`: Dynamic average calculation
 
 ### 2. Service Layer (`backend/app/services/biome_land_economy_service.py`)
+
 **New Service: BiomeLandEconomyService**
 
 Core business logic for economy mechanics:
 
 #### Method: `initialize_markets()`
+
 - Initializes BiomeLandMarket for all 7 biomes
 - Called on application startup
 - Creates records if not exists
 
 #### Method: `handle_land_purchase()`
+
 **When player buys land:**
+
 1. Divides payment equally across all biomes
 2. For each biome: distributes share to all sold lands
 3. Formula: `ΔPrice = amount / 7 / sold_lands_in_biome`
@@ -44,6 +51,7 @@ Core business logic for economy mechanics:
 6. Returns detailed report with price changes
 
 **Example:**
+
 ```python
 # Purchase for 10,000 BDT
 # Plains (50 lands): +28.57 BDT each
@@ -52,17 +60,21 @@ Core business logic for economy mechanics:
 ```
 
 #### Method: `handle_land_sale()`
+
 **When player sells land:**
+
 - Same as purchase but negative (prices decrease)
 - Prevents negative prices with `max(0, price)`
 - Reverse effect of purchase
 
 #### Method: `get_biome_market_stats()`
+
 - Retrieves current market statistics
 - Can fetch all biomes or specific biome
 - Returns formatted JSON response
 
 #### Method: `update_sold_lands_count()`
+
 - Increments/decrements sold lands counter
 - Called when lands are claimed or ownership changes
 - Updates average price calculation
@@ -72,12 +84,14 @@ Core business logic for economy mechanics:
 #### File: `backend/app/services/marketplace_service.py`
 
 **Modified: `buy_now()` method**
+
 - Added import of BiomeLandEconomyService
 - After transaction commit, calls `handle_land_purchase()`
 - Logs detailed economy impact
 - Handles errors gracefully without blocking transaction
 
 **Modified: `finalize_auction()` method**
+
 - Added import of BiomeLandEconomyService
 - When auction finalizes, calls `handle_land_purchase()`
 - Same integration pattern as buy_now
@@ -88,6 +102,7 @@ Core business logic for economy mechanics:
 #### File: `backend/app/main.py`
 
 **Modified: `lifespan()` startup function**
+
 - Added BiomeLandEconomyService initialization
 - Creates BiomeLandMarket records on app startup
 - Logs initialization status
@@ -96,6 +111,7 @@ Core business logic for economy mechanics:
 ## 🔢 The Economics Formula
 
 ### Purchase Impact
+
 When player buys land for **C** BDT:
 
 $$\Delta P_i = \frac{C}{X \times X_i}$$
@@ -106,21 +122,22 @@ $$\Delta P_i = \frac{C}{X \times X_i}$$
 
 ### Effect Across Biomes
 
-| Biome | Sold Lands | Formula | Price Increase |
-|-------|-----------|---------|-----------------|
-| Plains | 50 | 10,000 ÷ 7 ÷ 50 | +28.57 BDT |
-| Beach | 30 | 10,000 ÷ 7 ÷ 30 | +47.62 BDT |
-| Forest | 100 | 10,000 ÷ 7 ÷ 100 | +14.29 BDT |
-| Mountain | 25 | 10,000 ÷ 7 ÷ 25 | +57.14 BDT |
-| Desert | 40 | 10,000 ÷ 7 ÷ 40 | +35.71 BDT |
-| Snow | 15 | 10,000 ÷ 7 ÷ 15 | +95.24 BDT |
-| Ocean | 60 | 10,000 ÷ 7 ÷ 60 | +23.81 BDT |
+| Biome    | Sold Lands | Formula          | Price Increase |
+| -------- | ---------- | ---------------- | -------------- |
+| Plains   | 50         | 10,000 ÷ 7 ÷ 50  | +28.57 BDT     |
+| Beach    | 30         | 10,000 ÷ 7 ÷ 30  | +47.62 BDT     |
+| Forest   | 100        | 10,000 ÷ 7 ÷ 100 | +14.29 BDT     |
+| Mountain | 25         | 10,000 ÷ 7 ÷ 25  | +57.14 BDT     |
+| Desert   | 40         | 10,000 ÷ 7 ÷ 40  | +35.71 BDT     |
+| Snow     | 15         | 10,000 ÷ 7 ÷ 15  | +95.24 BDT     |
+| Ocean    | 60         | 10,000 ÷ 7 ÷ 60  | +23.81 BDT     |
 
 **Key Insight**: Biomes with fewer sold lands experience larger price increases, creating natural market scarcity premium.
 
 ## 🛠️ Technical Implementation
 
 ### Database Queries Per Transaction
+
 1. Fetch land details
 2. Fetch all 7 biome markets
 3. For each biome (7 iterations):
@@ -131,12 +148,14 @@ $$\Delta P_i = \frac{C}{X \times X_i}$$
 **Performance**: ~50-100ms per transaction (acceptable)
 
 ### Error Handling
+
 - Graceful error handling with try/catch
 - Automatic rollback on any error
 - Detailed logging at DEBUG and ERROR levels
 - Non-blocking (errors don't prevent transactions)
 
 ### Edge Cases Handled
+
 1. **Zero sold lands in biome**: Skipped (avoids division by zero)
 2. **Negative prices**: Capped at 0
 3. **Concurrent transactions**: Database locks prevent race conditions
@@ -145,18 +164,21 @@ $$\Delta P_i = \frac{C}{X \times X_i}$$
 ## 📊 Market Impact Examples
 
 ### Scenario 1: Whale Buys 50,000 BDT of Land
+
 - Per-biome allocation: 50,000 ÷ 7 = 7,142.86 BDT
 - Plains (100 lands): +71.43 per land
 - Beach (50 lands): +142.86 per land
 - **Effect**: Significant price jump signals market activity to all players
 
 ### Scenario 2: Small Seller Liquidates for 2,000 BDT
+
 - Per-biome allocation: 2,000 ÷ 7 = 285.71 BDT
 - Plains (100 lands): -2.86 per land
 - Beach (50 lands): -5.71 per land
 - **Effect**: Modest price decrease, normal market correction
 
 ### Scenario 3: Biome Without Owned Lands
+
 - Suppose Ocean has 0 owned lands
 - When purchases happen elsewhere, Ocean's share is distributed but no lands to update
 - **Effect**: Dormant biomes unaffected until first land is claimed
@@ -164,36 +186,40 @@ $$\Delta P_i = \frac{C}{X \times X_i}$$
 ## 📈 Market Dynamics Created
 
 ### Price Discovery
+
 - Prices reflect actual market activity
 - No artificial caps or floors
 - True supply/demand equilibrium
 
 ### Opportunity
+
 - Early investors in cheap biomes benefit from rising prices
 - Speculators can buy low, sell high
 - Market efficiency incentivizes early adoption
 
 ### Volatility
+
 - Fragmented biomes (few lands): higher volatility
 - Consolidated biomes (many lands): more stable
 - Large transactions cause visible market swings
 
 ## 🚀 Deployment Status
 
-| Component | Status | Notes |
-|-----------|--------|-------|
-| BiomeLandMarket model | ✅ Created | In models/ directory |
-| BiomeLandEconomyService | ✅ Created | Full implementation |
-| Marketplace integration | ✅ Complete | buy_now + finalize_auction |
-| App initialization | ✅ Complete | Runs on startup |
-| Error handling | ✅ Implemented | Graceful degradation |
-| Logging | ✅ Complete | DEBUG and INFO levels |
-| Documentation | ✅ Complete | 2 documents created |
-| Git commit | ✅ Pushed | Commit 128c6d0 |
+| Component               | Status         | Notes                      |
+| ----------------------- | -------------- | -------------------------- |
+| BiomeLandMarket model   | ✅ Created     | In models/ directory       |
+| BiomeLandEconomyService | ✅ Created     | Full implementation        |
+| Marketplace integration | ✅ Complete    | buy_now + finalize_auction |
+| App initialization      | ✅ Complete    | Runs on startup            |
+| Error handling          | ✅ Implemented | Graceful degradation       |
+| Logging                 | ✅ Complete    | DEBUG and INFO levels      |
+| Documentation           | ✅ Complete    | 2 documents created        |
+| Git commit              | ✅ Pushed      | Commit 128c6d0             |
 
 ## 📚 Documentation Created
 
 1. **BIOME_ECONOMY_IMPLEMENTATION.md** (450+ lines)
+
    - Detailed implementation guide
    - Formula explanations with examples
    - Architecture documentation
@@ -227,26 +253,28 @@ Modified:
 ## ✅ Testing Recommendations
 
 ### Manual Testing
+
 ```
 1. Buy land for 10,000 BDT
    ✓ Check all 7 biome prices increased
    ✓ Verify BiomeLandMarket.last_transaction_at updated
-   
+
 2. Check database:
    SELECT * FROM biome_land_market;
    ✓ Verify price updates across all biomes
    ✓ Verify sold_lands_count correct
-   
+
 3. Run auction and finalize
    ✓ Verify economy system triggered
    ✓ Check prices updated correctly
-   
+
 4. Check logs
    ✓ No errors in biome economy service
    ✓ Debug messages show details
 ```
 
 ### Load Testing
+
 ```
 - 100 concurrent purchases
 - 1000 sequential transactions
@@ -276,6 +304,7 @@ Modified:
 ## 📞 Support
 
 For questions about the Global Biome Economy System:
+
 1. Read [BIOME_ECONOMY_IMPLEMENTATION.md](BIOME_ECONOMY_IMPLEMENTATION.md) for detailed technical info
 2. Read [BIOME_ECONOMY_QUICK_REFERENCE.md](BIOME_ECONOMY_QUICK_REFERENCE.md) for quick answers
 3. Check logs: Look for "Biome economy updated" messages
@@ -283,5 +312,5 @@ For questions about the Global Biome Economy System:
 
 ---
 
-**Implementation Complete** ✅ 
+**Implementation Complete** ✅
 The Global Biome Economy System is now live and ready for testing.

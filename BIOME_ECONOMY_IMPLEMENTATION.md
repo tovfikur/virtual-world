@@ -11,6 +11,7 @@ The core pricing adjustment formula follows the principle of supply/demand equil
 $$\Delta P_i = \frac{C}{X \times X_i}$$
 
 Where:
+
 - **ΔP_i** = Price change for lands in biome i
 - **C** = Capital spent/received in transaction (BDT)
 - **X** = Total number of biomes (7: Plains, Beach, Forest, Mountain, Desert, Snow, Ocean)
@@ -19,6 +20,7 @@ Where:
 ### Purchase Example
 
 If a player buys land for 10,000 BDT:
+
 - Per-biome allocation: 10,000 ÷ 7 = 1,428.57 BDT per biome
 - If Plains has 50 sold lands: ΔPrice = 1,428.57 ÷ 50 = 28.57 BDT increase per Plains land
 - If Beach has 30 sold lands: ΔPrice = 1,428.57 ÷ 30 = 47.62 BDT increase per Beach land
@@ -26,6 +28,7 @@ If a player buys land for 10,000 BDT:
 ### Sale Example
 
 If a player sells land for 5,000 BDT:
+
 - Per-biome allocation: 5,000 ÷ 7 = 714.29 BDT per biome
 - If Plains has 50 sold lands: ΔPrice = -(714.29 ÷ 50) = -14.29 BDT decrease per Plains land
 - If Beach has 30 sold lands: ΔPrice = -(714.29 ÷ 30) = -23.81 BDT decrease per Beach land
@@ -35,7 +38,9 @@ If a player sells land for 5,000 BDT:
 ### Core Components
 
 #### 1. BiomeLandMarket Model (`backend/app/models/biome_land_market.py`)
+
 Tracks market state per biome:
+
 - `biome`: The biome type (enum: ocean, beach, plains, forest, desert, mountain, snow)
 - `sold_lands_count`: Total number of owned lands in biome
 - `average_price_bdt`: Average price per land in biome
@@ -43,11 +48,13 @@ Tracks market state per biome:
 - `last_transaction_at`: Timestamp of last price update
 
 #### 2. BiomeLandEconomyService (`backend/app/services/biome_land_economy_service.py`)
+
 Service layer handling all economy logic:
 
 **Key Methods:**
 
 ##### `initialize_markets(db: AsyncSession)`
+
 Creates initial BiomeLandMarket records for all 7 biomes on application startup.
 
 ```python
@@ -56,7 +63,9 @@ async with AsyncSessionLocal() as db:
 ```
 
 ##### `handle_land_purchase(db, land_id, amount_paid_bdt, buyer_id, seller_id)`
+
 Executes purchase economy logic:
+
 1. Divides payment equally across all biomes
 2. Distributes per-biome share to all sold lands in that biome
 3. Increases land prices proportionally
@@ -83,7 +92,9 @@ result = await BiomeLandEconomyService.handle_land_purchase(
 ```
 
 ##### `handle_land_sale(db, land_id, amount_received_bdt, seller_id)`
+
 Executes sale economy logic (reverse of purchase):
+
 1. Divides proceeds equally across all biomes
 2. Distributes per-biome share to all sold lands in that biome
 3. Decreases land prices proportionally (reverse effect)
@@ -100,6 +111,7 @@ result = await BiomeLandEconomyService.handle_land_sale(
 ```
 
 ##### `get_biome_market_stats(db, biome=None)`
+
 Retrieves current market statistics for biome(s).
 
 ```python
@@ -111,6 +123,7 @@ plains_stats = await BiomeLandEconomyService.get_biome_market_stats(db, Biome.PL
 ```
 
 ##### `update_sold_lands_count(db, biome, increment)`
+
 Updates the count of sold lands in a biome (called when lands are claimed or ownership changes).
 
 ```python
@@ -124,9 +137,11 @@ await BiomeLandEconomyService.update_sold_lands_count(
 ### Integration Points
 
 #### 1. Marketplace Buy-Now Purchase
+
 File: `backend/app/services/marketplace_service.py` - `buy_now()` method
 
 **Integration**: After transaction is committed and lands are transferred:
+
 ```python
 # Apply global biome economy adjustments
 primary_land = lands[0] if lands else None
@@ -141,9 +156,11 @@ if primary_land:
 ```
 
 #### 2. Auction Finalization
+
 File: `backend/app/services/marketplace_service.py` - `finalize_auction()` method
 
 **Integration**: After auction transaction is committed and lands are transferred:
+
 ```python
 # Apply global biome economy adjustments
 primary_land = lands[0] if lands else None
@@ -158,9 +175,11 @@ if primary_land:
 ```
 
 #### 3. Application Startup
+
 File: `backend/app/main.py` - `lifespan()` function
 
 **Integration**: During application initialization:
+
 ```python
 # Initialize biome land economy markets
 try:
@@ -175,26 +194,34 @@ except Exception as e:
 ## Edge Cases & Special Handling
 
 ### Zero Sold Lands in Biome
+
 When a biome has no sold lands (`sold_lands_count == 0`):
+
 - **Current Behavior**: Price adjustment for that biome is skipped
 - **Why**: Prevents division by zero and invalid market manipulation
 - **Effect**: If all lands in a biome are unclaimed, biome prices remain unchanged by external purchases
 - **Future Enhancement**: Could implement a "reserve pool" where 0-sold biomes receive a percentage of revenue
 
 ### Negative Prices Prevention
+
 In `handle_land_sale()`, prices cannot go below zero:
+
 ```python
 land_record.price_base_bdt = max(0, old_price - price_decrease)
 ```
 
 ### Price Update Consistency
+
 All prices in a biome are updated simultaneously:
+
 - Bulk update for all `Land` records with `biome == X` and `owner_id IS NOT NULL`
 - Single transaction commit ensures atomicity
 - No partial updates or race conditions
 
 ### Transaction Atomicity
+
 Economy adjustments are handled within transaction:
+
 - Land ownership transfer committed first
 - Marketplace transaction created
 - Economy adjustments applied in same session
@@ -206,6 +233,7 @@ Economy adjustments are handled within transaction:
 ### New Tables/Models
 
 **BiomeLandMarket**
+
 ```sql
 CREATE TABLE biome_land_market (
     biome VARCHAR(50) PRIMARY KEY,
@@ -219,11 +247,13 @@ CREATE TABLE biome_land_market (
 ### Modified Tables
 
 **Land Table** (existing)
+
 - `price_base_bdt` field is updated dynamically based on economy events
 - No schema changes required
 - Historical prices not tracked (current system design)
 
 **Transaction Table** (existing)
+
 - No changes required
 - Used as source of truth for all buy/sell events
 - Audit trail remains intact
@@ -231,23 +261,27 @@ CREATE TABLE biome_land_market (
 ## Performance Considerations
 
 ### Database Queries
-- Per purchase/sale: 
+
+- Per purchase/sale:
   - 1 query to fetch land details
   - 1 query to fetch all biome markets (7 records max)
   - 7 bulk updates (1 per biome)
   - Total: ~10 queries per transaction
 
 ### Execution Time
+
 - Average: 50-100ms per transaction
 - Includes database operations and price recalculations
 - Asynchronous execution prevents blocking
 
 ### Caching
+
 - BiomeLandMarket data is read-heavy, cacheable
 - Cache invalidation on every transaction (safe but more frequent)
 - Future optimization: Cache with 5-10 second TTL
 
 ### Scalability
+
 - Linear time complexity: O(X) where X = number of biomes (7)
 - Constant biomes count means predictable performance
 - Land record updates are bulk operations (efficient)
@@ -257,6 +291,7 @@ CREATE TABLE biome_land_market (
 Economy operations are logged at DEBUG and INFO levels:
 
 **DEBUG**: Per-biome price details
+
 ```
 Biome economy updated: {
     "success": True,
@@ -269,12 +304,14 @@ Biome economy updated: {
 ```
 
 **INFO**: Transaction summary
+
 ```
 Land purchase processed: land-uuid, Amount: 10000 BDT, Price changes: {...}
 Land sale processed: land-uuid, Amount: 5000 BDT, Price changes: {...}
 ```
 
 **ERROR**: Transaction failures
+
 ```
 Error processing land purchase: Connection timeout
 Error updating sold lands count: Biome market not found
@@ -283,17 +320,20 @@ Error updating sold lands count: Biome market not found
 ## Testing Strategy
 
 ### Unit Tests
+
 1. Price calculation formula correctness
 2. Edge cases (zero lands, negative prices)
 3. Concurrent transaction safety
 
 ### Integration Tests
+
 1. End-to-end buy flow with economy impact
 2. End-to-end auction flow with economy impact
 3. Multiple biomes affected simultaneously
 4. Market statistics accuracy
 
 ### Load Tests
+
 1. 1000 concurrent purchases
 2. Price stability under high load
 3. Database query performance
