@@ -85,6 +85,7 @@ class BiomeLandEconomyService:
         Returns:
             Dict with market impact details
         """
+        logger.info(f"🌍 ECONOMY SERVICE CALLED: land_id={land_id}, amount={amount_paid_bdt} BDT")
         try:
             # Fetch land details
             land_result = await db.execute(select(Land).where(Land.land_id == land_id))
@@ -145,8 +146,8 @@ class BiomeLandEconomyService:
                 market.average_price_bdt = market.calculate_average_price()
                 market.last_transaction_at = datetime.utcnow()
 
-            # Commit all changes
-            await db.commit()
+            # DO NOT commit here - let caller handle commit
+            # All changes are tracked in the session
 
             logger.info(
                 f"Land purchase processed: {land_id}, "
@@ -254,8 +255,8 @@ class BiomeLandEconomyService:
                 market.average_price_bdt = market.calculate_average_price()
                 market.last_transaction_at = datetime.utcnow()
 
-            # Commit all changes
-            await db.commit()
+            # DO NOT commit here - let caller handle commit
+            # All changes are tracked in the session
 
             logger.info(
                 f"Land sale processed: {land_id}, "
