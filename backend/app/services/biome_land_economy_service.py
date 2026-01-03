@@ -86,6 +86,7 @@ class BiomeLandEconomyService:
             Dict with market impact details
         """
         logger.info(f"🌍 ECONOMY SERVICE CALLED: land_id={land_id}, amount={amount_paid_bdt} BDT")
+        logger.info(f"📊 BUY EVENT: C = {amount_paid_bdt} BDT, X = {BiomeLandEconomyService.TOTAL_BIOMES} biomes")
         try:
             # Fetch land details
             land_result = await db.execute(select(Land).where(Land.land_id == land_id))
@@ -102,8 +103,9 @@ class BiomeLandEconomyService:
                 logger.warning("No biome markets initialized")
                 return {"error": "Biome markets not initialized"}
 
-            # Calculate per-biome share
+            # Calculate per-biome share: PerBiomeShare = C / X
             per_biome_share = amount_paid_bdt / BiomeLandEconomyService.TOTAL_BIOMES
+            logger.info(f"💰 PerBiomeShare = {amount_paid_bdt} / {BiomeLandEconomyService.TOTAL_BIOMES} = {per_biome_share:.2f} BDT per biome")
 
             # Track price changes
             price_changes = {}
@@ -122,11 +124,13 @@ class BiomeLandEconomyService:
 
                 if owned_lands_count == 0:
                     # Skip biomes with no sold lands (avoid division by zero)
-                    logger.debug(f"Biome {market.biome.value} has no owned lands, skipping price update")
+                    logger.info(f"⏭️  Biome {market.biome.value}: Xi = 0 (no sold lands), skipping")
                     continue
 
                 # Calculate price increase for each land in this biome
+                # Formula: ΔPi = PerBiomeShare / Xi = C / (X × Xi)
                 price_increase = per_biome_share / owned_lands_count
+                logger.info(f"📈 Biome {market.biome.value}: Xi = {owned_lands_count} lands, ΔPi = {per_biome_share:.2f} / {owned_lands_count} = {price_increase:.2f} BDT")
 
                 if biome_lands:
                     for land_record in biome_lands:
@@ -142,24 +146,32 @@ class BiomeLandEconomyService:
                             }
 
                 # Update market stats
-                market.total_market_value_bdt += amount_paid_bdt // BiomeLandEconomyService.TOTAL_BIOMES
-                market.average_price_bdt = market.calculate_average_price()
+                market.total_market_value_bdt += int(per_biome_share)
+                market.average_price_bdt = sum(land.price_base_bdt for land in biome_lands) / len(biome_lands) if biome_lands else 0
                 market.last_transaction_at = datetime.utcnow()
 
             # DO NOT commit here - let caller handle commit
             # All changes are tracked in the session
 
-            logger.info(
-                f"Land purchase processed: {land_id}, "
-                f"Amount: {amount_paid_bdt} BDT, "
-                f"Price changes: {price_changes}"
+            # Verify total redistribution (Economic Law: no leakage)
+            total_redistributed = sum(
+                pc["increase"] * pc["affected_lands"] 
+                for pc in price_changes.values()
             )
+            logger.info(
+                f"✅ Land purchase processed: {land_id}, "
+                f"Amount: {amount_paid_bdt} BDT, "
+                f"Biomes affected: {len(price_changes)}, "
+                f"Total redistributed: {total_redistributed:.2f} BDT (Expected: {amount_paid_bdt})"
+            )
+            logger.info(f"📋 Price changes: {price_changes}")
 
             return {
                 "success": True,
                 "amount_paid_bdt": amount_paid_bdt,
                 "per_biome_share": per_biome_share,
                 "price_changes": price_changes,
+                "total_redistributed": total_redistributed,
                 "message": f"Land prices updated in {len(price_changes)} biomes"
             }
 
@@ -195,6 +207,8 @@ class BiomeLandEconomyService:
         Returns:
             Dict with market impact details
         """
+        logger.info(f"💸 SELL EVENT: land_id={land_id}, amount={amount_received_bdt} BDT")
+        logger.info(f"📊 SELL EVENT: C = {amount_received_bdt} BDT, X = {BiomeLandEconomyService.TOTAL_BIOMES} biomes")
         try:
             # Fetch land details
             land_result = await db.execute(select(Land).where(Land.land_id == land_id))
@@ -211,8 +225,9 @@ class BiomeLandEconomyService:
                 logger.warning("No biome markets initialized")
                 return {"error": "Biome markets not initialized"}
 
-            # Calculate per-biome share
+            # Calculate per-biome share: PerBiomeShare = C / X
             per_biome_share = amount_received_bdt / BiomeLandEconomyService.TOTAL_BIOMES
+            logger.info(f"💰 PerBiomeShare = {amount_received_bdt} / {BiomeLandEconomyService.TOTAL_BIOMES} = {per_biome_share:.2f} BDT per biome")
 
             # Track price changes
             price_changes = {}
@@ -230,11 +245,13 @@ class BiomeLandEconomyService:
                 owned_lands_count = len(biome_lands)
 
                 if owned_lands_count == 0:
-                    logger.debug(f"Biome {market.biome.value} has no owned lands, skipping price update")
+                    logger.info(f"⏭️  Biome {market.biome.value}: Xi = 0 (no sold lands), skipping")
                     continue
 
                 # Calculate price decrease for each land in this biome
+                # Formula: ΔPi = PerBiomeShare / Xi = C / (X × Xi)
                 price_decrease = per_biome_share / owned_lands_count
+                logger.info(f"📉 Biome {market.biome.value}: Xi = {owned_lands_count} lands, ΔPi = {per_biome_share:.2f} / {owned_lands_count} = {price_decrease:.2f} BDT")
 
                 if biome_lands:
                     for land_record in biome_lands:
@@ -251,18 +268,25 @@ class BiomeLandEconomyService:
                             }
 
                 # Update market stats
-                market.total_market_value_bdt = max(0, market.total_market_value_bdt - amount_received_bdt // BiomeLandEconomyService.TOTAL_BIOMES)
-                market.average_price_bdt = market.calculate_average_price()
+                market.total_market_value_bdt = max(0, market.total_market_value_bdt - int(per_biome_share))
+                market.average_price_bdt = sum(land.price_base_bdt for land in biome_lands) / len(biome_lands) if biome_lands else 0
                 market.last_transaction_at = datetime.utcnow()
 
             # DO NOT commit here - let caller handle commit
             # All changes are tracked in the session
 
-            logger.info(
-                f"Land sale processed: {land_id}, "
-                f"Amount: {amount_received_bdt} BDT, "
-                f"Price changes: {price_changes}"
+            # Verify total redistribution (Economic Law: no leakage)
+            total_redistributed = sum(
+                pc["decrease"] * pc["affected_lands"] 
+                for pc in price_changes.values()
             )
+            logger.info(
+                f"✅ Land sale processed: {land_id}, "
+                f"Amount: {amount_received_bdt} BDT, "
+                f"Biomes affected: {len(price_changes)}, "
+                f"Total redistributed: {total_redistributed:.2f} BDT (Expected: {amount_received_bdt})"
+            )
+            logger.info(f"📋 Price changes: {price_changes}")
 
             return {
                 "success": True,
