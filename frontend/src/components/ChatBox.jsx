@@ -6,17 +6,17 @@
  * 3. Fenced land restrictions
  */
 
-import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
-import { wsService } from '../services/websocket';
-import { landsAPI, chatAPI, wsAPI, usersAPI } from '../services/api';
-import useAuthStore from '../stores/authStore';
-import toast from 'react-hot-toast';
+import { useState, useEffect, useRef, useMemo, useCallback } from "react";
+import { wsService } from "../services/websocket";
+import { landsAPI, chatAPI, wsAPI, usersAPI } from "../services/api";
+import useAuthStore from "../stores/authStore";
+import toast from "react-hot-toast";
 
-function ChatBox({ onClose, land, mode = 'proximity' }) {
+function ChatBox({ onClose, land, mode = "proximity" }) {
   const { user } = useAuthStore();
   const [messages, setMessages] = useState([]);
-  const [inputValue, setInputValue] = useState('');
-  const [currentRoom, setCurrentRoom] = useState('');
+  const [inputValue, setInputValue] = useState("");
+  const [currentRoom, setCurrentRoom] = useState("");
   const [typingUsers, setTypingUsers] = useState(new Set());
   const [canChat, setCanChat] = useState(true);
   const [chatMode, setChatMode] = useState(mode); // 'proximity', 'message', 'restricted'
@@ -28,7 +28,7 @@ function ChatBox({ onClose, land, mode = 'proximity' }) {
   const [accessEntries, setAccessEntries] = useState([]);
   const [accessRestricted, setAccessRestricted] = useState(false);
   const [showAccessPanel, setShowAccessPanel] = useState(false);
-  const [accessSearchTerm, setAccessSearchTerm] = useState('');
+  const [accessSearchTerm, setAccessSearchTerm] = useState("");
   const [accessSearchResults, setAccessSearchResults] = useState([]);
   const [accessLoading, setAccessLoading] = useState(false);
   const [accessSaving, setAccessSaving] = useState(false);
@@ -109,7 +109,7 @@ function ChatBox({ onClose, land, mode = 'proximity' }) {
       setAccessEntries(data.entries || []);
       setAccessRestricted(Boolean(data.restricted));
     } catch (error) {
-      console.error('Failed to load chat access list', error);
+      console.error("Failed to load chat access list", error);
     }
   }, [land?.land_id, land?.fenced, isOwnLand]);
 
@@ -121,7 +121,7 @@ function ChatBox({ onClose, land, mode = 'proximity' }) {
     ];
     return participantIds
       .filter((id) => id && id !== user?.user_id)
-      .map((id) => memberNamesRef.current[id] || memberNames[id] || 'Visitor')
+      .map((id) => memberNamesRef.current[id] || memberNames[id] || "Visitor")
       .filter((name) => {
         if (seen.has(name)) {
           return false;
@@ -132,7 +132,7 @@ function ChatBox({ onClose, land, mode = 'proximity' }) {
   }, [roomMembers, memberNames, user?.user_id]);
 
   const presenceTitle = useMemo(() => {
-    if (chatMode === 'restricted') return null;
+    if (chatMode === "restricted") return null;
     if (otherMemberNames.length === 0) return null;
     if (otherMemberNames.length === 1) {
       const baseName = otherMemberNames[0];
@@ -150,9 +150,9 @@ function ChatBox({ onClose, land, mode = 'proximity' }) {
       return `${otherMemberNames.length} visitors are active on this land`;
     }
     if (otherMemberNames.length === 2) {
-      return 'Group chat in progress';
+      return "Group chat in progress";
     }
-    return 'Real-time chat is available right now';
+    return "Real-time chat is available right now";
   }, [otherMemberNames.length, presenceTitle]);
 
   useEffect(() => {
@@ -177,9 +177,9 @@ function ChatBox({ onClose, land, mode = 'proximity' }) {
       markReadPendingRef.current = true;
       try {
         await chatAPI.markSessionAsRead(sessionIdToUse);
-        window.dispatchEvent(new CustomEvent('unreadMessagesUpdated'));
+        window.dispatchEvent(new CustomEvent("unreadMessagesUpdated"));
       } catch (error) {
-        console.error('Failed to mark messages as read:', error);
+        console.error("Failed to mark messages as read:", error);
       } finally {
         markReadPendingRef.current = false;
       }
@@ -194,8 +194,8 @@ function ChatBox({ onClose, land, mode = 'proximity' }) {
       setCanChat(true);
 
       if (!land) {
-        setCurrentRoom('global');
-        setChatMode('proximity');
+        setCurrentRoom("global");
+        setChatMode("proximity");
         setLandOwner(null);
         return;
       }
@@ -204,7 +204,7 @@ function ChatBox({ onClose, land, mode = 'proximity' }) {
       const ownsLand = land.owner_id === user?.user_id;
       const isFenced = Boolean(land.fenced);
       const hasOwner = Boolean(land.owner_id);
-      const ownerLabel = land.owner_username || 'Owner';
+      const ownerLabel = land.owner_username || "Owner";
       if (hasOwner) {
         setLandOwner(ownerLabel);
       } else {
@@ -213,16 +213,16 @@ function ChatBox({ onClose, land, mode = 'proximity' }) {
 
       // Determine chat mode
       if (isFenced && !ownsLand) {
-        setChatMode('restricted');
+        setChatMode("restricted");
         setCanChat(false);
-        setRestrictionReason('This fenced land only allows invited guests.');
+        setRestrictionReason("This fenced land only allows invited guests.");
       } else if (hasOwner && !ownsLand) {
         // Someone else's land - leave message mode
-        setChatMode('message');
+        setChatMode("message");
         setCanChat(true);
       } else {
         // Own land or unclaimed - proximity chat mode
-        setChatMode('proximity');
+        setChatMode("proximity");
         setCanChat(true);
       }
 
@@ -247,7 +247,7 @@ function ChatBox({ onClose, land, mode = 'proximity' }) {
         setRestrictionReason(null);
         setCanChat(true);
         setMessages([]);
-        setChatMode('proximity');
+        setChatMode("proximity");
         setCurrentSessionId(null);
         return;
       }
@@ -273,13 +273,16 @@ function ChatBox({ onClose, land, mode = 'proximity' }) {
           setMessages([]);
           setRestrictionReason(null);
           setCanChat(true);
-          setChatMode(hasOwner && !ownsLand ? 'message' : 'proximity');
+          setChatMode(hasOwner && !ownsLand ? "message" : "proximity");
           setCurrentSessionId(null);
           return;
         }
 
         try {
-          const messagesResponse = await chatAPI.getLandMessages(resolvedLandId, 50);
+          const messagesResponse = await chatAPI.getLandMessages(
+            resolvedLandId,
+            50
+          );
           if (cancelled) {
             return;
           }
@@ -303,18 +306,18 @@ function ChatBox({ onClose, land, mode = 'proximity' }) {
           }
           setRestrictionReason(null);
           setCanChat(true);
-          setChatMode(hasOwner && !ownsLand ? 'message' : 'proximity');
+          setChatMode(hasOwner && !ownsLand ? "message" : "proximity");
         } catch (historyError) {
           if (cancelled) {
             return;
           }
           if (historyError.response?.status === 403) {
             setMessages([]);
-            setChatMode('restricted');
+            setChatMode("restricted");
             setCanChat(false);
             setRestrictionReason(
               historyError.response?.data?.detail ||
-                'Only invited guests can read or leave messages on this fenced square.'
+                "Only invited guests can read or leave messages on this fenced square."
             );
             return;
           }
@@ -323,15 +326,17 @@ function ChatBox({ onClose, land, mode = 'proximity' }) {
             if (!isFencedVisitor) {
               setRestrictionReason(null);
               setCanChat(true);
-              setChatMode(hasOwner && !ownsLand ? 'message' : 'proximity');
+              setChatMode(hasOwner && !ownsLand ? "message" : "proximity");
             } else {
-              setChatMode('restricted');
+              setChatMode("restricted");
               setCanChat(false);
-              setRestrictionReason('This fenced land only allows invited guests.');
+              setRestrictionReason(
+                "This fenced land only allows invited guests."
+              );
             }
             return;
           }
-          console.error('Failed to load message history:', historyError);
+          console.error("Failed to load message history:", historyError);
           setMessages([]);
           setCurrentSessionId(null);
         }
@@ -343,11 +348,11 @@ function ChatBox({ onClose, land, mode = 'proximity' }) {
           setMessages([]);
           setRestrictionReason(null);
           setCanChat(true);
-          setChatMode('proximity');
+          setChatMode("proximity");
           setCurrentSessionId(null);
           return;
         }
-        console.error('Failed to load land details for chat history:', error);
+        console.error("Failed to load land details for chat history:", error);
         setMessages([]);
         setCurrentSessionId(null);
       }
@@ -391,7 +396,7 @@ function ChatBox({ onClose, land, mode = 'proximity' }) {
               occ.presence?.display_name ||
               occ.presence?.username ||
               occ.presence?.name ||
-              'Visitor';
+              "Visitor";
           }
         });
         if (Object.keys(names).length > 0) {
@@ -399,7 +404,7 @@ function ChatBox({ onClose, land, mode = 'proximity' }) {
         }
       } catch (error) {
         if (!cancelled) {
-          console.error('Failed to load online users for presence', error);
+          console.error("Failed to load online users for presence", error);
         }
       }
     };
@@ -420,28 +425,31 @@ function ChatBox({ onClose, land, mode = 'proximity' }) {
 
   // WebSocket connection and message handling
   useEffect(() => {
-    if (!currentRoom || chatMode === 'restricted' || !canChat) return;
+    if (!currentRoom || chatMode === "restricted" || !canChat) return;
 
     // Join room
     wsService.joinRoom(currentRoom);
 
     // Listen for messages
-    const unsubscribe = wsService.on('message', (msg) => {
+    const unsubscribe = wsService.on("message", (msg) => {
       setMessages((prev) => {
         // Check if message already exists (avoid duplicates)
-        const exists = prev.some(m => m.id === msg.message_id);
+        const exists = prev.some((m) => m.id === msg.message_id);
         if (exists) return prev;
 
-        return [...prev, {
-          id: msg.message_id,
-          sender: msg.sender_username,
-          sender_id: msg.sender_id,
-          content: msg.content,
-          timestamp: new Date(msg.timestamp),
-          isHistory: false,
-          is_leave_message: msg.is_leave_message,
-          read_by_owner: false  // New messages are unread
-        }];
+        return [
+          ...prev,
+          {
+            id: msg.message_id,
+            sender: msg.sender_username,
+            sender_id: msg.sender_id,
+            content: msg.content,
+            timestamp: new Date(msg.timestamp),
+            isHistory: false,
+            is_leave_message: msg.is_leave_message,
+            read_by_owner: false, // New messages are unread
+          },
+        ];
       });
 
       if (msg.is_leave_message && isOwnLand) {
@@ -450,7 +458,7 @@ function ChatBox({ onClose, land, mode = 'proximity' }) {
     });
 
     // Listen for typing indicators
-    const unsubscribeTyping = wsService.on('typing', (msg) => {
+    const unsubscribeTyping = wsService.on("typing", (msg) => {
       if (msg.user_id !== user?.user_id) {
         setTypingUsers((prev) => {
           const newSet = new Set(prev);
@@ -474,7 +482,7 @@ function ChatBox({ onClose, land, mode = 'proximity' }) {
     });
 
     // Listen for room join confirmation and member updates
-    const unsubscribeJoined = wsService.on('joined_room', (msg) => {
+    const unsubscribeJoined = wsService.on("joined_room", (msg) => {
       if (msg.room_id === currentRoom) {
         const members = Array.from(new Set(msg.members || []));
         setRoomMembers(members);
@@ -483,7 +491,7 @@ function ChatBox({ onClose, land, mode = 'proximity' }) {
     });
 
     // Listen for user joined
-    const unsubscribeUserJoined = wsService.on('user_joined', (msg) => {
+    const unsubscribeUserJoined = wsService.on("user_joined", (msg) => {
       if (msg.room_id === currentRoom) {
         let added = false;
         setRoomMembers((prev) => {
@@ -500,23 +508,26 @@ function ChatBox({ onClose, land, mode = 'proximity' }) {
     });
 
     // Listen for user left
-    const unsubscribeUserLeft = wsService.on('user_left', (msg) => {
+    const unsubscribeUserLeft = wsService.on("user_left", (msg) => {
       if (msg.room_id === currentRoom) {
-        setRoomMembers((prev) => prev.filter(id => id !== msg.user_id));
+        setRoomMembers((prev) => prev.filter((id) => id !== msg.user_id));
       }
     });
 
     // Listen for messages cleaned
-    const unsubscribeMessagesCleaned = wsService.on('messages_cleaned', (msg) => {
-      if (msg.room_id === currentRoom) {
-        console.log('Messages cleaned event received:', msg);
-        // Clear all messages
-        setMessages([]);
-        // Trigger refresh of unread counts
-        window.dispatchEvent(new CustomEvent('unreadMessagesUpdated'));
-        toast.info(`All messages have been cleaned from this square`);
+    const unsubscribeMessagesCleaned = wsService.on(
+      "messages_cleaned",
+      (msg) => {
+        if (msg.room_id === currentRoom) {
+          console.log("Messages cleaned event received:", msg);
+          // Clear all messages
+          setMessages([]);
+          // Trigger refresh of unread counts
+          window.dispatchEvent(new CustomEvent("unreadMessagesUpdated"));
+          toast.info(`All messages have been cleaned from this square`);
+        }
       }
-    });
+    );
 
     return () => {
       unsubscribe();
@@ -527,23 +538,31 @@ function ChatBox({ onClose, land, mode = 'proximity' }) {
       unsubscribeMessagesCleaned();
       wsService.leaveRoom(currentRoom);
     };
-  }, [currentRoom, user, resolveMemberNames, chatMode, canChat, isOwnLand, markMessagesAsRead]);
+  }, [
+    currentRoom,
+    user,
+    resolveMemberNames,
+    chatMode,
+    canChat,
+    isOwnLand,
+    markMessagesAsRead,
+  ]);
 
   useEffect(() => {
     // Auto-scroll to bottom
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
   const handleSendMessage = (e) => {
     e.preventDefault();
     if (!inputValue.trim()) return;
-    if (!canChat || chatMode === 'restricted') {
-      toast.error('You do not have permission to send messages here.');
+    if (!canChat || chatMode === "restricted") {
+      toast.error("You do not have permission to send messages here.");
       return;
     }
 
     wsService.sendMessage(currentRoom, inputValue);
-    setInputValue('');
+    setInputValue("");
 
     // Stop typing indicator
     wsService.sendTyping(currentRoom, false);
@@ -553,7 +572,7 @@ function ChatBox({ onClose, land, mode = 'proximity' }) {
   };
 
   const handleInputChange = (e) => {
-    if (chatMode === 'restricted' || !canChat) return;
+    if (chatMode === "restricted" || !canChat) return;
     setInputValue(e.target.value);
 
     // Send typing indicator
@@ -582,8 +601,8 @@ function ChatBox({ onClose, land, mode = 'proximity' }) {
       const response = await landsAPI.searchChatAccess(land.land_id, term);
       setAccessSearchResults(response.data || []);
     } catch (error) {
-      console.error('Failed to search users for chat access', error);
-      toast.error('Failed to search users');
+      console.error("Failed to search users for chat access", error);
+      toast.error("Failed to search users");
     } finally {
       setAccessLoading(false);
     }
@@ -608,8 +627,8 @@ function ChatBox({ onClose, land, mode = 'proximity' }) {
           )
         );
       } catch (error) {
-        console.error('Failed to grant chat access', error);
-        toast.error(error.response?.data?.detail || 'Failed to grant access');
+        console.error("Failed to grant chat access", error);
+        toast.error(error.response?.data?.detail || "Failed to grant access");
       } finally {
         setAccessSaving(false);
       }
@@ -627,12 +646,14 @@ function ChatBox({ onClose, land, mode = 'proximity' }) {
         await loadAccessEntries();
         setAccessSearchResults((prev) =>
           prev.map((entry) =>
-            entry.username === username ? { ...entry, has_access: false } : entry
+            entry.username === username
+              ? { ...entry, has_access: false }
+              : entry
           )
         );
       } catch (error) {
-        console.error('Failed to remove chat access', error);
-        toast.error(error.response?.data?.detail || 'Failed to remove access');
+        console.error("Failed to remove chat access", error);
+        toast.error(error.response?.data?.detail || "Failed to remove access");
       } finally {
         setAccessSaving(false);
       }
@@ -641,22 +662,25 @@ function ChatBox({ onClose, land, mode = 'proximity' }) {
   );
 
   const getChatTitle = () => {
-    if (chatMode === 'restricted') {
-      return 'FENCED';
+    if (chatMode === "restricted") {
+      return "FENCED";
     }
-    if (chatMode === 'message') {
-      return `Leave Message for ${landOwner || 'Owner'}`;
+    if (chatMode === "message") {
+      return `Leave Message for ${landOwner || "Owner"}`;
     }
     if (land) {
       return `Land Chat (${land.x}, ${land.y})`;
     }
-    return 'Global Chat';
+    return "Global Chat";
   };
   const getChatSubtitle = () => {
-    if (chatMode === 'restricted') {
-      return restrictionReason || `Only ${landOwner || 'the owner'} can receive messages here`;
+    if (chatMode === "restricted") {
+      return (
+        restrictionReason ||
+        `Only ${landOwner || "the owner"} can receive messages here`
+      );
     }
-    if (chatMode === 'message') {
+    if (chatMode === "message") {
       return `Your message will be saved for the owner`;
     }
     if (land) {
@@ -667,18 +691,20 @@ function ChatBox({ onClose, land, mode = 'proximity' }) {
 
   const chatHeaderTitle = presenceTitle || getChatTitle();
   const chatHeaderSubtitle =
-    presenceTitle && presenceSubtitle
-      ? presenceSubtitle
-      : getChatSubtitle();
+    presenceTitle && presenceSubtitle ? presenceSubtitle : getChatSubtitle();
 
   const handleCleanMessages = async () => {
     if (!land || !land.land_id) {
-      toast.error('Cannot clean messages: Land not found');
+      toast.error("Cannot clean messages: Land not found");
       return;
     }
 
     // Confirm deletion
-    if (!window.confirm('Are you sure you want to delete all messages in this square? This cannot be undone.')) {
+    if (
+      !window.confirm(
+        "Are you sure you want to delete all messages in this square? This cannot be undone."
+      )
+    ) {
       return;
     }
 
@@ -689,24 +715,36 @@ function ChatBox({ onClose, land, mode = 'proximity' }) {
       setMessages([]);
 
       // Trigger refresh of unread counts
-      window.dispatchEvent(new CustomEvent('unreadMessagesUpdated'));
+      window.dispatchEvent(new CustomEvent("unreadMessagesUpdated"));
 
       toast.success(`Cleaned ${response.data.messages_deleted} messages`);
     } catch (error) {
-      console.error('Failed to clean messages:', error);
-      toast.error(error.response?.data?.detail || 'Failed to clean messages');
+      console.error("Failed to clean messages:", error);
+      toast.error(error.response?.data?.detail || "Failed to clean messages");
     }
   };
 
   return (
     <div className="w-full h-80 md:h-96 bg-gray-800 rounded-lg shadow-xl border border-gray-700 flex flex-col">
       {/* Header */}
-      <div className={`flex items-center justify-between px-3 md:px-4 py-2 md:py-3 border-b ${chatMode === 'restricted' ? 'bg-red-900/30 border-red-700' : chatMode === 'message' ? 'bg-blue-900/30 border-blue-700' : 'border-gray-700'}`}>
+      <div
+        className={`flex items-center justify-between px-3 md:px-4 py-2 md:py-3 border-b ${
+          chatMode === "restricted"
+            ? "bg-red-900/30 border-red-700"
+            : chatMode === "message"
+            ? "bg-blue-900/30 border-blue-700"
+            : "border-gray-700"
+        }`}
+      >
         <div className="flex-1">
-          <h3 className="text-white font-semibold text-sm md:text-base">{chatHeaderTitle}</h3>
+          <h3 className="text-white font-semibold text-sm md:text-base">
+            {chatHeaderTitle}
+          </h3>
           <div className="flex items-center gap-2">
-            <p className="text-[10px] md:text-xs text-gray-400">{chatHeaderSubtitle}</p>
-            {roomMembers.length > 0 && chatMode === 'proximity' && (
+            <p className="text-[10px] md:text-xs text-gray-400">
+              {chatHeaderSubtitle}
+            </p>
+            {roomMembers.length > 0 && chatMode === "proximity" && (
               <span className="inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] bg-green-600/30 text-green-300 border border-green-600/50">
                 {roomMembers.length} here
               </span>
@@ -721,8 +759,18 @@ function ChatBox({ onClose, land, mode = 'proximity' }) {
               className="text-gray-400 hover:text-red-400 transition-colors"
               title="Clean all messages"
             >
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+              <svg
+                className="w-5 h-5"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
+                />
               </svg>
             </button>
           )}
@@ -730,8 +778,18 @@ function ChatBox({ onClose, land, mode = 'proximity' }) {
             onClick={onClose}
             className="text-gray-400 hover:text-white transition-colors"
           >
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+            <svg
+              className="w-5 h-5"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M6 18L18 6M6 6l12 12"
+              />
             </svg>
           </button>
         </div>
@@ -743,18 +801,22 @@ function ChatBox({ onClose, land, mode = 'proximity' }) {
           <div className="bg-gray-900/40 border border-gray-700 rounded-lg p-3 mb-2">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-[10px] uppercase text-gray-500 tracking-wide">Chat Access</p>
+                <p className="text-[10px] uppercase text-gray-500 tracking-wide">
+                  Chat Access
+                </p>
                 <p className="text-sm text-white">
                   {accessRestricted
-                    ? `${accessEntries.length} invited ${accessEntries.length === 1 ? 'guest' : 'guests'}`
-                    : 'Open to everyone'}
+                    ? `${accessEntries.length} invited ${
+                        accessEntries.length === 1 ? "guest" : "guests"
+                      }`
+                    : "Open to everyone"}
                 </p>
               </div>
               <button
                 onClick={() => setShowAccessPanel((prev) => !prev)}
                 className="text-xs px-2 py-1 rounded border border-gray-600 text-gray-200 hover:bg-gray-700 transition-colors"
               >
-                {showAccessPanel ? 'Hide' : 'Manage'}
+                {showAccessPanel ? "Hide" : "Manage"}
               </button>
             </div>
             {showAccessPanel && (
@@ -773,7 +835,7 @@ function ChatBox({ onClose, land, mode = 'proximity' }) {
                     className="px-3 py-1.5 rounded bg-blue-600 hover:bg-blue-700 text-white text-sm disabled:opacity-50"
                     disabled={accessLoading}
                   >
-                    {accessLoading ? 'Searching...' : 'Search'}
+                    {accessLoading ? "Searching..." : "Search"}
                   </button>
                 </div>
                 <label className="flex items-center space-x-2 text-xs text-gray-300">
@@ -799,20 +861,24 @@ function ChatBox({ onClose, land, mode = 'proximity' }) {
                           onClick={() => handleGrantAccess(result.username)}
                           className={`px-2 py-0.5 rounded text-xs ${
                             result.has_access
-                              ? 'bg-green-700/40 text-green-200 cursor-default'
-                              : 'bg-green-600 hover:bg-green-700 text-white'
+                              ? "bg-green-700/40 text-green-200 cursor-default"
+                              : "bg-green-600 hover:bg-green-700 text-white"
                           }`}
                         >
-                          {result.has_access ? 'Added' : 'Grant access'}
+                          {result.has_access ? "Added" : "Grant access"}
                         </button>
                       </div>
                     ))}
                   </div>
                 )}
                 <div>
-                  <p className="text-xs text-gray-400 mb-1">People who can view & leave messages:</p>
+                  <p className="text-xs text-gray-400 mb-1">
+                    People who can view & leave messages:
+                  </p>
                   {accessEntries.length === 0 ? (
-                    <p className="text-xs text-gray-500">No invited guests yet — chat is open to everyone.</p>
+                    <p className="text-xs text-gray-500">
+                      No invited guests yet — chat is open to everyone.
+                    </p>
                   ) : (
                     <ul className="space-y-1">
                       {accessEntries.map((entry) => (
@@ -838,24 +904,50 @@ function ChatBox({ onClose, land, mode = 'proximity' }) {
             )}
           </div>
         )}
-        {chatMode === 'restricted' ? (
+        {chatMode === "restricted" ? (
           <div className="text-center text-red-400 mt-8">
             <div className="w-16 h-16 mx-auto mb-4 bg-red-900/50 rounded-full flex items-center justify-center">
-              <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+              <svg
+                className="w-8 h-8"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"
+                />
               </svg>
             </div>
             <p className="text-lg font-semibold mb-2">Chat access restricted</p>
-            <p className="text-sm text-gray-300">{restrictionReason || `Only ${landOwner || 'the owner'} can receive messages here`}</p>
-            <p className="text-xs text-gray-500 mt-3">The owner has limited who can read or leave messages on this square.</p>
+            <p className="text-sm text-gray-300">
+              {restrictionReason ||
+                `Only ${landOwner || "the owner"} can receive messages here`}
+            </p>
+            <p className="text-xs text-gray-500 mt-3">
+              The owner has limited who can read or leave messages on this
+              square.
+            </p>
           </div>
         ) : messages.length === 0 ? (
           <div className="text-center text-gray-500 mt-8">
-            {chatMode === 'message' ? (
+            {chatMode === "message" ? (
               <>
                 <div className="w-12 h-12 mx-auto mb-3 bg-blue-900/50 rounded-full flex items-center justify-center">
-                  <svg className="w-6 h-6 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                  <svg
+                    className="w-6 h-6 text-blue-400"
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"
+                    />
                   </svg>
                 </div>
                 <p>No messages yet</p>
@@ -864,7 +956,9 @@ function ChatBox({ onClose, land, mode = 'proximity' }) {
             ) : (
               <>
                 <p>No messages yet</p>
-                <p className="text-sm mt-1">Start chatting with visitors on this land!</p>
+                <p className="text-sm mt-1">
+                  Start chatting with visitors on this land!
+                </p>
               </>
             )}
           </div>
@@ -874,32 +968,76 @@ function ChatBox({ onClose, land, mode = 'proximity' }) {
 
             return (
               <div key={msg.id} className="animate-slideUp">
-                <div className={`flex items-start space-x-2 ${isMine ? 'flex-row-reverse space-x-reverse' : ''}`}>
-                  <div className={`flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center text-white text-sm font-semibold ${isMine ? 'bg-green-600' : 'bg-blue-600'}`}>
+                <div
+                  className={`flex items-start space-x-2 ${
+                    isMine ? "flex-row-reverse space-x-reverse" : ""
+                  }`}
+                >
+                  <div
+                    className={`flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center text-white text-sm font-semibold ${
+                      isMine ? "bg-green-600" : "bg-blue-600"
+                    }`}
+                  >
                     {msg.sender[0].toUpperCase()}
                   </div>
                   <div className="flex-1">
-                    <div className={`flex items-baseline space-x-2 ${isMine ? 'flex-row-reverse space-x-reverse' : ''}`}>
-                      <span className="text-white font-semibold text-sm">{msg.sender}</span>
+                    <div
+                      className={`flex items-baseline space-x-2 ${
+                        isMine ? "flex-row-reverse space-x-reverse" : ""
+                      }`}
+                    >
+                      <span className="text-white font-semibold text-sm">
+                        {msg.sender}
+                      </span>
                       <span className="text-gray-500 text-xs">
-                        {msg.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                        {msg.timestamp.toLocaleTimeString([], {
+                          hour: "2-digit",
+                          minute: "2-digit",
+                        })}
                       </span>
                     </div>
-                    <div className={`flex items-end gap-1 ${isMine ? 'flex-row-reverse' : ''}`}>
-                      <p className={`text-gray-300 text-sm mt-1 break-words ${isMine ? 'text-right' : ''}`}>{msg.content}</p>
+                    <div
+                      className={`flex items-end gap-1 ${
+                        isMine ? "flex-row-reverse" : ""
+                      }`}
+                    >
+                      <p
+                        className={`text-gray-300 text-sm mt-1 break-words ${
+                          isMine ? "text-right" : ""
+                        }`}
+                      >
+                        {msg.content}
+                      </p>
                       {isMine && msg.is_leave_message && (
-                        <div className="flex-shrink-0 mb-1" title={msg.read_by_owner ? "Read" : "Delivered"}>
+                        <div
+                          className="flex-shrink-0 mb-1"
+                          title={msg.read_by_owner ? "Read" : "Delivered"}
+                        >
                           {msg.read_by_owner ? (
                             // Double checkmark (blue) - Read
-                            <svg className="w-4 h-4 text-blue-400" fill="currentColor" viewBox="0 0 20 20">
-                              <path d="M0 11l2-2 5 5L18 3l2 2L7 18z"/>
-                              <path d="M0 11l2-2 5 5L18 3l2 2L7 18z" transform="translate(3, 0)"/>
+                            <svg
+                              className="w-4 h-4 text-blue-400"
+                              fill="currentColor"
+                              viewBox="0 0 20 20"
+                            >
+                              <path d="M0 11l2-2 5 5L18 3l2 2L7 18z" />
+                              <path
+                                d="M0 11l2-2 5 5L18 3l2 2L7 18z"
+                                transform="translate(3, 0)"
+                              />
                             </svg>
                           ) : (
                             // Double checkmark (gray) - Delivered but not read
-                            <svg className="w-4 h-4 text-gray-500" fill="currentColor" viewBox="0 0 20 20">
-                              <path d="M0 11l2-2 5 5L18 3l2 2L7 18z"/>
-                              <path d="M0 11l2-2 5 5L18 3l2 2L7 18z" transform="translate(3, 0)"/>
+                            <svg
+                              className="w-4 h-4 text-gray-500"
+                              fill="currentColor"
+                              viewBox="0 0 20 20"
+                            >
+                              <path d="M0 11l2-2 5 5L18 3l2 2L7 18z" />
+                              <path
+                                d="M0 11l2-2 5 5L18 3l2 2L7 18z"
+                                transform="translate(3, 0)"
+                              />
                             </svg>
                           )}
                         </div>
@@ -913,31 +1051,53 @@ function ChatBox({ onClose, land, mode = 'proximity' }) {
         )}
         {typingUsers.size > 0 && canChat && (
           <div className="text-gray-500 text-sm italic">
-            {typingUsers.size === 1 ? 'Someone is' : `${typingUsers.size} people are`} typing...
+            {typingUsers.size === 1
+              ? "Someone is"
+              : `${typingUsers.size} people are`}{" "}
+            typing...
           </div>
         )}
         <div ref={messagesEndRef} />
       </div>
 
       {/* Input */}
-      <form onSubmit={handleSendMessage} className="p-2 md:p-4 border-t border-gray-700">
+      <form
+        onSubmit={handleSendMessage}
+        className="p-2 md:p-4 border-t border-gray-700"
+      >
         {canChat ? (
           <div className="flex space-x-2">
             <input
               type="text"
               value={inputValue}
               onChange={handleInputChange}
-              placeholder={chatMode === 'message' ? `Leave a message for ${landOwner}...` : "Type a message..."}
+              placeholder={
+                chatMode === "message"
+                  ? `Leave a message for ${landOwner}...`
+                  : "Type a message..."
+              }
               className="flex-1 px-2 md:px-3 py-2 bg-gray-700 text-white rounded-lg border border-gray-600 focus:border-blue-500 focus:outline-none text-xs md:text-sm"
               maxLength={500}
             />
             <button
               type="submit"
-              className={`px-3 md:px-4 py-2 ${chatMode === 'message' ? 'bg-green-600 hover:bg-green-700' : 'bg-blue-600 hover:bg-blue-700'} text-white rounded-lg transition-colors`}
-              title={chatMode === 'message' ? 'Send message to owner' : 'Send message'}
+              className={`px-3 md:px-4 py-2 ${
+                chatMode === "message"
+                  ? "bg-green-600 hover:bg-green-700"
+                  : "bg-blue-600 hover:bg-blue-700"
+              } text-white rounded-lg transition-colors`}
+              title={
+                chatMode === "message"
+                  ? "Send message to owner"
+                  : "Send message"
+              }
             >
-              <svg className="w-4 h-4 md:w-5 md:h-5" fill="currentColor" viewBox="0 0 24 24">
-                <path d="M16.6915026,12.4744748 L3.50612381,13.2599618 C3.19218622,13.2599618 3.03521743,13.4170592 3.03521743,13.5741566 L1.15159189,20.0151496 C0.8376543,20.8006365 0.99,21.89 1.77946707,22.52 C2.41,22.99 3.50612381,23.1 4.13399899,22.8429026 L21.714504,14.0454487 C22.6563168,13.5741566 23.1272231,12.6315722 22.9702544,11.6889879 L4.13399899,1.16398446 C3.34915502,0.9 2.40734225,0.9 1.77946707,1.4429026 C0.994623095,2.0051934 0.837654326,3.0951162 1.15159189,3.88061309 L3.03521743,10.3216061 C3.03521743,10.4787035 3.19218622,10.6358009 3.50612381,10.6358009 L16.6915026,11.4212879 C16.6915026,11.4212879 17.1624089,11.4212879 17.1624089,12.0496172 C17.1624089,12.6315722 16.6915026,12.4744748 16.6915026,12.4744748 Z"/>
+              <svg
+                className="w-4 h-4 md:w-5 md:h-5"
+                fill="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path d="M16.6915026,12.4744748 L3.50612381,13.2599618 C3.19218622,13.2599618 3.03521743,13.4170592 3.03521743,13.5741566 L1.15159189,20.0151496 C0.8376543,20.8006365 0.99,21.89 1.77946707,22.52 C2.41,22.99 3.50612381,23.1 4.13399899,22.8429026 L21.714504,14.0454487 C22.6563168,13.5741566 23.1272231,12.6315722 22.9702544,11.6889879 L4.13399899,1.16398446 C3.34915502,0.9 2.40734225,0.9 1.77946707,1.4429026 C0.994623095,2.0051934 0.837654326,3.0951162 1.15159189,3.88061309 L3.03521743,10.3216061 C3.03521743,10.4787035 3.19218622,10.6358009 3.50612381,10.6358009 L16.6915026,11.4212879 C16.6915026,11.4212879 17.1624089,11.4212879 17.1624089,12.0496172 C17.1624089,12.6315722 16.6915026,12.4744748 16.6915026,12.4744748 Z" />
               </svg>
             </button>
           </div>

@@ -2977,9 +2977,13 @@ function WorldRenderer() {
             // Keep the point between fingers stable while zooming.
             const anchor = pinchAnchorRef.current;
             const cx =
-              typeof anchor.x === "number" ? anchor.x : midX ?? viewport.width / 2;
+              typeof anchor.x === "number"
+                ? anchor.x
+                : midX ?? viewport.width / 2;
             const cy =
-              typeof anchor.y === "number" ? anchor.y : midY ?? viewport.height / 2;
+              typeof anchor.y === "number"
+                ? anchor.y
+                : midY ?? viewport.height / 2;
 
             const camX = cameraRef.current?.x ?? camera.x;
             const camY = cameraRef.current?.y ?? camera.y;
@@ -3127,7 +3131,15 @@ function WorldRenderer() {
             onPointerDown={handleZoom(0.12)}
             onClick={(e) => e.preventDefault()}
           >
-            <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <svg
+              className="w-5 h-5"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
               <path d="M12 5v14M5 12h14" />
             </svg>
           </button>
@@ -3139,7 +3151,15 @@ function WorldRenderer() {
             onPointerLeave={handleDirectionRelease}
             onPointerCancel={handleDirectionRelease}
           >
-            <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <svg
+              className="w-5 h-5"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
               <path d="M12 5l-6 8h12z" />
             </svg>
           </button>
@@ -3149,7 +3169,15 @@ function WorldRenderer() {
             onPointerDown={handleZoom(-0.12)}
             onClick={(e) => e.preventDefault()}
           >
-            <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <svg
+              className="w-5 h-5"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
               <path d="M5 12h14" />
             </svg>
           </button>
@@ -3162,7 +3190,15 @@ function WorldRenderer() {
             onPointerLeave={handleDirectionRelease}
             onPointerCancel={handleDirectionRelease}
           >
-            <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <svg
+              className="w-5 h-5"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
               <path d="M5 12l8 6V6z" />
             </svg>
           </button>
@@ -3175,7 +3211,15 @@ function WorldRenderer() {
             onPointerLeave={handleDirectionRelease}
             onPointerCancel={handleDirectionRelease}
           >
-            <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <svg
+              className="w-5 h-5"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
               <path d="M19 12l-8 6V6z" />
             </svg>
           </button>
@@ -3189,7 +3233,15 @@ function WorldRenderer() {
             onPointerLeave={handleDirectionRelease}
             onPointerCancel={handleDirectionRelease}
           >
-            <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <svg
+              className="w-5 h-5"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
               <path d="M12 19l6-8H6z" />
             </svg>
           </button>

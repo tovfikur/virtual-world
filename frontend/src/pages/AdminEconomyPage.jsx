@@ -39,7 +39,10 @@ function AdminEconomyPage() {
 
   const validateSettings = () => {
     // Validate transaction fee
-    if (settings?.transaction_fee_percent < 0 || settings?.transaction_fee_percent > 100) {
+    if (
+      settings?.transaction_fee_percent < 0 ||
+      settings?.transaction_fee_percent > 100
+    ) {
       toast.error("Transaction fee must be between 0% and 100%");
       return false;
     }
@@ -53,16 +56,28 @@ function AdminEconomyPage() {
     }
 
     // Validate elevation factors
-    const elevMin = settings?.elevation_price_factor?.min ?? settings?.elevation_price_min_factor ?? 1;
-    const elevMax = settings?.elevation_price_factor?.max ?? settings?.elevation_price_max_factor ?? 2;
+    const elevMin =
+      settings?.elevation_price_factor?.min ??
+      settings?.elevation_price_min_factor ??
+      1;
+    const elevMax =
+      settings?.elevation_price_factor?.max ??
+      settings?.elevation_price_max_factor ??
+      2;
     if (elevMin > elevMax) {
       toast.error("Minimum elevation factor cannot be greater than maximum");
       return false;
     }
 
     // Validate auction durations
-    const auctionMin = settings?.auction_limits?.min_duration_hours ?? settings?.auction_min_duration_hours ?? 1;
-    const auctionMax = settings?.auction_limits?.max_duration_hours ?? settings?.auction_max_duration_hours ?? 168;
+    const auctionMin =
+      settings?.auction_limits?.min_duration_hours ??
+      settings?.auction_min_duration_hours ??
+      1;
+    const auctionMax =
+      settings?.auction_limits?.max_duration_hours ??
+      settings?.auction_max_duration_hours ??
+      168;
     if (auctionMin > auctionMax) {
       toast.error("Minimum auction duration cannot be greater than maximum");
       return false;
@@ -81,52 +96,95 @@ function AdminEconomyPage() {
       const payload = {
         // General Settings
         base_land_price_bdt: parseInt(settings?.base_land_price_bdt) || 0,
-        transaction_fee_percent: parseFloat(settings?.transaction_fee_percent) || 0,
-        min_land_price_bdt: settings?.min_land_price_bdt ? parseInt(settings.min_land_price_bdt) : null,
-        max_land_price_bdt: settings?.max_land_price_bdt ? parseInt(settings.max_land_price_bdt) : null,
+        transaction_fee_percent:
+          parseFloat(settings?.transaction_fee_percent) || 0,
+        min_land_price_bdt: settings?.min_land_price_bdt
+          ? parseInt(settings.min_land_price_bdt)
+          : null,
+        max_land_price_bdt: settings?.max_land_price_bdt
+          ? parseInt(settings.max_land_price_bdt)
+          : null,
         enable_land_trading: Boolean(settings?.enable_land_trading),
 
         // Elevation Price Factors
         elevation_price_min_factor:
-          parseFloat(settings?.elevation_price_factor?.min ?? settings?.elevation_price_min_factor) || 1,
+          parseFloat(
+            settings?.elevation_price_factor?.min ??
+              settings?.elevation_price_min_factor
+          ) || 1,
         elevation_price_max_factor:
-          parseFloat(settings?.elevation_price_factor?.max ?? settings?.elevation_price_max_factor) || 2,
+          parseFloat(
+            settings?.elevation_price_factor?.max ??
+              settings?.elevation_price_max_factor
+          ) || 2,
 
         // Biome Land Base Prices
-        plains_base_price: parseInt(settings?.biome_land_base_prices?.plains) || 0,
-        forest_base_price: parseInt(settings?.biome_land_base_prices?.forest) || 0,
-        beach_base_price: parseInt(settings?.biome_land_base_prices?.beach) || 0,
-        mountain_base_price: parseInt(settings?.biome_land_base_prices?.mountain) || 0,
-        desert_base_price: parseInt(settings?.biome_land_base_prices?.desert) || 0,
+        plains_base_price:
+          parseInt(settings?.biome_land_base_prices?.plains) || 0,
+        forest_base_price:
+          parseInt(settings?.biome_land_base_prices?.forest) || 0,
+        beach_base_price:
+          parseInt(settings?.biome_land_base_prices?.beach) || 0,
+        mountain_base_price:
+          parseInt(settings?.biome_land_base_prices?.mountain) || 0,
+        desert_base_price:
+          parseInt(settings?.biome_land_base_prices?.desert) || 0,
         snow_base_price: parseInt(settings?.biome_land_base_prices?.snow) || 0,
-        ocean_base_price: parseInt(settings?.biome_land_base_prices?.ocean) || 0,
+        ocean_base_price:
+          parseInt(settings?.biome_land_base_prices?.ocean) || 0,
 
         // Marketplace Fee Tiers
-        fee_tier_1_threshold: parseInt(settings?.marketplace_fee_tiers?.tier_1?.threshold_bdt) || 0,
-        fee_tier_1_percent: parseFloat(settings?.marketplace_fee_tiers?.tier_1?.percent) || 0,
-        fee_tier_2_threshold: parseInt(settings?.marketplace_fee_tiers?.tier_2?.threshold_bdt) || 0,
-        fee_tier_2_percent: parseFloat(settings?.marketplace_fee_tiers?.tier_2?.percent) || 0,
-        fee_tier_3_threshold: parseInt(settings?.marketplace_fee_tiers?.tier_3?.threshold_bdt) || 0,
-        fee_tier_3_percent: parseFloat(settings?.marketplace_fee_tiers?.tier_3?.percent) || 0,
+        fee_tier_1_threshold:
+          parseInt(settings?.marketplace_fee_tiers?.tier_1?.threshold_bdt) || 0,
+        fee_tier_1_percent:
+          parseFloat(settings?.marketplace_fee_tiers?.tier_1?.percent) || 0,
+        fee_tier_2_threshold:
+          parseInt(settings?.marketplace_fee_tiers?.tier_2?.threshold_bdt) || 0,
+        fee_tier_2_percent:
+          parseFloat(settings?.marketplace_fee_tiers?.tier_2?.percent) || 0,
+        fee_tier_3_threshold:
+          parseInt(settings?.marketplace_fee_tiers?.tier_3?.threshold_bdt) || 0,
+        fee_tier_3_percent:
+          parseFloat(settings?.marketplace_fee_tiers?.tier_3?.percent) || 0,
 
         // Auction Limits
         auction_min_duration_hours:
-          parseInt(settings?.auction_limits?.min_duration_hours ?? settings?.auction_min_duration_hours) || 1,
+          parseInt(
+            settings?.auction_limits?.min_duration_hours ??
+              settings?.auction_min_duration_hours
+          ) || 1,
         auction_max_duration_hours:
-          parseInt(settings?.auction_limits?.max_duration_hours ?? settings?.auction_max_duration_hours) || 168,
+          parseInt(
+            settings?.auction_limits?.max_duration_hours ??
+              settings?.auction_max_duration_hours
+          ) || 168,
 
         // Biome Market Controls
-        max_price_move_percent: parseFloat(settings?.biome_market_controls?.max_price_move_percent) || 0,
-        max_transaction_percent: parseFloat(settings?.biome_market_controls?.max_transaction_percent) || 0,
-        redistribution_pool_percent: parseFloat(settings?.biome_market_controls?.redistribution_pool_percent) || 0,
-        biome_trading_paused: Boolean(settings?.biome_market_controls?.biome_trading_paused),
-        biome_prices_frozen: Boolean(settings?.biome_market_controls?.biome_prices_frozen),
+        max_price_move_percent:
+          parseFloat(settings?.biome_market_controls?.max_price_move_percent) ||
+          0,
+        max_transaction_percent:
+          parseFloat(
+            settings?.biome_market_controls?.max_transaction_percent
+          ) || 0,
+        redistribution_pool_percent:
+          parseFloat(
+            settings?.biome_market_controls?.redistribution_pool_percent
+          ) || 0,
+        biome_trading_paused: Boolean(
+          settings?.biome_market_controls?.biome_trading_paused
+        ),
+        biome_prices_frozen: Boolean(
+          settings?.biome_market_controls?.biome_prices_frozen
+        ),
 
         // Biome Multipliers (if present)
-        ...(settings?.biome_multipliers && Object.keys(settings.biome_multipliers).reduce((acc, biome) => {
-          acc[`${biome}_multiplier`] = parseFloat(settings.biome_multipliers[biome]) || 1;
-          return acc;
-        }, {})),
+        ...(settings?.biome_multipliers &&
+          Object.keys(settings.biome_multipliers).reduce((acc, biome) => {
+            acc[`${biome}_multiplier`] =
+              parseFloat(settings.biome_multipliers[biome]) || 1;
+            return acc;
+          }, {})),
       };
 
       await adminAPI.updateEconomicSettings(payload);
@@ -202,8 +260,16 @@ function AdminEconomyPage() {
             </div>
             {hasChanges && (
               <div className="flex items-center gap-2 text-sm text-yellow-400">
-                <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
-                  <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                <svg
+                  className="w-5 h-5"
+                  fill="currentColor"
+                  viewBox="0 0 20 20"
+                >
+                  <path
+                    fillRule="evenodd"
+                    d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z"
+                    clipRule="evenodd"
+                  />
                 </svg>
                 <span>Unsaved changes</span>
               </div>
@@ -226,14 +292,18 @@ function AdminEconomyPage() {
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div>
                   <label className="block text-sm font-medium text-gray-300 mb-2">
-                    Base Land Price (BDT) <span className="text-red-400">*</span>
+                    Base Land Price (BDT){" "}
+                    <span className="text-red-400">*</span>
                   </label>
                   <input
                     type="number"
                     min="0"
                     value={settings?.base_land_price_bdt ?? 0}
                     onChange={(e) =>
-                      handleChange("base_land_price_bdt", parseInt(e.target.value) || 0)
+                      handleChange(
+                        "base_land_price_bdt",
+                        parseInt(e.target.value) || 0
+                      )
                     }
                     className="w-full bg-gray-700 text-white px-4 py-2.5 rounded border border-gray-600 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                   />
@@ -253,7 +323,10 @@ function AdminEconomyPage() {
                     step="0.1"
                     value={settings?.transaction_fee_percent ?? 0}
                     onChange={(e) =>
-                      handleChange("transaction_fee_percent", parseFloat(e.target.value) || 0)
+                      handleChange(
+                        "transaction_fee_percent",
+                        parseFloat(e.target.value) || 0
+                      )
                     }
                     className="w-full bg-gray-700 text-white px-4 py-2.5 rounded border border-gray-600 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                   />
@@ -271,7 +344,10 @@ function AdminEconomyPage() {
                     min="0"
                     value={settings?.min_land_price_bdt ?? ""}
                     onChange={(e) =>
-                      handleChange("min_land_price_bdt", e.target.value ? parseInt(e.target.value) : null)
+                      handleChange(
+                        "min_land_price_bdt",
+                        e.target.value ? parseInt(e.target.value) : null
+                      )
                     }
                     placeholder="No minimum (optional)"
                     className="w-full bg-gray-700 text-white px-4 py-2.5 rounded border border-gray-600 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
@@ -290,7 +366,10 @@ function AdminEconomyPage() {
                     min="0"
                     value={settings?.max_land_price_bdt ?? ""}
                     onChange={(e) =>
-                      handleChange("max_land_price_bdt", e.target.value ? parseInt(e.target.value) : null)
+                      handleChange(
+                        "max_land_price_bdt",
+                        e.target.value ? parseInt(e.target.value) : null
+                      )
                     }
                     placeholder="No maximum (optional)"
                     className="w-full bg-gray-700 text-white px-4 py-2.5 rounded border border-gray-600 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
@@ -334,18 +413,37 @@ function AdminEconomyPage() {
             </div>
             <div className="p-6">
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                {["plains", "forest", "beach", "mountain", "desert", "snow", "ocean"].map((biome) => (
-                  <div key={biome} className="bg-gray-700/50 rounded-lg p-4 border border-gray-600">
+                {[
+                  "plains",
+                  "forest",
+                  "beach",
+                  "mountain",
+                  "desert",
+                  "snow",
+                  "ocean",
+                ].map((biome) => (
+                  <div
+                    key={biome}
+                    className="bg-gray-700/50 rounded-lg p-4 border border-gray-600"
+                  >
                     <label className="block text-sm font-medium text-gray-300 mb-2 capitalize flex items-center gap-2">
-                      <span className={`w-3 h-3 rounded-full ${
-                        biome === 'plains' ? 'bg-green-500' :
-                        biome === 'forest' ? 'bg-green-700' :
-                        biome === 'beach' ? 'bg-yellow-400' :
-                        biome === 'mountain' ? 'bg-gray-500' :
-                        biome === 'desert' ? 'bg-yellow-600' :
-                        biome === 'snow' ? 'bg-blue-200' :
-                        'bg-blue-600'
-                      }`}></span>
+                      <span
+                        className={`w-3 h-3 rounded-full ${
+                          biome === "plains"
+                            ? "bg-green-500"
+                            : biome === "forest"
+                            ? "bg-green-700"
+                            : biome === "beach"
+                            ? "bg-yellow-400"
+                            : biome === "mountain"
+                            ? "bg-gray-500"
+                            : biome === "desert"
+                            ? "bg-yellow-600"
+                            : biome === "snow"
+                            ? "bg-blue-200"
+                            : "bg-blue-600"
+                        }`}
+                      ></span>
                       {biome}
                     </label>
                     <div className="flex items-center gap-2">
@@ -366,7 +464,9 @@ function AdminEconomyPage() {
                         onBlur={() => setHasChanges(true)}
                         className="flex-1 bg-gray-600 text-white px-3 py-2 rounded border border-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                       />
-                      <span className="text-sm text-gray-400 font-medium">BDT</span>
+                      <span className="text-sm text-gray-400 font-medium">
+                        BDT
+                      </span>
                     </div>
                   </div>
                 ))}
@@ -380,46 +480,62 @@ function AdminEconomyPage() {
               <div className="border-b border-gray-700 px-6 py-4">
                 <h2 className="text-lg font-bold">Biome Price Multipliers</h2>
                 <p className="text-sm text-gray-400 mt-1">
-                  Multipliers applied to base land price for each biome (legacy system)
+                  Multipliers applied to base land price for each biome (legacy
+                  system)
                 </p>
               </div>
               <div className="p-6">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {Object.entries(settings.biome_multipliers).map(([biome, multiplier]) => (
-                    <div key={biome} className="bg-gray-700/50 rounded-lg p-4 border border-gray-600">
-                      <label className="block text-sm font-medium text-gray-300 mb-3 capitalize">
-                        {biome}
-                      </label>
-                      <div className="flex items-center gap-4">
-                        <input
-                          type="range"
-                          min="0.1"
-                          max="5.0"
-                          step="0.1"
-                          value={multiplier}
-                          onChange={(e) =>
-                            handleMultiplierChange(biome, parseFloat(e.target.value))
-                          }
-                          className="flex-1 h-2 bg-gray-600 rounded-lg appearance-none cursor-pointer accent-blue-500"
-                        />
-                        <input
-                          type="number"
-                          min="0.1"
-                          max="5.0"
-                          step="0.1"
-                          value={multiplier}
-                          onChange={(e) =>
-                            handleMultiplierChange(biome, parseFloat(e.target.value) || 0.1)
-                          }
-                          className="w-20 bg-gray-600 text-white px-3 py-1.5 rounded border border-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500 text-center"
-                        />
-                        <span className="text-xs text-gray-400">×</span>
+                  {Object.entries(settings.biome_multipliers).map(
+                    ([biome, multiplier]) => (
+                      <div
+                        key={biome}
+                        className="bg-gray-700/50 rounded-lg p-4 border border-gray-600"
+                      >
+                        <label className="block text-sm font-medium text-gray-300 mb-3 capitalize">
+                          {biome}
+                        </label>
+                        <div className="flex items-center gap-4">
+                          <input
+                            type="range"
+                            min="0.1"
+                            max="5.0"
+                            step="0.1"
+                            value={multiplier}
+                            onChange={(e) =>
+                              handleMultiplierChange(
+                                biome,
+                                parseFloat(e.target.value)
+                              )
+                            }
+                            className="flex-1 h-2 bg-gray-600 rounded-lg appearance-none cursor-pointer accent-blue-500"
+                          />
+                          <input
+                            type="number"
+                            min="0.1"
+                            max="5.0"
+                            step="0.1"
+                            value={multiplier}
+                            onChange={(e) =>
+                              handleMultiplierChange(
+                                biome,
+                                parseFloat(e.target.value) || 0.1
+                              )
+                            }
+                            className="w-20 bg-gray-600 text-white px-3 py-1.5 rounded border border-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500 text-center"
+                          />
+                          <span className="text-xs text-gray-400">×</span>
+                        </div>
+                        <p className="text-xs text-gray-500 mt-2">
+                          Calculated price:{" "}
+                          {(settings.base_land_price_bdt * multiplier).toFixed(
+                            0
+                          )}{" "}
+                          BDT
+                        </p>
                       </div>
-                      <p className="text-xs text-gray-500 mt-2">
-                        Calculated price: {(settings.base_land_price_bdt * multiplier).toFixed(0)} BDT
-                      </p>
-                    </div>
-                  ))}
+                    )
+                  )}
                 </div>
               </div>
             </section>
@@ -518,7 +634,10 @@ function AdminEconomyPage() {
             <div className="p-6">
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 {["tier_1", "tier_2", "tier_3"].map((tier, index) => (
-                  <div key={tier} className="bg-gray-700/50 rounded-lg p-4 border border-gray-600">
+                  <div
+                    key={tier}
+                    className="bg-gray-700/50 rounded-lg p-4 border border-gray-600"
+                  >
                     <h3 className="font-semibold mb-4 text-blue-400 capitalize">
                       Tier {index + 1}
                     </h3>
@@ -531,7 +650,8 @@ function AdminEconomyPage() {
                           type="number"
                           min="0"
                           value={
-                            settings?.marketplace_fee_tiers?.[tier]?.threshold_bdt ?? 0
+                            settings?.marketplace_fee_tiers?.[tier]
+                              ?.threshold_bdt ?? 0
                           }
                           onChange={(e) => {
                             setSettings((prev) => ({
@@ -540,7 +660,8 @@ function AdminEconomyPage() {
                                 ...prev.marketplace_fee_tiers,
                                 [tier]: {
                                   ...prev.marketplace_fee_tiers?.[tier],
-                                  threshold_bdt: parseInt(e.target.value, 10) || 0,
+                                  threshold_bdt:
+                                    parseInt(e.target.value, 10) || 0,
                                 },
                               },
                             }));
@@ -559,7 +680,8 @@ function AdminEconomyPage() {
                           max="100"
                           step="0.1"
                           value={
-                            settings?.marketplace_fee_tiers?.[tier]?.percent ?? 0
+                            settings?.marketplace_fee_tiers?.[tier]?.percent ??
+                            0
                           }
                           onChange={(e) => {
                             setSettings((prev) => ({
@@ -645,7 +767,8 @@ function AdminEconomyPage() {
                             prev?.auction_limits?.min_duration_hours ??
                             prev?.auction_min_duration_hours ??
                             1,
-                          max_duration_hours: parseInt(e.target.value, 10) || 168,
+                          max_duration_hours:
+                            parseInt(e.target.value, 10) || 168,
                         },
                       }));
                       setHasChanges(true);
@@ -679,14 +802,16 @@ function AdminEconomyPage() {
                     min="0"
                     step="0.1"
                     value={
-                      settings?.biome_market_controls?.max_price_move_percent ?? 0
+                      settings?.biome_market_controls?.max_price_move_percent ??
+                      0
                     }
                     onChange={(e) => {
                       setSettings((prev) => ({
                         ...prev,
                         biome_market_controls: {
                           ...prev.biome_market_controls,
-                          max_price_move_percent: parseFloat(e.target.value) || 0,
+                          max_price_move_percent:
+                            parseFloat(e.target.value) || 0,
                         },
                       }));
                       setHasChanges(true);
@@ -706,14 +831,16 @@ function AdminEconomyPage() {
                     min="0"
                     step="0.1"
                     value={
-                      settings?.biome_market_controls?.max_transaction_percent ?? 0
+                      settings?.biome_market_controls
+                        ?.max_transaction_percent ?? 0
                     }
                     onChange={(e) => {
                       setSettings((prev) => ({
                         ...prev,
                         biome_market_controls: {
                           ...prev.biome_market_controls,
-                          max_transaction_percent: parseFloat(e.target.value) || 0,
+                          max_transaction_percent:
+                            parseFloat(e.target.value) || 0,
                         },
                       }));
                       setHasChanges(true);
@@ -734,14 +861,16 @@ function AdminEconomyPage() {
                     max="100"
                     step="0.1"
                     value={
-                      settings?.biome_market_controls?.redistribution_pool_percent ?? 0
+                      settings?.biome_market_controls
+                        ?.redistribution_pool_percent ?? 0
                     }
                     onChange={(e) => {
                       setSettings((prev) => ({
                         ...prev,
                         biome_market_controls: {
                           ...prev.biome_market_controls,
-                          redistribution_pool_percent: parseFloat(e.target.value) || 0,
+                          redistribution_pool_percent:
+                            parseFloat(e.target.value) || 0,
                         },
                       }));
                       setHasChanges(true);
@@ -758,7 +887,8 @@ function AdminEconomyPage() {
                   <input
                     type="checkbox"
                     checked={
-                      settings?.biome_market_controls?.biome_trading_paused ?? false
+                      settings?.biome_market_controls?.biome_trading_paused ??
+                      false
                     }
                     onChange={(e) => {
                       setSettings((prev) => ({
@@ -785,7 +915,8 @@ function AdminEconomyPage() {
                   <input
                     type="checkbox"
                     checked={
-                      settings?.biome_market_controls?.biome_prices_frozen ?? false
+                      settings?.biome_market_controls?.biome_prices_frozen ??
+                      false
                     }
                     onChange={(e) => {
                       setSettings((prev) => ({
@@ -820,8 +951,16 @@ function AdminEconomyPage() {
           <div className="flex items-center gap-4">
             {hasChanges && (
               <div className="flex items-center gap-2 text-sm text-yellow-400">
-                <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
-                  <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
+                <svg
+                  className="w-5 h-5"
+                  fill="currentColor"
+                  viewBox="0 0 20 20"
+                >
+                  <path
+                    fillRule="evenodd"
+                    d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z"
+                    clipRule="evenodd"
+                  />
                 </svg>
                 <span>You have unsaved changes</span>
               </div>
@@ -847,8 +986,18 @@ function AdminEconomyPage() {
                 </>
               ) : (
                 <>
-                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                  <svg
+                    className="w-5 h-5"
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M5 13l4 4L19 7"
+                    />
                   </svg>
                   <span>Save All Changes</span>
                 </>

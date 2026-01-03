@@ -138,7 +138,10 @@ function WorldPage() {
   };
 
   return (
-    <div className="fixed inset-0 w-full h-full overflow-hidden bg-gray-900" style={{ minHeight: '100vh', minHeight: '100dvh' }}>  
+    <div
+      className="fixed inset-0 w-full h-full overflow-hidden bg-gray-900"
+      style={{ minHeight: "100vh", minHeight: "100dvh" }}
+    >
       {/* PixiJS World Renderer */}
       <WorldRenderer />
 
@@ -156,7 +159,8 @@ function WorldPage() {
       {!showChat && (
         <button
           onClick={() => setShowChat(true)}
-          className="absolute bottom-2 left-2 md:left-4 z-20 bg-gray-800 hover:bg-gray-700 text-white px-3 md:px-4 py-2 rounded-lg shadow-lg border border-gray-600 transition-colors">
+          className="absolute bottom-2 left-2 md:left-4 z-20 bg-gray-800 hover:bg-gray-700 text-white px-3 md:px-4 py-2 rounded-lg shadow-lg border border-gray-600 transition-colors"
+        >
           <svg
             className="w-5 h-5 md:w-6 md:h-6"
             fill="none"
