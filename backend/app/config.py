@@ -51,6 +51,7 @@ class Settings(BaseSettings):
     jwt_algorithm: str = Field(default="HS256", env="JWT_ALGORITHM")
     jwt_access_token_expire_minutes: int = Field(default=60, env="JWT_ACCESS_TOKEN_EXPIRE_MINUTES")
     jwt_refresh_token_expire_days: int = Field(default=7, env="JWT_REFRESH_TOKEN_EXPIRE_DAYS")
+    session_inactivity_timeout_minutes: int = Field(default=5, env="SESSION_INACTIVITY_TIMEOUT_MINUTES")
 
     # Password Security
     bcrypt_rounds: int = Field(default=12, env="BCRYPT_ROUNDS")

@@ -29,6 +29,7 @@ from app.schemas.land_schema import (
 from app.dependencies import get_current_user, get_optional_user
 from app.services.cache_service import cache_service
 from app.config import CACHE_TTLS
+from app.models.admin_config import AdminConfig
 from pydantic import BaseModel
 
 logger = logging.getLogger(__name__)
@@ -42,6 +43,62 @@ class LandClaimRequest(BaseModel):
     biome: str
     elevation: float
     price_base_bdt: int
+
+
+async def _calculate_current_land_price(
+    land: Land,
+    db: AsyncSession
+) -> int:
+    """
+    Recalculate land price based on current admin configuration.
+    
+    This ensures that when admin updates biome base prices or elevation factors,
+    all lands reflect the current economic settings.
+    
+    Args:
+        land: Land object with biome and elevation
+        db: Database session
+        
+    Returns:
+        Recalculated price in BDT
+    """
+    # Fetch current admin config
+    result = await db.execute(select(AdminConfig).limit(1))
+    config = result.scalar_one_or_none()
+    
+    if not config:
+        # Fallback to stored price if no config
+        return int(land.price_base_bdt)
+    
+    # Get biome-specific base price
+    biome_base_prices = {
+        Biome.PLAINS: config.plains_base_price,
+        Biome.FOREST: config.forest_base_price,
+        Biome.BEACH: config.beach_base_price,
+        Biome.MOUNTAIN: config.mountain_base_price,
+        Biome.DESERT: config.desert_base_price,
+        Biome.SNOW: config.snow_base_price,
+        Biome.OCEAN: config.ocean_base_price
+    }
+    
+    base = biome_base_prices.get(land.biome, 100)
+    
+    # Apply elevation factor
+    elevation = land.elevation if land.elevation is not None else 0.5
+    # Clamp elevation to [0, 1]
+    elevation = max(0.0, min(1.0, elevation))
+    
+    min_factor = float(config.elevation_price_min_factor) if config.elevation_price_min_factor else 0.8
+    max_factor = float(config.elevation_price_max_factor) if config.elevation_price_max_factor else 1.2
+    
+    # Ensure min_factor <= max_factor
+    if min_factor > max_factor:
+        min_factor, max_factor = max_factor, min_factor
+    
+    elevation_factor = min_factor + (elevation * (max_factor - min_factor))
+    
+    calculated_price = int(base * elevation_factor)
+    return calculated_price
 
 
 async def _serialize_land(
@@ -66,6 +123,15 @@ async def _serialize_land(
 
     land_dict = land.to_dict()
     land_dict["owner_username"] = owner_username
+    
+    # Recalculate price based on current admin config
+    try:
+        current_price = await _calculate_current_land_price(land, db)
+        land_dict["price_base_bdt"] = current_price
+    except Exception as e:
+        logger.warning(f"Failed to recalculate land price for {land.land_id}: {e}")
+        # Keep the stored price if calculation fails
+    
     return land_dict
 
 

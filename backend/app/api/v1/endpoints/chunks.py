@@ -12,12 +12,78 @@ import uuid
 
 from app.services.world_service import world_service
 from app.db.session import get_db
-from app.models.land import Land
+from app.models.land import Land, Biome
 from app.models.land_chat_access import LandChatAccess
+from app.models.admin_config import AdminConfig
 from app.dependencies import get_optional_user
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/chunks", tags=["chunks"])
+
+
+async def _calculate_unclaimed_land_price(
+    land_data: Dict,
+    db: AsyncSession
+) -> int:
+    """
+    Recalculate unclaimed land price based on current admin configuration.
+    
+    For unowned/unclaimed lands coming from chunk generation,
+    ensure prices reflect the latest admin economic settings.
+    
+    Args:
+        land_data: Land data dict with biome and elevation
+        db: Database session
+        
+    Returns:
+        Recalculated price in BDT
+    """
+    # Fetch current admin config
+    result = await db.execute(select(AdminConfig).limit(1))
+    config = result.scalar_one_or_none()
+    
+    if not config:
+        # Fallback to stored price if no config
+        return int(land_data.get("price_base_bdt", 100))
+    
+    # Map biome string to enum
+    biome_str = land_data.get("biome", "plains")
+    try:
+        biome = Biome(biome_str)
+    except ValueError:
+        biome = Biome.PLAINS
+    
+    # Get biome-specific base price
+    biome_base_prices = {
+        Biome.PLAINS: config.plains_base_price,
+        Biome.FOREST: config.forest_base_price,
+        Biome.BEACH: config.beach_base_price,
+        Biome.MOUNTAIN: config.mountain_base_price,
+        Biome.DESERT: config.desert_base_price,
+        Biome.SNOW: config.snow_base_price,
+        Biome.OCEAN: config.ocean_base_price
+    }
+    
+    base = biome_base_prices.get(biome, 100)
+    
+    # Apply elevation factor
+    elevation = land_data.get("elevation", 0.5)
+    if elevation is None:
+        elevation = 0.5
+    # Clamp elevation to [0, 1]
+    elevation = max(0.0, min(1.0, elevation))
+    
+    min_factor = float(config.elevation_price_min_factor) if config.elevation_price_min_factor else 0.8
+    max_factor = float(config.elevation_price_max_factor) if config.elevation_price_max_factor else 1.2
+    
+    # Ensure min_factor <= max_factor
+    if min_factor > max_factor:
+        min_factor, max_factor = max_factor, min_factor
+    
+    elevation_factor = min_factor + (elevation * (max_factor - min_factor))
+    
+    calculated_price = int(base * elevation_factor)
+    return calculated_price
 
 
 async def enrich_chunk_with_ownership(
@@ -26,14 +92,14 @@ async def enrich_chunk_with_ownership(
     user_uuid: Optional[uuid.UUID] = None,
 ) -> Dict:
     """
-    Enrich chunk data with ownership and fencing information.
+    Enrich chunk data with ownership, fencing, and current pricing information.
 
     Args:
         chunk_data: Generated chunk data from world service
         db: Database session
 
     Returns:
-        Enriched chunk data with fencing flags
+        Enriched chunk data with fencing flags and recalculated prices
     """
     # Calculate coordinate range for this chunk
     lands = chunk_data["lands"]
@@ -88,7 +154,7 @@ async def enrich_chunk_with_ownership(
 
     user_id_str = str(user_uuid) if user_uuid else None
 
-    # Enrich land data with ownership and fencing information
+    # Enrich land data with ownership, fencing, and recalculated pricing
     for land in lands:
         coord_key = (land["x"], land["y"])
         if coord_key in ownership_lookup:
@@ -111,6 +177,14 @@ async def enrich_chunk_with_ownership(
             # Land is not owned
             land["fenced"] = False
             land["guest_access"] = False
+        
+        # Recalculate price based on current admin config for both owned and unowned lands
+        try:
+            current_price = await _calculate_unclaimed_land_price(land, db)
+            land["price_base_bdt"] = current_price
+        except Exception as e:
+            logger.warning(f"Failed to recalculate price for land at ({land['x']}, {land['y']}): {e}")
+            # Keep the generated price if calculation fails
 
     return chunk_data
 

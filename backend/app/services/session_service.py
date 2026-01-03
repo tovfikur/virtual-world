@@ -23,6 +23,13 @@ class SessionService:
     """Manages user sessions with single-session enforcement for authenticated users."""
 
     @staticmethod
+    def _normalize_timestamp(ts: Optional[datetime]) -> Optional[datetime]:
+        """Ensure timestamps are timezone-aware for safe comparisons."""
+        if ts is None:
+            return None
+        return ts if ts.tzinfo else ts.replace(tzinfo=timezone.utc)
+
+    @staticmethod
     def generate_device_fingerprint(user_agent: str, ip_address: str) -> str:
         """
         Generate device fingerprint from user-agent and IP.
@@ -121,10 +128,10 @@ class SessionService:
         )
         session = result.scalar_one_or_none()
 
-        # Check if expired
-        if session and session.expires_at < datetime.now(timezone.utc):
-            session.is_active = False
-            await db.commit()
+        if not session:
+            return None
+
+        if not await SessionService.validate_session(db, session):
             return None
 
         return session
@@ -153,10 +160,10 @@ class SessionService:
         )
         session = result.scalar_one_or_none()
 
-        # Check if expired
-        if session and session.expires_at < datetime.now(timezone.utc):
-            session.is_active = False
-            await db.commit()
+        if not session:
+            return None
+
+        if not await SessionService.validate_session(db, session):
             return None
 
         return session
@@ -191,7 +198,7 @@ class SessionService:
         db: AsyncSession, session: UserSession
     ) -> bool:
         """
-        Validate that a session is active and not expired.
+        Validate that a session is active, not expired, and not idle past the inactivity timeout.
 
         Args:
             db: Database session
@@ -203,7 +210,22 @@ class SessionService:
         if not session or not session.is_active:
             return False
 
-        if session.expires_at < datetime.now(timezone.utc):
+        now = datetime.now(timezone.utc)
+        last_activity = SessionService._normalize_timestamp(session.last_activity)
+        expires_at = SessionService._normalize_timestamp(session.expires_at)
+
+        # Enforce inactivity timeout (auto-logout) before absolute expiry
+        inactivity_minutes = settings.session_inactivity_timeout_minutes
+        if (
+            inactivity_minutes > 0
+            and last_activity is not None
+            and now - last_activity > timedelta(minutes=inactivity_minutes)
+        ):
+            session.is_active = False
+            await db.commit()
+            return False
+
+        if expires_at and expires_at < now:
             session.is_active = False
             await db.commit()
             return False

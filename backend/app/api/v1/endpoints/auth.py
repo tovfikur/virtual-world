@@ -419,42 +419,18 @@ async def refresh_token(
         except Exception as e:
             logger.error(f"Error checking DB session: {e}")
 
-    # If DB session is missing or expired, create a new one and update session_id
     if not db_session:
-        logger.warning(f"DB session invalid for token {session_token}; creating new session")
-        try:
-            # Create new session with same user
-            new_session_id = secrets.token_urlsafe(32)
-            access_minutes, refresh_days, _, _ = await _get_security_settings(db)
-            
-            new_db_session = await SessionService.create_session(
-                db=db,
-                user_id=str(user.user_id),
-                session_token=new_session_id,
-                user_agent=session_data.get("user_agent", "unknown"),
-                ip_address=session_data.get("ip_address", "0.0.0.0"),
-                expires_in_minutes=refresh_days * 24 * 60,
-            )
-            
-            # Update cache with new session_id
-            session_data["session_id"] = new_session_id
-            await cache_service.set(
-                f"session:{user.user_id}",
-                session_data,
-                ttl=max(refresh_days * 24 * 60 * 60, CACHE_TTLS["session"])
-            )
-            logger.info(f"Created new DB session {new_session_id} for refresh")
-            db_session = new_db_session
-        except Exception as e:
-            logger.error(f"Failed to create new session on refresh: {e}")
-            # Fall back to reusing old session_id, will likely fail auth but at least we tried
-    else:
-        # Session exists, just update its last activity
-        try:
-            await SessionService.update_activity(db, db_session)
-            logger.info(f"Updated activity for existing session {db_session.session_id}")
-        except Exception as e:
-            logger.error(f"Error updating session activity: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Session expired or inactive"
+        )
+
+    # Session exists, just update its last activity
+    try:
+        await SessionService.update_activity(db, db_session)
+        logger.info(f"Updated activity for existing session {db_session.session_id}")
+    except Exception as e:
+        logger.error(f"Error updating session activity: {e}")
 
     access_minutes, refresh_days, _, _ = await _get_security_settings(db)
     access_expires_seconds = access_minutes * 60
