@@ -1,7 +1,9 @@
 # Economic Settings Price Recalculation Fix
 
 ## Problem
+
 Economic settings (biome base prices, elevation factors) were not being reflected in the frontend when:
+
 1. Admin updated economic configuration
 2. Users browsed the world and selected land for buy/sell
 3. Multi-select showing land prices
@@ -9,6 +11,7 @@ Economic settings (biome base prices, elevation factors) were not being reflecte
 The issue was that prices were stored in the database when lands were created/claimed, but were never recalculated when the admin updated the configuration.
 
 ## Root Cause
+
 - Land prices were calculated at generation time based on admin config at that moment
 - Stored in `lands.price_base_bdt` column
 - When admin updated config, API endpoints returned stale prices from the database
@@ -19,27 +22,32 @@ The issue was that prices were stored in the database when lands were created/cl
 ### 1. **Lands Endpoint** (`backend/app/api/v1/endpoints/lands.py`)
 
 **Added `_calculate_current_land_price()` function:**
+
 - Fetches current admin configuration
 - Recalculates land price based on current biome base prices and elevation factors
 - Applied to all land responses
 
 **Updated `_serialize_land()` function:**
+
 - Now calls `_calculate_current_land_price()` after serializing land data
 - All land API calls return current prices reflecting admin's latest settings
 
 ### 2. **Chunks Endpoint** (`backend/app/api/v1/endpoints/chunks.py`)
 
 **Added `_calculate_unclaimed_land_price()` function:**
+
 - Similar price calculation for unclaimed/unowned lands from chunk generation
 - Works with land data dictionaries instead of ORM objects
 
 **Updated `enrich_chunk_with_ownership()` function:**
+
 - Recalculates prices for all lands in chunks (both owned and unowned)
 - Ensures world view displays current prices
 
 ## How It Works
 
 ### Price Calculation Formula
+
 ```
 base_price = biome_specific_base_price (from admin config)
 elevation_factor = min_factor + (elevation * (max_factor - min_factor))
@@ -47,6 +55,7 @@ final_price = base_price * elevation_factor
 ```
 
 Where:
+
 - `biome_specific_base_price` = Admin's configured price for the biome (plains, forest, etc.)
 - `elevation` = Land's elevation value (0-1)
 - `min_factor` & `max_factor` = Admin's configured elevation price factors
@@ -54,16 +63,19 @@ Where:
 ### Affected Endpoints
 
 **Land retrieval (now recalculates price):**
+
 - `GET /lands/{land_id}` - Get land by ID
-- `GET /lands/coordinates/{x}/{y}` - Get land by coordinates  
+- `GET /lands/coordinates/{x}/{y}` - Get land by coordinates
 - `GET /lands/` - Search/filter lands
 - `GET /lands/owner/{owner_id}/coordinates` - Get owner's lands
 
 **Chunk streaming (now recalculates price):**
+
 - `GET /chunks/{chunk_x}/{chunk_y}` - Get single chunk
 - `POST /chunks/batch` - Get multiple chunks
 
 **Frontend components updated:**
+
 - `LandInfoPanel` - Shows correct current price when land is selected
 - `MultiLandActionsPanel` - Shows correct total price for bulk purchase
 - `WorldPage` - Displays current prices in land information
@@ -71,10 +83,12 @@ Where:
 ## Configuration
 
 Admin can update economic settings via:
+
 - **Admin Dashboard** → Economy Settings
 - **API Endpoint**: `PATCH /admin/config/economy`
 
 **Configurable fields:**
+
 - `plains_base_price` - Base price for plains biome
 - `forest_base_price` - Base price for forest biome
 - `beach_base_price` - Base price for beach biome
@@ -105,6 +119,7 @@ Admin can update economic settings via:
 ## Backwards Compatibility
 
 ✅ **No breaking changes:**
+
 - Existing API contracts unchanged
 - Response format identical
 - Price field name unchanged (`price_base_bdt`)

@@ -106,6 +106,19 @@ async def create_listing(
         )
 
     try:
+        # Check if land trading is enabled
+        from app.models.admin_config import AdminConfig
+        config_result = await db.execute(select(AdminConfig).limit(1))
+        config = config_result.scalar_one_or_none()
+        if not config:
+            raise HTTPException(status_code=500, detail="Admin config not found")
+        
+        if not config.enable_land_trading:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Land trading is currently disabled by admin"
+            )
+
         await _enforce_marketplace_rate_limit(db, request, current_user)
 
         listing = await marketplace_service.create_listing(
@@ -413,6 +426,19 @@ async def place_bid(
         )
 
     try:
+        # Check if land trading is enabled
+        from app.models.admin_config import AdminConfig
+        config_result = await db.execute(select(AdminConfig).limit(1))
+        config = config_result.scalar_one_or_none()
+        if not config:
+            raise HTTPException(status_code=500, detail="Admin config not found")
+        
+        if not config.enable_land_trading:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Land trading is currently disabled by admin"
+            )
+
         await _enforce_marketplace_rate_limit(db, request, current_user)
 
         bid = await marketplace_service.place_bid(
@@ -544,6 +570,19 @@ async def buy_now(
         )
 
     try:
+        # Check if land trading is enabled
+        from app.models.admin_config import AdminConfig
+        config_result = await db.execute(select(AdminConfig).limit(1))
+        config = config_result.scalar_one_or_none()
+        if not config:
+            raise HTTPException(status_code=500, detail="Admin config not found")
+        
+        if not config.enable_land_trading:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Land trading is currently disabled by admin"
+            )
+
         await _enforce_marketplace_rate_limit(db, request, current_user)
 
         transaction = await marketplace_service.buy_now(

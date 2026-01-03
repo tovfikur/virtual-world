@@ -1,6 +1,7 @@
 # Economic Settings Price Recalculation - Implementation Details
 
 ## Overview
+
 The economic settings fix ensures that land prices are always calculated based on the current admin configuration, rather than returning stale prices stored in the database.
 
 ## Architecture
@@ -38,7 +39,7 @@ async def _calculate_current_land_price(
 ) -> int:
     """
     Recalculate land price based on current admin configuration.
-    
+
     Formula:
         elevation_factor = min_factor + (elevation * (max_factor - min_factor))
         price = base_price * elevation_factor
@@ -46,13 +47,16 @@ async def _calculate_current_land_price(
 ```
 
 **Parameters:**
+
 - `land: Land` - ORM object with biome and elevation
 - `db: AsyncSession` - Database session to fetch AdminConfig
 
 **Returns:**
+
 - `int` - Calculated price in BDT
 
 **Logic:**
+
 1. Fetch AdminConfig from database
 2. Map biome to base price (plains, forest, beach, etc.)
 3. Clamp elevation to [0, 1] range
@@ -62,6 +66,7 @@ async def _calculate_current_land_price(
 #### Updated Function: `_serialize_land()`
 
 Added price recalculation:
+
 ```python
 # Recalculate price based on current admin config
 try:
@@ -73,6 +78,7 @@ except Exception as e:
 ```
 
 **Fallback Logic:**
+
 - If calculation fails, keeps the stored `price_base_bdt` from database
 - Logs warning for monitoring
 
@@ -93,6 +99,7 @@ async def _calculate_unclaimed_land_price(
 ```
 
 **Key Differences:**
+
 - Works with `Dict` instead of `Land` ORM object
 - Converts biome string to enum: `biome = Biome(biome_str)`
 - Handles missing values with defaults
@@ -100,6 +107,7 @@ async def _calculate_unclaimed_land_price(
 #### Updated Function: `enrich_chunk_with_ownership()`
 
 Added price recalculation in the loop:
+
 ```python
 # Recalculate price based on current admin config for both owned and unowned lands
 try:
@@ -114,33 +122,35 @@ except Exception as e:
 
 ### Lands Endpoints (now return current prices)
 
-| Endpoint | Method | Affected |
-|----------|--------|----------|
-| `/lands/{land_id}` | GET | ✅ Yes |
-| `/lands/coordinates/{x}/{y}` | GET | ✅ Yes |
-| `/lands/owner/{owner_id}/coordinates` | GET | ✅ Yes |
-| `/lands/` | GET | ✅ Yes (search) |
-| `/lands/{land_id}` | PUT | ✅ Yes (response) |
-| `/lands/{land_id}/fence` | POST | ✅ Yes (response) |
-| `/lands/{land_id}/transfer` | POST | ✅ Yes (response) |
-| `/lands/claim` | POST | ✅ Yes (response) |
+| Endpoint                              | Method | Affected          |
+| ------------------------------------- | ------ | ----------------- |
+| `/lands/{land_id}`                    | GET    | ✅ Yes            |
+| `/lands/coordinates/{x}/{y}`          | GET    | ✅ Yes            |
+| `/lands/owner/{owner_id}/coordinates` | GET    | ✅ Yes            |
+| `/lands/`                             | GET    | ✅ Yes (search)   |
+| `/lands/{land_id}`                    | PUT    | ✅ Yes (response) |
+| `/lands/{land_id}/fence`              | POST   | ✅ Yes (response) |
+| `/lands/{land_id}/transfer`           | POST   | ✅ Yes (response) |
+| `/lands/claim`                        | POST   | ✅ Yes (response) |
 
 ### Chunk Endpoints (now return current prices)
 
-| Endpoint | Method | Affected |
-|----------|--------|----------|
-| `/chunks/{chunk_x}/{chunk_y}` | GET | ✅ Yes |
-| `/chunks/batch` | POST | ✅ Yes |
+| Endpoint                      | Method | Affected |
+| ----------------------------- | ------ | -------- |
+| `/chunks/{chunk_x}/{chunk_y}` | GET    | ✅ Yes   |
+| `/chunks/batch`               | POST   | ✅ Yes   |
 
 ## Price Calculation Details
 
 ### Formula
+
 ```
 elevation_factor = min_factor + (elevation * (max_factor - min_factor))
 price = base_price * elevation_factor
 ```
 
 ### Example Calculation
+
 ```
 Given:
 - Plains base price: 125 BDT
@@ -157,14 +167,16 @@ price = 125 * 1.0 = 125 BDT
 
 1. **Missing AdminConfig**
    - Falls back to stored price
-   
 2. **Invalid biome**
+
    - Defaults to PLAINS price
 
 3. **Elevation out of range**
+
    - Clamped to [0, 1]
 
 4. **Min factor > Max factor**
+
    - Swapped to ensure correct order
 
 5. **Database error**
@@ -173,11 +185,13 @@ price = 125 * 1.0 = 125 BDT
 ## Performance Considerations
 
 ### Database Queries
+
 - **Per land response**: 1 query to fetch AdminConfig
 - **Per chunk response**: 1 query to fetch AdminConfig (shared across all lands in chunk)
 - No N+1 problem since AdminConfig is single record
 
 ### Caching Opportunities
+
 If performance becomes an issue, could optimize with:
 
 ```python
@@ -195,6 +209,7 @@ if not config:
 ## Testing Strategy
 
 ### Unit Tests
+
 ```python
 # Test price calculation logic
 async def test_calculate_land_price_with_admin_config():
@@ -213,6 +228,7 @@ async def test_price_calculation_failure_fallback():
 ```
 
 ### Integration Tests
+
 ```python
 # Test via API endpoint
 async def test_get_land_returns_current_price():
@@ -230,6 +246,7 @@ async def test_chunk_prices_reflect_admin_config():
 ```
 
 ### Manual Testing
+
 1. Set known admin price
 2. Fetch land via API
 3. Verify price matches formula
@@ -239,10 +256,12 @@ async def test_chunk_prices_reflect_admin_config():
 ## Error Handling
 
 ### Logging
+
 - WARNING: "Failed to recalculate land price for {land_id}: {error}"
 - WARNING: "Failed to recalculate price for land at ({x}, {y}): {error}"
 
 ### Fallback Behavior
+
 - Always returns a price (either calculated or stored)
 - Never raises exception from price calculation
 - Logs issue for monitoring
@@ -250,6 +269,7 @@ async def test_chunk_prices_reflect_admin_config():
 ## Backwards Compatibility
 
 ✅ **Fully compatible:**
+
 - API contract unchanged
 - Response field names unchanged
 - Only value of `price_base_bdt` changes (to be current)
@@ -257,16 +277,20 @@ async def test_chunk_prices_reflect_admin_config():
 
 ## Future Enhancements
 
-1. **Add cache invalidation** 
+1. **Add cache invalidation**
+
    - When admin updates config, clear price cache
 
 2. **Add price history**
+
    - Track price changes over time for analytics
 
 3. **Add price prediction**
+
    - ML model to predict optimal prices
 
 4. **Batch price calculation**
+
    - Single DB query for multiple lands
 
 5. **Price range limits**
@@ -282,18 +306,21 @@ async def test_chunk_prices_reflect_admin_config():
 ## Debugging
 
 ### Check current admin config
+
 ```bash
 curl -H "Authorization: Bearer {token}" \
   http://localhost:8000/api/v1/admin/config/economy
 ```
 
 ### Check land price from API
+
 ```bash
 curl http://localhost:8000/api/v1/lands/{land_id}
 # Check: response.price_base_bdt should match formula
 ```
 
 ### Check calculation manually
+
 ```python
 # In Python REPL
 base = 125

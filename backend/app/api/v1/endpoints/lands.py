@@ -954,6 +954,13 @@ async def claim_land(
     if not config:
         raise HTTPException(status_code=500, detail="Admin config not found")
 
+    # Check if land trading is enabled
+    if not config.enable_land_trading:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Land trading is currently disabled by admin"
+        )
+
     # Calculate price based on admin config and land attributes
     # Dynamic pricing: base * biome_multiplier * elevation_factor
     base_price = config.base_land_price_bdt
