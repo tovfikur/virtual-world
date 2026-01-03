@@ -107,6 +107,16 @@ async def lifespan(app: FastAPI):
         logger.error(f"Biome market initialization failed: {e}")
         # Not raising - markets can be created on first request
 
+    # Initialize biome land economy markets
+    try:
+        from app.services.biome_land_economy_service import BiomeLandEconomyService
+        async with AsyncSessionLocal() as db:
+            await BiomeLandEconomyService.initialize_markets(db)
+        logger.info("Biome land economy markets initialized")
+    except Exception as e:
+        logger.error(f"Biome land economy market initialization failed: {e}")
+        # Not raising - markets can be created on first request
+
     # Start biome market worker
     try:
         biome_market_worker.start()

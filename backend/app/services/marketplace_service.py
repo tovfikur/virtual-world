@@ -294,11 +294,14 @@ class MarketplaceService:
         """
         Execute instant buy now purchase with dynamic pricing.
         Uses latest admin-configured or trading price for each land/biome at purchase time.
+        Applies global biome economy adjustments based on purchase amount.
         """
         from app.services.world_service import WorldService
         from app.services.biome_market_service import BiomeMarketService
+        from app.services.biome_land_economy_service import BiomeLandEconomyService
         world_service = WorldService()
         biome_market_service = BiomeMarketService()
+        economy_service = BiomeLandEconomyService()
 
         # Get listing
         result = await db.execute(
@@ -399,6 +402,20 @@ class MarketplaceService:
         await db.commit()
         await db.refresh(transaction)
 
+        # Apply global biome economy adjustments
+        # Distribute purchase amount across all biomes and increase land prices
+        primary_land = lands[0] if lands else None
+        if primary_land:
+            economy_result = await BiomeLandEconomyService.handle_land_purchase(
+                db=db,
+                land_id=str(primary_land.land_id),
+                amount_paid_bdt=total_price,
+                buyer_id=str(buyer_id),
+                seller_id=str(listing.seller_id)
+            )
+            if economy_result.get("success"):
+                logger.debug(f"Biome economy updated: {economy_result}")
+
         # Invalidate caches
         await cache_service.delete(f"listing:{listing_id}")
         for land in lands:
@@ -420,6 +437,7 @@ class MarketplaceService:
     ) -> Optional[Transaction]:
         """
         Finalize an ended auction.
+        Applies global biome economy adjustments when sale is completed.
 
         Args:
             db: Database session
@@ -431,6 +449,8 @@ class MarketplaceService:
         Raises:
             ValueError: If validation fails
         """
+        from app.services.biome_land_economy_service import BiomeLandEconomyService
+        economy_service = BiomeLandEconomyService()
         # Get listing
         result = await db.execute(
             select(Listing).where(Listing.listing_id == listing_id)
@@ -564,6 +584,20 @@ class MarketplaceService:
 
         await db.commit()
         await db.refresh(transaction)
+
+        # Apply global biome economy adjustments
+        # Distribute auction amount across all biomes and increase land prices
+        primary_land = lands[0] if lands else None
+        if primary_land:
+            economy_result = await BiomeLandEconomyService.handle_land_purchase(
+                db=db,
+                land_id=str(primary_land.land_id),
+                amount_paid_bdt=final_price,
+                buyer_id=str(buyer.user_id),
+                seller_id=str(seller.user_id)
+            )
+            if economy_result.get("success"):
+                logger.debug(f"Biome economy updated: {economy_result}")
 
         # Invalidate caches
         await cache_service.delete(f"listing:{listing_id}")
