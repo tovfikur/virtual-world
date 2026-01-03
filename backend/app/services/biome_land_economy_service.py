@@ -109,15 +109,7 @@ class BiomeLandEconomyService:
 
             # For each biome, distribute its share
             for market in biome_markets:
-                if market.sold_lands_count == 0:
-                    # Skip biomes with no sold lands (avoid division by zero)
-                    logger.debug(f"Biome {market.biome.value} has no sold lands, skipping price update")
-                    continue
-
-                # Calculate price increase for each land in this biome
-                price_increase = per_biome_share / market.sold_lands_count
-
-                # Update all lands in this biome with new price
+                # Count actual owned lands in this biome from Land table
                 lands_in_biome = await db.execute(
                     select(Land).where(
                         Land.biome == market.biome,
@@ -125,6 +117,15 @@ class BiomeLandEconomyService:
                     )
                 )
                 biome_lands = lands_in_biome.scalars().all()
+                owned_lands_count = len(biome_lands)
+
+                if owned_lands_count == 0:
+                    # Skip biomes with no sold lands (avoid division by zero)
+                    logger.debug(f"Biome {market.biome.value} has no owned lands, skipping price update")
+                    continue
+
+                # Calculate price increase for each land in this biome
+                price_increase = per_biome_share / owned_lands_count
 
                 if biome_lands:
                     for land_record in biome_lands:
@@ -217,14 +218,7 @@ class BiomeLandEconomyService:
 
             # For each biome, distribute its share (reverse: decrease prices)
             for market in biome_markets:
-                if market.sold_lands_count == 0:
-                    logger.debug(f"Biome {market.biome.value} has no sold lands, skipping price update")
-                    continue
-
-                # Calculate price decrease for each land in this biome
-                price_decrease = per_biome_share / market.sold_lands_count
-
-                # Update all lands in this biome with new price
+                # Count actual owned lands in this biome from Land table
                 lands_in_biome = await db.execute(
                     select(Land).where(
                         Land.biome == market.biome,
@@ -232,6 +226,14 @@ class BiomeLandEconomyService:
                     )
                 )
                 biome_lands = lands_in_biome.scalars().all()
+                owned_lands_count = len(biome_lands)
+
+                if owned_lands_count == 0:
+                    logger.debug(f"Biome {market.biome.value} has no owned lands, skipping price update")
+                    continue
+
+                # Calculate price decrease for each land in this biome
+                price_decrease = per_biome_share / owned_lands_count
 
                 if biome_lands:
                     for land_record in biome_lands:
