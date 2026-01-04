@@ -16,6 +16,7 @@ from app.models.bid import Bid, BidStatus
 from app.models.land import Land
 from app.models.user import User
 from app.models.transaction import Transaction, TransactionType, TransactionStatus
+from app.models.land_price_history import LandPriceHistory
 from app.models.admin_config import AdminConfig
 from app.services.cache_service import cache_service
 from app.services.parcel_service import parcel_service
@@ -115,7 +116,7 @@ class MarketplaceService:
                     raise ValueError(f"Please wait {remaining} seconds before creating another listing")
 
         # Validate auction duration against admin-configured limits
-        if listing_type in [ListingType.AUCTION, ListingType.AUCTION_WITH_BUYNOW]:
+        if listing_type == ListingType.AUCTION:
             min_hours = int(config.auction_min_duration_hours) if config else 1
             max_hours = int(config.auction_max_duration_hours) if config else 168
             if max_listing_duration_days:
@@ -130,7 +131,7 @@ class MarketplaceService:
 
         # Calculate end time for auctions
         ends_at = None
-        if listing_type in [ListingType.AUCTION, ListingType.AUCTION_WITH_BUYNOW]:
+        if listing_type == ListingType.AUCTION:
             ends_at = datetime.now(timezone.utc) + timedelta(hours=duration_hours)
 
             # Reserve price enforcement relative to starting price
@@ -142,14 +143,25 @@ class MarketplaceService:
                     )
 
         # Create listing
+        # For fixed price listings, price_bdt can be auto-calculated from current land prices if not provided
+        if listing_type == ListingType.AUCTION:
+            price_value = starting_price_bdt
+        else:
+            # Fixed price listing
+            if buy_now_price_bdt is not None:
+                price_value = buy_now_price_bdt
+            else:
+                # Auto-calculate using current land price_base_bdt values (already economy-adjusted)
+                price_value = sum(land.price_base_bdt or 0 for land in lands)
+                logger.info(f"Auto-calculated market price for {len(lands)} lands from base prices: {price_value} BDT")
+        
         listing = Listing(
             seller_id=seller_id,
             type=listing_type,
-            price_bdt=starting_price_bdt or buy_now_price_bdt,
+            price_bdt=price_value,
             reserve_price_bdt=reserve_price_bdt,
-            buy_now_price_bdt=buy_now_price_bdt,
             auction_end_time=ends_at,
-            auto_extend=(listing_type in [ListingType.AUCTION, ListingType.AUCTION_WITH_BUYNOW]),
+            auto_extend=(listing_type == ListingType.AUCTION),
             auto_extend_minutes=auto_extend_minutes
         )
 
@@ -292,15 +304,10 @@ class MarketplaceService:
         buyer_id: uuid.UUID
     ) -> Transaction:
         """
-        Execute instant buy now purchase with dynamic pricing.
-        Uses latest admin-configured or trading price for each land/biome at purchase time.
+        Execute fixed-price/open-sale purchase at the listing price.
         Applies global biome economy adjustments based on purchase amount.
         """
-        from app.services.world_service import WorldGenerationService
-        from app.services.biome_market_service import BiomeMarketService
         from app.services.biome_land_economy_service import BiomeLandEconomyService
-        world_service = WorldGenerationService()
-        biome_market_service = BiomeMarketService()
         economy_service = BiomeLandEconomyService()
 
         # Get listing
@@ -312,6 +319,8 @@ class MarketplaceService:
             raise ValueError("Listing not found")
         if listing.status != ListingStatus.ACTIVE:
             raise ValueError("Listing is not active")
+        if listing.type != ListingType.FIXED_PRICE:
+            raise ValueError("Buy now is only available for fixed price listings")
         # Cannot buy own listing
         if listing.seller_id == buyer_id:
             raise ValueError("Cannot buy your own listing")
@@ -338,19 +347,9 @@ class MarketplaceService:
         if not lands:
             raise ValueError("No lands found in listing")
 
-        # Calculate dynamic price for each land
-        total_price = 0
-        land_prices = []
-        for land in lands:
-            # Use trading price if available, else admin-configured base price
-            try:
-                market = await biome_market_service.get_market(db, land.biome)
-                price = int(market.share_price_bdt)
-            except Exception:
-                # Fallback to admin-configured base price
-                price = await world_service.calculate_base_price(land.biome, land.elevation, db)
-            land_prices.append((land, price))
-            total_price += price
+        total_price = listing.price_bdt
+        if total_price is None:
+            raise ValueError("Listing price is not set")
 
         # Fetch admin config for fee tiers
         cfg_res = await db.execute(select(AdminConfig).limit(1))
@@ -377,7 +376,7 @@ class MarketplaceService:
         seller.balance_bdt += (total_price - platform_fee)
 
         # Transfer all lands in parcel to buyer
-        for land, _ in land_prices:
+        for land in lands:
             land.owner_id = buyer_id
             land.for_sale = False
             land.fenced = False
@@ -416,7 +415,20 @@ class MarketplaceService:
             else:
                 logger.warning(f"⚠️ Biome economy update failed: {economy_result}")
 
-        # Commit all changes including economy adjustments
+        # Record per-land history (spread parcel price equally)
+        per_land_price = int(total_price / len(lands)) if lands else total_price
+        for land in lands:
+            history = LandPriceHistory(
+                land_id=land.land_id,
+                listing_id=listing_id,
+                transaction_id=transaction.transaction_id,
+                previous_owner_id=seller.user_id,
+                new_owner_id=buyer_id,
+                price_bdt=per_land_price
+            )
+            db.add(history)
+
+        # Commit all changes including economy adjustments and history
         await db.commit()
         await db.refresh(transaction)
 
@@ -582,6 +594,19 @@ class MarketplaceService:
         transaction.platform_fee_bdt = platform_fee
 
         db.add(transaction)
+
+        # Record per-land history (spread parcel price equally)
+        per_land_price = int(final_price / len(lands)) if lands else final_price
+        for land in lands:
+            history = LandPriceHistory(
+                land_id=land.land_id,
+                listing_id=listing_id,
+                transaction_id=transaction.transaction_id,
+                previous_owner_id=seller.user_id,
+                new_owner_id=buyer.user_id,
+                price_bdt=per_land_price
+            )
+            db.add(history)
 
         # Mark listing as sold
         listing.status = ListingStatus.SOLD

@@ -176,6 +176,11 @@ class Land(BaseModel):
         back_populates="land",
         cascade="all, delete-orphan"
     )
+    price_history = relationship(
+        "LandPriceHistory",
+        back_populates="land",
+        cascade="all, delete-orphan"
+    )
 
     @validates("x", "y")
     def validate_coordinates(self, key: str, value: int) -> int:

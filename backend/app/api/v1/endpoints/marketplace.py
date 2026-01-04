@@ -91,8 +91,7 @@ async def create_listing(
 
     **Listing Types:**
     - **auction**: Auction with starting price and duration
-    - **fixed_price**: Fixed price with buy now only
-    - **auction_with_buynow**: Auction with optional instant buy now
+    - **fixed_price**: Open sale / marketplace fixed price
 
     Returns created listing with parcel details.
     """
@@ -121,17 +120,22 @@ async def create_listing(
 
         await _enforce_marketplace_rate_limit(db, request, current_user)
 
-        listing = await marketplace_service.create_listing(
-            db=db,
-            land_ids=land_uuids,
-            seller_id=seller_uuid,
-            listing_type=ListingType(listing_data.listing_type),
-            starting_price_bdt=listing_data.starting_price_bdt,
-            reserve_price_bdt=listing_data.reserve_price_bdt,
-            buy_now_price_bdt=listing_data.buy_now_price_bdt,
-            duration_hours=listing_data.duration_hours,
-            auto_extend_minutes=listing_data.auto_extend_minutes
-        )
+        try:
+            listing = await marketplace_service.create_listing(
+                db=db,
+                land_ids=land_uuids,
+                seller_id=seller_uuid,
+                listing_type=ListingType(listing_data.listing_type),
+                starting_price_bdt=listing_data.starting_price_bdt,
+                reserve_price_bdt=listing_data.reserve_price_bdt,
+                buy_now_price_bdt=listing_data.buy_now_price_bdt,
+                duration_hours=listing_data.duration_hours,
+                auto_extend_minutes=listing_data.auto_extend_minutes
+            )
+        except ValueError as ve:
+            # Surface validation errors as 400 instead of 500
+            await db.rollback()
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(ve))
 
         # Get lands in parcel for response
         result = await db.execute(
@@ -162,12 +166,14 @@ async def create_listing(
         return ListingResponse(**listing_dict)
 
     except ValueError as e:
+        await db.rollback()
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=str(e)
         )
     except Exception as e:
-        logger.error(f"Failed to create parcel listing: {e}")
+        await db.rollback()
+        logger.exception("Failed to create parcel listing")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to create listing"

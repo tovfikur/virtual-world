@@ -10,6 +10,7 @@ from app.models.listing import Listing, ListingType, ListingStatus
 from app.models.listing_land import ListingLand
 from app.models.bid import Bid, BidStatus
 from app.models.transaction import Transaction, TransactionStatus
+from app.models.land_price_history import LandPriceHistory
 from app.models.chat import ChatSession, Message
 from app.models.land_chat_access import LandChatAccess
 from app.models.audit_log import AuditLog, AuditEventCategory
@@ -39,6 +40,7 @@ __all__ = [
     # Transaction
     "Transaction",
     "TransactionStatus",
+    "LandPriceHistory",
     # Chat
     "ChatSession",
     "Message",

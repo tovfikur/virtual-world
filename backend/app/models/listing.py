@@ -14,10 +14,9 @@ from app.db.base import BaseModel
 
 
 class ListingType(str, PyEnum):
-    """Listing type enumeration."""
+    """Listing type enumeration (restricted to two modes)."""
     AUCTION = "auction"
-    FIXED_PRICE = "fixed_price"
-    AUCTION_WITH_BUYNOW = "auction_with_buynow"
+    FIXED_PRICE = "fixed_price"  # Open sale/marketplace
 
 
 class ListingStatus(str, PyEnum):
@@ -34,8 +33,7 @@ class Listing(BaseModel):
 
     Supports multiple listing types:
     - Auction: Time-limited bidding with highest bidder winning
-    - Fixed Price: Set price with immediate purchase option
-    - Buy Now: Instant purchase at fixed price
+    - Fixed Price: Open sale with immediate purchase at set price
 
     A listing can contain multiple connected lands (parcel).
 
@@ -43,7 +41,7 @@ class Listing(BaseModel):
         listing_id: Unique UUID identifier
         seller_id: Reference to user selling the parcel
         listing_lands: List of lands in this parcel (via junction table)
-        type: Listing type (auction/fixed_price/buy_now)
+        type: Listing type (auction/fixed_price)
         description: Seller's description of the parcel
         images: Array of image URLs
         price_bdt: Starting/fixed price in BDT (for entire parcel)
@@ -52,8 +50,6 @@ class Listing(BaseModel):
         auction_end_time: When auction ends
         auto_extend: Whether to extend auction if bids near end
         auto_extend_minutes: Minutes to extend by
-        buy_now_enabled: Whether instant purchase is available
-        buy_now_price_bdt: Fixed price for instant purchase (for entire parcel)
         status: Current listing status
         sold_at: When listing was sold
     """
@@ -96,11 +92,11 @@ class Listing(BaseModel):
     # Auction Fields
     auction_start_time = Column(DateTime(timezone=True), nullable=True)
     auction_end_time = Column(DateTime(timezone=True), nullable=True)
-    auto_extend = Column(Boolean, default=False, nullable=False)
+    auto_extend = Column(Boolean, default=True, nullable=False)
     auto_extend_minutes = Column(Integer, default=5, nullable=False)
 
-    # Buy Now Option
-    buy_now_enabled = Column(Boolean, default=False, nullable=False)
+    # Legacy buy-now fields (kept for schema compatibility; defaulted off)
+    buy_now_enabled = Column(Boolean, default=False, server_default="false", nullable=False)
     buy_now_price_bdt = Column(Integer, nullable=True)
 
     # Status
@@ -196,14 +192,20 @@ class Listing(BaseModel):
             "listing_id": str(self.listing_id),
             "seller_id": str(self.seller_id),
             "listing_type": self.type.value,
+            "description": self.description,
+            "images": self.images,
             "status": self.status.value,
-            "starting_price_bdt": self.price_bdt if self.type in [ListingType.AUCTION, ListingType.AUCTION_WITH_BUYNOW] else None,
+            "starting_price_bdt": self.price_bdt if self.type == ListingType.AUCTION else None,
+            "fixed_price_bdt": self.price_bdt if self.type == ListingType.FIXED_PRICE else None,
             "current_price_bdt": self.price_bdt,
             "reserve_price_bdt": self.reserve_price_bdt,
-            "buy_now_price_bdt": self.buy_now_price_bdt,
-            "bid_count": 0,  # TODO: Calculate from bids relationship
-            "highest_bidder_id": None,  # TODO: Get from bids
+            "buy_now_price_bdt": self.price_bdt if self.type == ListingType.FIXED_PRICE else None,
+            # Avoid lazy-loading bids in async context; endpoint should inject counts if needed
+            "bid_count": 0,
+            "highest_bidder_id": None,
             "ends_at": self.auction_end_time.isoformat() if self.auction_end_time else None,
+            "auto_extend": self.auto_extend,
+            "auto_extend_minutes": self.auto_extend_minutes,
             "created_at": self.created_at.isoformat() if self.created_at else None,
             "updated_at": self.updated_at.isoformat() if self.updated_at else None,
         }

@@ -178,6 +178,9 @@ async def create_default_admin():
                 starter_land_buffer_units=1,
                 starter_shape_variation_enabled=True,
 
+                # Marketplace settings
+                listing_cooldown_minutes=0,  # No cooldown for better UX
+
                 # Meta
                 updated_by_id=admin_user.user_id
             )

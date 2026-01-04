@@ -406,6 +406,7 @@ function WorldRenderer() {
   const landLookupRef = useRef(new Map());
   const badgeGraphicsRef = useRef(new Map()); // land_id -> badge graphics
   const ownershipBordersRef = useRef(new Map()); // owner_id -> border graphics
+  const listingBordersRef = useRef(new Map()); // chunk_id -> listing border graphics
   const ownershipCacheRef = useRef(new Map()); // key -> { owner_id, owner_username }
   const ownershipRequestsRef = useRef(new Map()); // key -> active promise
   const ownerLandCacheRef = useRef(new Map()); // owner_id -> { lands, owner_username, fetchedAt }
@@ -2460,6 +2461,64 @@ function WorldRenderer() {
           }
         }
       });
+
+      // Draw yellow borders for marketplace listings in this chunk
+      const listingBorder = new PIXI.Graphics();
+
+      // Set line style EXACTLY like ownership borders
+      if (typeof listingBorder.lineStyle === "function") {
+        try {
+          listingBorder.lineStyle({
+            width: 3,
+            color: 0xffd700, // Bright yellow/gold
+            alpha: 1,
+            join: "miter",
+            cap: "square",
+            alignment: 0.5,
+            miterLimit: 2,
+          });
+        } catch (_) {
+          listingBorder.lineStyle(3, 0xffd700, 1);
+        }
+      }
+
+      const offset = 0.5; // subpixel offset for crisp lines
+      let listedLandsCount = 0;
+
+      chunkData.lands.forEach((land) => {
+        if (land.for_sale) {
+          listedLandsCount++;
+          const baseX = land.x * LAND_SIZE + offset;
+          const baseY = land.y * LAND_SIZE + offset;
+
+          // Draw border lines for all 4 edges (exactly like ownership borders)
+          // Top edge
+          listingBorder.moveTo(baseX, baseY);
+          listingBorder.lineTo(baseX + LAND_SIZE, baseY);
+          // Bottom edge
+          listingBorder.moveTo(baseX, baseY + LAND_SIZE);
+          listingBorder.lineTo(baseX + LAND_SIZE, baseY + LAND_SIZE);
+          // Left edge
+          listingBorder.moveTo(baseX, baseY);
+          listingBorder.lineTo(baseX, baseY + LAND_SIZE);
+          // Right edge
+          listingBorder.moveTo(baseX + LAND_SIZE, baseY);
+          listingBorder.lineTo(baseX + LAND_SIZE, baseY + LAND_SIZE);
+        }
+      });
+
+      if (listedLandsCount > 0) {
+        console.log(
+          `[YELLOW BORDER] Drawing borders for ${listedLandsCount} listed lands in chunk ${chunkId}`
+        );
+      }
+
+      // Add listing border to world container (same as ownership borders)
+      if (worldContainerRef.current) {
+        worldContainerRef.current.addChild(listingBorder);
+        listingBorder.zIndex = 1000; // Ensure it's on top
+      }
+      listingBordersRef.current.set(chunkId, listingBorder);
 
       container.addChild(chunkContainer);
       landGraphicsRef.current.set(chunkId, chunkContainer);

@@ -51,7 +51,8 @@ function MultiLandActionsPanel() {
   } = useWorldStore();
   const [showListingForm, setShowListingForm] = useState(false);
   const [showPaymentModal, setShowPaymentModal] = useState(false);
-  const [listingType, setListingType] = useState("fixed_price");
+  // Default to market price (auto-use economy price)
+  const [listingType, setListingType] = useState("market_price");
   const [price, setPrice] = useState("");
   const [buyNowPrice, setBuyNowPrice] = useState("");
   const [duration, setDuration] = useState("24");
@@ -303,19 +304,20 @@ function MultiLandActionsPanel() {
       // Step 2: Create single parcel listing with all lands
       const listingData = {
         land_ids: landIds,
-        listing_type: listingType,
       };
 
       // Set appropriate price fields based on listing type
-      if (listingType === "fixed_price") {
-        listingData.buy_now_price_bdt = parseInt(price);
+      if (listingType === "market_price" || listingType === "fixed_price") {
+        // Use fixed_price type with current economy price (backend will calculate if price not provided)
+        listingData.listing_type = "fixed_price";
+        // Do not send price for market price; backend sums price_base_bdt
       } else if (listingType === "auction") {
+        listingData.listing_type = "auction";
         listingData.starting_price_bdt = parseInt(price);
         listingData.duration_hours = parseInt(duration);
-      } else if (listingType === "auction_with_buynow") {
-        listingData.starting_price_bdt = parseInt(price);
-        listingData.buy_now_price_bdt = parseInt(buyNowPrice);
-        listingData.duration_hours = parseInt(duration);
+      } else {
+        // Fallback for any legacy values: send through as-is
+        listingData.listing_type = listingType;
       }
 
       await marketplaceAPI.createListing(listingData);
@@ -509,23 +511,26 @@ function MultiLandActionsPanel() {
               onChange={(e) => setListingType(e.target.value)}
               className="w-full px-3 py-2 bg-gray-600 text-white rounded border border-gray-500 focus:border-blue-500 focus:outline-none text-sm"
             >
-              <option value="fixed_price">Fixed Price</option>
+              <option value="market_price">Sale at Current Market Price</option>
               <option value="auction">Auction</option>
-              <option value="auction_with_buynow">Auction + Buy Now</option>
             </select>
 
-            <input
-              type="number"
-              value={price}
-              onChange={(e) => setPrice(e.target.value)}
-              placeholder={
-                listingType === "fixed_price"
-                  ? "Price (BDT)"
-                  : "Starting Price (BDT)"
-              }
-              required
-              className="w-full px-3 py-2 bg-gray-600 text-white rounded border border-gray-500 focus:border-blue-500 focus:outline-none text-sm"
-            />
+            {listingType === "auction" && (
+              <input
+                type="number"
+                value={price}
+                onChange={(e) => setPrice(e.target.value)}
+                placeholder="Starting Price (BDT)"
+                required
+                className="w-full px-3 py-2 bg-gray-600 text-white rounded border border-gray-500 focus:border-blue-500 focus:outline-none text-sm"
+              />
+            )}
+
+            {listingType === "market_price" && (
+              <div className="text-sm text-gray-300 bg-gray-700 px-3 py-2 rounded border border-gray-600">
+                ℹ️ Will use current economy market price at listing time
+              </div>
+            )}
 
             {listingType === "auction_with_buynow" && (
               <input
@@ -538,7 +543,7 @@ function MultiLandActionsPanel() {
               />
             )}
 
-            {listingType !== "fixed_price" && (
+            {listingType === "auction" && (
               <select
                 value={duration}
                 onChange={(e) => setDuration(e.target.value)}

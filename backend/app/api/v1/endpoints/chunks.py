@@ -14,6 +14,8 @@ from app.services.world_service import world_service
 from app.db.session import get_db
 from app.models.land import Land, Biome
 from app.models.land_chat_access import LandChatAccess
+from app.models.listing_land import ListingLand
+from app.models.listing import Listing, ListingStatus
 from app.models.admin_config import AdminConfig
 from app.dependencies import get_optional_user
 
@@ -152,6 +154,21 @@ async def enrich_chunk_with_ownership(
         )
         guest_access_ids = {str(land_id) for land_id in access_result.scalars().all()}
 
+    # Query for lands with active marketplace listings
+    listed_land_ids: Set[str] = set()
+    if owned_land_ids:
+        listing_result = await db.execute(
+            select(ListingLand.land_id)
+            .join(Listing)
+            .where(
+                and_(
+                    ListingLand.land_id.in_(owned_land_ids),
+                    Listing.status == ListingStatus.ACTIVE
+                )
+            )
+        )
+        listed_land_ids = {str(land_id) for land_id in listing_result.scalars().all()}
+
     user_id_str = str(user_uuid) if user_uuid else None
 
     # Enrich land data with ownership, fencing, and recalculated pricing
@@ -173,10 +190,14 @@ async def enrich_chunk_with_ownership(
                 land["guest_access"] = has_guest_access or is_owner
             else:
                 land["guest_access"] = False
+            
+            # Check if land is listed for sale
+            land["for_sale"] = ownership_entry["land_id"] in listed_land_ids
         else:
             # Land is not owned
             land["fenced"] = False
             land["guest_access"] = False
+            land["for_sale"] = False
         
         # Recalculate price based on current admin config for both owned and unowned lands
         try:

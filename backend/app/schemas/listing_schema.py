@@ -13,7 +13,6 @@ class ListingType(str, Enum):
     """Listing type enum."""
     AUCTION = "auction"
     FIXED_PRICE = "fixed_price"
-    AUCTION_WITH_BUYNOW = "auction_with_buynow"
 
 
 class ListingStatus(str, Enum):
@@ -27,7 +26,7 @@ class ListingStatus(str, Enum):
 class ListingCreate(BaseModel):
     """Schema for creating a new parcel listing."""
     land_ids: List[str] = Field(..., description="List of land UUIDs in parcel (must be connected)")
-    listing_type: ListingType = Field(..., description="Type of listing")
+    listing_type: ListingType = Field(..., description="Type of listing (auction or fixed_price)")
     starting_price_bdt: Optional[int] = Field(
         None,
         ge=1,
@@ -41,7 +40,7 @@ class ListingCreate(BaseModel):
     buy_now_price_bdt: Optional[int] = Field(
         None,
         ge=1,
-        description="Buy now price (required for fixed_price and auction_with_buynow, for entire parcel)"
+        description="Fixed price for open sale listings (required for fixed_price)"
     )
     duration_hours: Optional[int] = Field(
         None,
@@ -69,25 +68,23 @@ class ListingCreate(BaseModel):
     def validate_starting_price(cls, v, values):
         """Validate starting price for auctions."""
         listing_type = values.get("listing_type")
-        if listing_type in [ListingType.AUCTION, ListingType.AUCTION_WITH_BUYNOW]:
-            if v is None:
-                raise ValueError("starting_price_bdt required for auctions")
+        if listing_type == ListingType.AUCTION and v is None:
+            raise ValueError("starting_price_bdt required for auctions")
         return v
 
     @validator("buy_now_price_bdt")
     def validate_buy_now_price(cls, v, values):
-        """Validate buy now price."""
+        """Validate fixed price."""
         listing_type = values.get("listing_type")
-        if listing_type in [ListingType.FIXED_PRICE, ListingType.AUCTION_WITH_BUYNOW]:
-            if v is None:
-                raise ValueError("buy_now_price_bdt required for this listing type")
+        if listing_type == ListingType.FIXED_PRICE and v is None:
+            raise ValueError("buy_now_price_bdt required for fixed_price listings")
         return v
 
     @validator("duration_hours")
     def validate_duration(cls, v, values):
         """Validate duration for auctions."""
         listing_type = values.get("listing_type")
-        if listing_type in [ListingType.AUCTION, ListingType.AUCTION_WITH_BUYNOW]:
+        if listing_type == ListingType.AUCTION:
             if v is None:
                 raise ValueError("duration_hours required for auctions")
         return v

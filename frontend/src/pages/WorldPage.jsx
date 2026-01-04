@@ -140,7 +140,7 @@ function WorldPage() {
   return (
     <div
       className="fixed inset-0 w-full h-full overflow-hidden bg-gray-900"
-      style={{ minHeight: "100vh", minHeight: "100dvh" }}
+      style={{ minHeight: "100dvh" }}
     >
       {/* PixiJS World Renderer */}
       <WorldRenderer />
