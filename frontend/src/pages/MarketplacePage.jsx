@@ -7,9 +7,11 @@ import { useState, useEffect } from "react";
 import { marketplaceAPI } from "../services/api";
 import toast from "react-hot-toast";
 import useAuthStore from "../stores/authStore";
+import useWorldStore from "../stores/worldStore";
 
 function MarketplacePage() {
   const { user } = useAuthStore();
+  const { refreshChunksForLands } = useWorldStore();
   const [listings, setListings] = useState([]);
   const [loading, setLoading] = useState(true);
   const [filters, setFilters] = useState({
@@ -43,8 +45,16 @@ function MarketplacePage() {
 
   const handleBuyNow = async (listingId) => {
     try {
-      await marketplaceAPI.buyNow(listingId, "balance");
+      const response = await marketplaceAPI.buyNow(listingId, "balance");
       toast.success("Purchase successful!");
+      
+      // Refresh chunks for the purchased lands (from response)
+      const purchasedLands = response.data?.lands || [];
+      if (purchasedLands.length > 0) {
+        console.log(`[MARKETPLACE BUY] Refreshing chunks for ${purchasedLands.length} purchased lands`);
+        await refreshChunksForLands(purchasedLands);
+      }
+      
       loadListings();
     } catch (error) {
       toast.error(error.response?.data?.detail || "Purchase failed");

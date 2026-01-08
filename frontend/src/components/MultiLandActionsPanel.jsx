@@ -46,6 +46,7 @@ function MultiLandActionsPanel() {
     selectedLands,
     clearSelectedLands,
     updateLandProperty,
+    refreshChunksForLands,
     isMultiPanelExpanded,
     setMultiPanelExpanded,
   } = useWorldStore();
@@ -144,6 +145,11 @@ function MultiLandActionsPanel() {
 
     setProcessing(false);
     setProgress({ current: 0, total: 0 });
+
+    // Refresh chunks to update borders
+    if (successCount > 0) {
+      await refreshChunksForLands(unownedLands);
+    }
 
     if (successCount > 0) {
       toast.success(`Successfully purchased ${successCount} land(s)!`);
@@ -324,6 +330,9 @@ function MultiLandActionsPanel() {
 
       setProcessing(false);
       setProgress({ current: 0, total: 0 });
+
+      // Refresh chunks to update listing borders
+      await refreshChunksForLands(selectedLands);
 
       toast.success(
         `✅ Parcel listing created with ${landIds.length} land${

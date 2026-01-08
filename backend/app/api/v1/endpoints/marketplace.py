@@ -30,6 +30,7 @@ from app.services.marketplace_service import marketplace_service
 from app.services.parcel_service import parcel_service
 from app.services.cache_service import cache_service
 from app.services.rate_limit_service import rate_limit_service
+from app.services.websocket_service import connection_manager
 from app.config import CACHE_TTLS
 
 logger = logging.getLogger(__name__)
@@ -162,6 +163,18 @@ async def create_listing(
             [(land.x, land.y) for land in lands]
         )
         listing_dict["biomes"] = list(set(land.biome.value for land in lands))
+
+        # Broadcast listing created event to all connected users
+        lands_coords = [{"x": land.x, "y": land.y} for land in lands]
+        await connection_manager.broadcast_all({
+            "event": "listing_created",
+            "listing_id": str(listing.listing_id),
+            "seller_id": str(seller_uuid),
+            "lands": lands_coords,
+            "listing_type": listing.type.value,
+            "price_bdt": listing.price_bdt,
+            "timestamp": datetime.utcnow().isoformat()
+        })
 
         return ListingResponse(**listing_dict)
 
@@ -597,6 +610,24 @@ async def buy_now(
             buyer_id=buyer_uuid
         )
 
+        # Get land coordinates for frontend chunk refresh
+        lands_result = await db.execute(
+            select(Land).join(ListingLand).where(
+                ListingLand.listing_id == listing_uuid
+            )
+        )
+        purchased_lands = lands_result.scalars().all()
+        lands_coords = [{"x": land.x, "y": land.y} for land in purchased_lands]
+
+        # Broadcast listing sold event to all connected users
+        await connection_manager.broadcast_all({
+            "event": "listing_sold",
+            "listing_id": str(transaction.listing_id),
+            "buyer_id": str(buyer_uuid),
+            "lands": lands_coords,
+            "timestamp": datetime.utcnow().isoformat()
+        })
+
         return {
             "transaction_id": str(transaction.transaction_id),
             "listing_id": str(transaction.listing_id),
@@ -605,7 +636,8 @@ async def buy_now(
             "status": transaction.status.value,
             "payment_method": buy_request.payment_method,
             "completed_at": transaction.created_at.isoformat(),
-            "message": "Purchase successful! Land ownership transferred."
+            "message": "Purchase successful! Land ownership transferred.",
+            "lands": lands_coords
         }
 
     except ValueError as e:

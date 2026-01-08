@@ -420,6 +420,60 @@ const useWorldStore = create((set, get) => ({
     }
   },
 
+  // Refresh a specific chunk from the server (for ownership/listing changes)
+  refreshChunk: async (chunkX, chunkY) => {
+    const chunkId = `${chunkX}_${chunkY}`;
+    const { chunks } = get();
+
+    // Only refresh if chunk is already loaded
+    if (!chunks.has(chunkId)) {
+      return null;
+    }
+
+    try {
+      console.log(`[CHUNK REFRESH] Refreshing chunk ${chunkId}...`);
+      const response = await chunksAPI.getChunk(chunkX, chunkY, get().chunkSize);
+      const chunkData = response.data;
+
+      // Update chunk
+      set((state) => {
+        const newChunks = new Map(state.chunks);
+        newChunks.set(chunkId, chunkData);
+        return { chunks: newChunks };
+      });
+
+      console.log(`[CHUNK REFRESH] Chunk ${chunkId} refreshed successfully`);
+      return chunkData;
+    } catch (error) {
+      console.error(`Failed to refresh chunk ${chunkId}:`, error);
+      return null;
+    }
+  },
+
+  // Refresh chunks that contain specific lands (for ownership/listing changes)
+  refreshChunksForLands: async (lands) => {
+    const { chunkSize } = get();
+    const chunkIds = new Set();
+
+    // Find unique chunks that need refreshing
+    lands.forEach((land) => {
+      const chunkX = Math.floor(land.x / chunkSize);
+      const chunkY = Math.floor(land.y / chunkSize);
+      chunkIds.add(`${chunkX}_${chunkY}`);
+    });
+
+    console.log(`[CHUNK REFRESH] Refreshing ${chunkIds.size} chunks for ${lands.length} lands`);
+
+    // Refresh all affected chunks in parallel
+    const refreshPromises = Array.from(chunkIds).map((chunkId) => {
+      const [chunkX, chunkY] = chunkId.split('_').map(Number);
+      return get().refreshChunk(chunkX, chunkY);
+    });
+
+    await Promise.all(refreshPromises);
+    console.log(`[CHUNK REFRESH] Completed refreshing ${chunkIds.size} chunks`);
+  },
+
   // World info
   loadWorldInfo: async () => {
     try {

@@ -501,6 +501,7 @@ function WorldRenderer() {
     selectedLands,
     toggleLandSelection,
     unreadMessagesByLand,
+    refreshChunksForLands,
   } = useWorldStore();
 
   const getBiomeProfileForCoords = useCallback(
@@ -1632,6 +1633,73 @@ function WorldRenderer() {
     ownershipBordersRef.current.set(ownerId, borderGraphic);
   }, []);
 
+  const drawMarketplaceListingBorders = useCallback(() => {
+    if (!worldContainerRef.current) return;
+
+    // Remove all existing listing borders
+    listingBordersRef.current.forEach((borderGraphic) => {
+      if (worldContainerRef.current.children.includes(borderGraphic)) {
+        worldContainerRef.current.removeChild(borderGraphic);
+      }
+    });
+    listingBordersRef.current.clear();
+
+    // Create new border graphics for all listed lands across all chunks
+    const listingBorder = new PIXI.Graphics();
+    
+    // Set line style exactly like ownership borders
+    if (typeof listingBorder.lineStyle === "function") {
+      try {
+        listingBorder.lineStyle({
+          width: 3,
+          color: 0xFFD700, // Bright yellow/gold
+          alpha: 1,
+          join: "miter",
+          cap: "square",
+          alignment: 0.5,
+          miterLimit: 2,
+        });
+      } catch (_) {
+        listingBorder.lineStyle(3, 0xFFD700, 1);
+      }
+    }
+
+    const offset = 0.5; // subpixel offset for crisp lines
+    let listedLandsCount = 0;
+
+    // Draw borders for all listed lands in all loaded chunks
+    chunks.forEach((chunkData) => {
+      chunkData.lands.forEach((land) => {
+        if (land.for_sale) {
+          listedLandsCount++;
+          const baseX = land.x * LAND_SIZE + offset;
+          const baseY = land.y * LAND_SIZE + offset;
+          
+          // Draw border lines for all 4 edges (exactly like ownership borders)
+          // Top edge
+          listingBorder.moveTo(baseX, baseY);
+          listingBorder.lineTo(baseX + LAND_SIZE, baseY);
+          // Bottom edge
+          listingBorder.moveTo(baseX, baseY + LAND_SIZE);
+          listingBorder.lineTo(baseX + LAND_SIZE, baseY + LAND_SIZE);
+          // Left edge
+          listingBorder.moveTo(baseX, baseY);
+          listingBorder.lineTo(baseX, baseY + LAND_SIZE);
+          // Right edge
+          listingBorder.moveTo(baseX + LAND_SIZE, baseY);
+          listingBorder.lineTo(baseX + LAND_SIZE, baseY + LAND_SIZE);
+        }
+      });
+    });
+
+    if (listedLandsCount > 0) {
+      console.log(`[YELLOW BORDER] Drawing borders for ${listedLandsCount} listed lands`);
+      worldContainerRef.current.addChild(listingBorder);
+      listingBorder.zIndex = 1000; // Ensure it's on top
+      listingBordersRef.current.set('marketplace_listings', listingBorder);
+    }
+  }, [chunks]);
+
   const applyHighlightToGraphic = useCallback((key) => {
     // No longer change appearance - just track
     if (highlightedGraphicsRef.current.has(key)) {
@@ -1902,22 +1970,35 @@ function WorldRenderer() {
             }
           }
 
-          // Check if ownership changed (land got claimed)
+          // Check if ownership changed (any change: claim, buy, sell, release)
           const cachedOwner = ownershipCacheRef.current.get(key);
-          if (land.owner_id && land.owner_id !== cachedOwner?.owner_id) {
+          const oldOwnerId = cachedOwner?.owner_id ?? null;
+          const newOwnerId = land.owner_id ?? null;
+          
+          if (oldOwnerId !== newOwnerId) {
+            console.log(`[OWNERSHIP CHANGE] Land ${key}: ${oldOwnerId} -> ${newOwnerId}`);
+            
             // Update ownership cache
             ownershipCacheRef.current.set(key, {
-              owner_id: land.owner_id,
+              owner_id: newOwnerId,
               owner_username: land.owner_username || null,
             });
-            // Mark this owner for border redraw
-            ownersToRedraw.add(land.owner_id);
+            
+            // Mark old owner for border redraw (if any)
+            if (oldOwnerId) {
+              ownersToRedraw.add(oldOwnerId);
+            }
+            
+            // Mark new owner for border redraw (if any)
+            if (newOwnerId) {
+              ownersToRedraw.add(newOwnerId);
+            }
           }
         }
       });
     });
 
-    // Redraw borders for owners whose lands changed
+    // Redraw borders for all owners whose lands changed
     ownersToRedraw.forEach(async (ownerId) => {
       try {
         const response = await landsAPI.getOwnerCoordinates(ownerId, 20000);
@@ -1933,6 +2014,7 @@ function WorldRenderer() {
           fetchedAt: Date.now(),
         });
 
+        console.log(`[OWNERSHIP BORDER] Redrawing borders for owner ${ownerId} (${ownerLands.length} lands)`);
         drawOwnershipBorders(ownerId, ownerLands, user?.user_id);
       } catch (error) {
         console.error(`Failed to refresh ownership for ${ownerId}:`, error);
@@ -2462,64 +2544,6 @@ function WorldRenderer() {
         }
       });
 
-      // Draw yellow borders for marketplace listings in this chunk
-      const listingBorder = new PIXI.Graphics();
-
-      // Set line style EXACTLY like ownership borders
-      if (typeof listingBorder.lineStyle === "function") {
-        try {
-          listingBorder.lineStyle({
-            width: 3,
-            color: 0xffd700, // Bright yellow/gold
-            alpha: 1,
-            join: "miter",
-            cap: "square",
-            alignment: 0.5,
-            miterLimit: 2,
-          });
-        } catch (_) {
-          listingBorder.lineStyle(3, 0xffd700, 1);
-        }
-      }
-
-      const offset = 0.5; // subpixel offset for crisp lines
-      let listedLandsCount = 0;
-
-      chunkData.lands.forEach((land) => {
-        if (land.for_sale) {
-          listedLandsCount++;
-          const baseX = land.x * LAND_SIZE + offset;
-          const baseY = land.y * LAND_SIZE + offset;
-
-          // Draw border lines for all 4 edges (exactly like ownership borders)
-          // Top edge
-          listingBorder.moveTo(baseX, baseY);
-          listingBorder.lineTo(baseX + LAND_SIZE, baseY);
-          // Bottom edge
-          listingBorder.moveTo(baseX, baseY + LAND_SIZE);
-          listingBorder.lineTo(baseX + LAND_SIZE, baseY + LAND_SIZE);
-          // Left edge
-          listingBorder.moveTo(baseX, baseY);
-          listingBorder.lineTo(baseX, baseY + LAND_SIZE);
-          // Right edge
-          listingBorder.moveTo(baseX + LAND_SIZE, baseY);
-          listingBorder.lineTo(baseX + LAND_SIZE, baseY + LAND_SIZE);
-        }
-      });
-
-      if (listedLandsCount > 0) {
-        console.log(
-          `[YELLOW BORDER] Drawing borders for ${listedLandsCount} listed lands in chunk ${chunkId}`
-        );
-      }
-
-      // Add listing border to world container (same as ownership borders)
-      if (worldContainerRef.current) {
-        worldContainerRef.current.addChild(listingBorder);
-        listingBorder.zIndex = 1000; // Ensure it's on top
-      }
-      listingBordersRef.current.set(chunkId, listingBorder);
-
       container.addChild(chunkContainer);
       landGraphicsRef.current.set(chunkId, chunkContainer);
     });
@@ -2536,6 +2560,50 @@ function WorldRenderer() {
     user?.user_id,
     getLandTint,
   ]);
+
+  // Redraw marketplace listing borders when chunks change
+  useEffect(() => {
+    drawMarketplaceListingBorders();
+  }, [chunks, drawMarketplaceListingBorders]);
+
+  // Listen for marketplace events from other users (listing created/sold)
+  useEffect(() => {
+    const handleMarketplaceEvent = async (message) => {
+      const { event, lands } = message;
+      if (!lands || lands.length === 0) return;
+      
+      if (event === "listing_created") {
+        console.log(`[LISTING CREATED EVENT] Received notification for ${lands.length} lands, refreshing chunks...`);
+      } else if (event === "listing_sold") {
+        console.log(`[LISTING SOLD EVENT] Received notification for ${lands.length} lands, refreshing chunks...`);
+      } else {
+        return;
+      }
+      
+      // Refresh chunks for the affected lands
+      if (refreshChunksForLands) {
+        try {
+          await refreshChunksForLands(lands);
+          console.log(`[MARKETPLACE EVENT] Chunks refreshed successfully`);
+        } catch (error) {
+          console.error(`[MARKETPLACE EVENT] Failed to refresh chunks:`, error);
+        }
+      }
+    };
+
+    // Subscribe to both listing_created and listing_sold events
+    const unsubscribeCreated = wsService.on("listing_created", handleMarketplaceEvent);
+    const unsubscribeSold = wsService.on("listing_sold", handleMarketplaceEvent);
+    
+    return () => {
+      if (typeof unsubscribeCreated === "function") {
+        unsubscribeCreated();
+      }
+      if (typeof unsubscribeSold === "function") {
+        unsubscribeSold();
+      }
+    };
+  }, [refreshChunksForLands]);
 
   // Update message badges when unread messages change
   useEffect(() => {

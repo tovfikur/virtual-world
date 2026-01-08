@@ -177,7 +177,8 @@ class BiomeLandEconomyService:
 
         except Exception as e:
             logger.error(f"Error processing land purchase: {e}")
-            await db.rollback()
+            # DO NOT rollback here - let the caller handle transaction rollback
+            return {"success": False, "error": str(e)}
             return {"error": str(e)}
 
     @staticmethod
